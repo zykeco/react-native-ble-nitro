@@ -1,0 +1,76 @@
+{
+  "name": "react-native-ble-nitro",
+  "version": "1.0.0",
+  "description": "High-performance React Native BLE library built on Nitro Modules - 100% drop-in replacement for react-native-ble-plx",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "react-native": "src/index.ts",
+  "source": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "build:plugin": "tsc --project plugin/tsconfig.json",
+    "prepare": "npm run build",
+    "nitro-codegen": "nitro-codegen generate",
+    "clean": "rm -rf lib && rm -rf plugin/build",
+    "test": "jest",
+    "lint": "eslint src/ --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "react-native",
+    "bluetooth",
+    "ble",
+    "bluetooth-low-energy",
+    "nitro-modules",
+    "expo",
+    "ios",
+    "android",
+    "performance"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zykeco/react-native-ble-nitro.git"
+  },
+  "peerDependencies": {
+    "react-native": ">=0.76.0",
+    "react-native-nitro-modules": "^0.26.4"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint": "^8.0.0",
+    "expo": "^52.0.47",
+    "jest": "^29.0.0",
+    "nitro-codegen": "^0.26.4",
+    "react-native": "^0.76.0",
+    "ts-jest": "^29.4.0",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "lib/",
+    "src/",
+    "ios/",
+    "android/",
+    "plugin/build/",
+    "nitro.json",
+    "react-native.config.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "expo": {
+    "platforms": [
+      "ios",
+      "android"
+    ]
+  },
+  "codegenConfig": {
+    "name": "BleNitroSpec",
+    "type": "modules",
+    "jsSrcsDir": "src"
+  }
+}

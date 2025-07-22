@@ -1,0 +1,15 @@
+{
+  "$schema": "https://nitro.margelo.com/nitro.schema.json",
+  "cxxNamespace": ["co", "zyke", "ble"],
+  "ios": {
+    "iosModuleName": "BleNitro"
+  },
+  "android": {
+    "androidNamespace": ["co", "zyke", "ble"],
+    "androidCxxLibName": "BleNitro"
+  },
+  "autolinking": {},
+  "ignorePaths": [
+    "**/node_modules"
+  ]
+}
