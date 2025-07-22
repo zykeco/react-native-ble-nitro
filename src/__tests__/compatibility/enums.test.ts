@@ -16,7 +16,6 @@ import {
   normalizeCharacteristicSubscriptionType,
   State,
   LogLevel,
-  type CharacteristicSubscriptionType
 } from '../../compatibility/enums';
 import { 
   State as NitroState, 

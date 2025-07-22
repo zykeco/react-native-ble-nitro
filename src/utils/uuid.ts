@@ -1,4 +1,4 @@
-import type { UUID } from '../specs/types';
+import type { UUID } from '../specs/types.js';
 
 /**
  * Converts UUID to full 128bit, lowercase format which should be used to compare UUID values.

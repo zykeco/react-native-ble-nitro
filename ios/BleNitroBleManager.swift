@@ -26,10 +26,26 @@ public class BleNitroBleManager: HybridBleManagerSpec, CBCentralManagerDelegate 
     private var characteristicMonitors: [String: ((_ error: NativeBleError?, _ characteristic: NativeCharacteristic?) -> Void)] = [:]
     private var pendingOperations: [String: Any] = [:]
     
+    // State restoration
+    private var restoreIdentifier: String?
+    private var isInitialized = false
+    private var restoredState: BleRestoredState?
+    
     // MARK: - Initialization
     public override init() {
         super.init()
+        // Initialize with default options - will be reconfigured in initialize() method
         self.centralManager = CBCentralManager(delegate: self, queue: nil)
+    }
+    
+    private func reinitializeCentralManager() {
+        // Create CBCentralManager with state restoration if identifier is provided
+        var options: [String: Any] = [:]
+        if let restoreId = restoreIdentifier {
+            options[CBCentralManagerOptionRestoreIdentifierKey] = restoreId
+        }
+        
+        self.centralManager = CBCentralManager(delegate: self, queue: nil, options: options.isEmpty ? nil : options)
     }
     
     public override var memorySize: Int {
@@ -49,6 +65,29 @@ public class BleNitroBleManager: HybridBleManagerSpec, CBCentralManagerDelegate 
             self.pendingOperations.removeAll()
             resolve(())
         }
+    }
+    
+    public func initialize(options: BleManagerNitroOptions) throws -> Promise<Void> {
+        return Promise.resolve(withBlock: {
+            if let restoreId = options.restoreStateIdentifier {
+                // Store the restore identifier
+                self.restoreIdentifier = restoreId
+                
+                // Reinitialize the central manager with state restoration
+                self.reinitializeCentralManager()
+                
+                print("BleNitro: Initialized with restore state identifier: \(restoreId)")
+            }
+            
+            self.isInitialized = true
+            print("BleNitro: BLE Manager initialized")
+        })
+    }
+    
+    public func getRestoredState() throws -> Promise<BleRestoredState?> {
+        return Promise.resolve(withBlock: {
+            return self.restoredState
+        })
     }
     
     public func setLogLevel(logLevel: LogLevel) throws -> Promise<LogLevel> {
@@ -490,6 +529,40 @@ extension BleNitroBleManager: CBPeripheralDelegate {
                 break
             }
         }
+    }
+    
+    // MARK: - CBCentralManagerDelegate State Restoration
+    
+    public func centralManager(_ central: CBCentralManager, willRestoreState dict: [String : Any]) {
+        // Handle state restoration
+        if let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] {
+            print("BleNitro: Restoring \(peripherals.count) peripherals")
+            
+            // Add restored peripherals to our connected devices
+            for peripheral in peripherals {
+                let deviceId = peripheral.identifier.uuidString
+                connectedDevices[deviceId] = peripheral
+                peripheral.delegate = self
+                
+                print("BleNitro: Restored peripheral: \(deviceId)")
+            }
+            
+            // Store restored state for later retrieval
+            if !peripherals.isEmpty {
+                let restoredDevices = peripherals.map(createNativeDevice)
+                self.restoredState = BleRestoredState(connectedPeripherals: restoredDevices)
+                print("BleNitro: Stored restored state with \(restoredDevices.count) devices")
+            }
+        }
+    }
+    
+    public func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        let newState = convertCBManagerStateToState(central.state)
+        
+        // Notify state change listener if available
+        stateChangeListener?(newState)
+        
+        print("BleNitro: Central manager state changed to: \(central.state.rawValue)")
     }
 }
 

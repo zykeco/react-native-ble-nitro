@@ -57,6 +57,11 @@ class BleNitroBleManager(private val context: ReactApplicationContext) : HybridB
     private var logLevel: LogLevel = LogLevel.None
     private var isScanning = false
     private var scanCallback: ScanCallback? = null
+    
+    // State restoration
+    private var restoreIdentifier: String? = null
+    private var isInitialized = false
+    private var restoredState: BleRestoredState? = null
     private var scanListener: ((NativeBleError?, NativeDevice?) -> Unit)? = null
     private var stateChangeListener: ((State) -> Unit)? = null
     
@@ -97,6 +102,104 @@ class BleNitroBleManager(private val context: ReactApplicationContext) : HybridB
             resolve(Unit)
         } catch (e: Exception) {
             reject(e)
+        }
+    }
+    
+    override fun initialize(options: BleManagerNitroOptions): Promise<Unit> = Promise.resolve {
+        options.restoreStateIdentifier?.let { restoreId ->
+            this.restoreIdentifier = restoreId
+            
+            // Attempt to restore previous state from SharedPreferences
+            restoreConnectionState(restoreId)
+            
+            Log.d(TAG, "BleNitro: Initialized with restore state identifier: $restoreId")
+        }
+        
+        this.isInitialized = true
+        Log.d(TAG, "BleNitro: BLE Manager initialized")
+        Unit
+    }
+    
+    override fun getRestoredState(): Promise<BleRestoredState?> = Promise.resolve {
+        restoredState
+    }
+    
+    private fun restoreConnectionState(restoreId: String) {
+        try {
+            val sharedPrefs = context.getSharedPreferences("BleNitro_$restoreId", Context.MODE_PRIVATE)
+            val connectedDevicesJson = sharedPrefs.getString("connected_devices", null)
+            
+            connectedDevicesJson?.let { json ->
+                // Parse stored device IDs and attempt to reconnect
+                val deviceIds = json.split(",").filter { it.isNotEmpty() }
+                
+                if (deviceIds.isNotEmpty()) {
+                    Log.d(TAG, "BleNitro: Restoring ${deviceIds.size} devices")
+                    
+                    deviceIds.forEach { deviceId ->
+                        // Attempt to reconnect to previously connected devices
+                        restoreDeviceConnection(deviceId)
+                    }
+                    
+                    // Store restored state (initially empty, will be populated as devices reconnect)
+                    val initialDevices = deviceIds.mapNotNull { deviceId ->
+                        bluetoothAdapter?.getRemoteDevice(deviceId)?.let { device ->
+                            createNativeDevice(device, null, -1) // Initial state without GATT
+                        }
+                    }
+                    
+                    if (initialDevices.isNotEmpty()) {
+                        this.restoredState = BleRestoredState(initialDevices)
+                        Log.d(TAG, "BleNitro: Stored restored state with ${initialDevices.size} devices")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "BleNitro: Error restoring connection state", e)
+        }
+    }
+    
+    private fun restoreDeviceConnection(deviceId: String) {
+        try {
+            val bluetoothDevice = bluetoothAdapter?.getRemoteDevice(deviceId)
+            bluetoothDevice?.let { device ->
+                Log.d(TAG, "BleNitro: Attempting to restore connection to $deviceId")
+                
+                val gatt = device.connectGatt(context, true, object : BluetoothGattCallback() {
+                    override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
+                        if (newState == BluetoothProfile.STATE_CONNECTED) {
+                            connectedDevices[deviceId] = gatt!!
+                            Log.d(TAG, "BleNitro: Successfully restored connection to $deviceId")
+                        } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                            Log.d(TAG, "BleNitro: Failed to restore connection to $deviceId")
+                            gatt?.close()
+                        }
+                    }
+                })
+                
+                if (gatt != null) {
+                    deviceCallbacks[deviceId] = gatt
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "BleNitro: Error restoring device connection for $deviceId", e)
+        }
+    }
+    
+    private fun saveConnectionState() {
+        restoreIdentifier?.let { restoreId ->
+            try {
+                val sharedPrefs = context.getSharedPreferences("BleNitro_$restoreId", Context.MODE_PRIVATE)
+                val deviceIds = connectedDevices.keys.joinToString(",")
+                
+                sharedPrefs.edit()
+                    .putString("connected_devices", deviceIds)
+                    .apply()
+                
+                Log.d(TAG, "BleNitro: Saved connection state for ${connectedDevices.size} devices")
+            } catch (e: Exception) {
+                Log.e(TAG, "BleNitro: Error saving connection state", e)
+            }
         }
     }
     

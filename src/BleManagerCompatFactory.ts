@@ -5,8 +5,8 @@
  * by wrapping the Nitro implementation with compatibility shims
  */
 
-import { createBleManager } from './BleManagerFactory.js';
-import type { BleManager as BleManagerInterface } from './specs/BleManager.nitro.js';
+import { createBleManager } from './BleManagerFactory';
+import type { BleManager as BleManagerInterface } from './specs/BleManager.nitro';
 import type { 
   BleManagerOptions,
   UUID,
@@ -21,8 +21,8 @@ import type {
   NativeDescriptor,
   LogLevel,
   Subscription
-} from './specs/types.js';
-import { DeviceWrapper } from './compatibility/deviceWrapper.js';
+} from './specs/types';
+import { DeviceWrapper } from './compatibility/deviceWrapper';
 import { 
   stateToString, 
   logLevelToString,
@@ -30,7 +30,7 @@ import {
   normalizeCharacteristicSubscriptionType,
   State as PlxState,
   LogLevel as PlxLogLevel
-} from './compatibility/enums.js';
+} from './compatibility/enums';
 
 
 /**
@@ -93,7 +93,7 @@ export class BleManagerCompat {
   async startDeviceScan(
     uuids: UUID[] | null,
     options: ScanOptions | null,
-    listener: (error: any | null, scannedDevice: DeviceWrapper | null) => void
+    listener: (error: any | null, scannedDevice: DeviceWrapper | null) => void // TODO: COMPAT! remove any and move to BleError as react-native-ble-plx uses this type as well!
   ): Promise<void> {
     return await this.bleManager.startDeviceScan(uuids, options, (error, device) => {
       listener(error, device ? new DeviceWrapper(this.createDeviceFromNative(device)) : null);
@@ -131,7 +131,7 @@ export class BleManagerCompat {
 
   onDeviceDisconnected(
     deviceIdentifier: DeviceId,
-    listener: (error: any | null, device: DeviceWrapper | null) => void
+    listener: (error: any | null, device: DeviceWrapper | null) => void // TODO: COMPAT! use propper error type like in react-native-ble-plx!!!
   ): Subscription {
     return this.bleManager.onDeviceDisconnected(deviceIdentifier, (error, device) => {
       listener(error, device ? new DeviceWrapper(this.createDeviceFromNative(device)) : null);
@@ -255,7 +255,7 @@ export class BleManagerCompat {
     deviceIdentifier: DeviceId,
     serviceUUID: UUID,
     characteristicUUID: UUID,
-    listener: (error: any | null, characteristic: NativeCharacteristic | null) => void,
+    listener: (error: any | null, characteristic: NativeCharacteristic | null) => void, // TODO: COMPAT! use proper error type like in react-native-ble-plx
     transactionId?: TransactionId,
     subscriptionType?: 'notification' | 'indication'
   ): Subscription {
@@ -324,7 +324,7 @@ export class BleManagerCompat {
    * Helper method to create a Device wrapper from NativeDevice data
    * This is a temporary method until we have proper Device Nitro objects
    */
-  private createDeviceFromNative(nativeDevice: NativeDevice): any {
+  private createDeviceFromNative(nativeDevice: NativeDevice) {
     // This is a placeholder - in the actual implementation, we'd need to create
     // proper Nitro Device objects, but for now we'll work with the native data
     return {

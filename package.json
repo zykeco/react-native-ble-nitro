@@ -76,7 +76,7 @@
     "nitro-codegen": "^0.26.4",
     "react-native": "^0.76.0",
     "ts-jest": "^29.4.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.8.3"
   },
   "files": [
     "lib/",

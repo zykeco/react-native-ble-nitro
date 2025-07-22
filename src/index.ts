@@ -7,6 +7,9 @@ export * from './utils/index.js';
 // Export the main BleManager instance with compatibility wrapper
 export { BleManagerCompat as BleManager, createBleManagerCompat as createBleManager } from './BleManagerCompatFactory.js';
 
+// Export BleManager factory utilities (for internal use by error handling)
+export { getCustomErrorMessage, getStoredCallbacks } from './BleManagerFactory.js';
+
 // Export error handling utilities
 export * from './errors/BleError.js';
 

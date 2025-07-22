@@ -8,7 +8,6 @@ import type {
   ConnectionPriority,
   ScanOptions,
   ConnectionOptions,
-  BleManagerOptions,
   StateListener,
   DeviceScanListener,
   DeviceDisconnectedListener,
@@ -18,15 +17,29 @@ import type {
   NativeService,
   NativeCharacteristic,
   NativeDescriptor,
-  NativeBleError,
-  BleRestoredState,
   Base64,
   Subscription
 } from './types.js';
 
+// Nitro-compatible options interface (simplified without functions)
+export interface BleManagerNitroOptions {
+  restoreStateIdentifier?: string;
+}
+
+// Interface for restored state data
+export interface BleRestoredState {
+  connectedPeripherals: NativeDevice[];
+}
+
 export interface BleManager extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   // Lifecycle
   destroy(): Promise<void>;
+
+  // Initialization - Configure the BLE manager with options
+  initialize(options: BleManagerNitroOptions): Promise<void>;
+
+  // Get restored state if available (called after initialization)
+  getRestoredState(): Promise<BleRestoredState | null>;
 
   // Common operations
   setLogLevel(logLevel: LogLevel): Promise<LogLevel>;

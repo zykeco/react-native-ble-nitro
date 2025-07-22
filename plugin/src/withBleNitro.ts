@@ -1,7 +1,6 @@
 import {
   AndroidConfig,
   ConfigPlugin,
-  IOSConfig,
   WarningAggregator,
   withAndroidManifest,
   withInfoPlist,
