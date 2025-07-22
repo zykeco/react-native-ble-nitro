@@ -1,6 +1,6 @@
 {
   "name": "react-native-ble-nitro",
-  "version": "1.0.0-beta.0",
+  "version": "1.0.0-beta.1",
   "description": "High-performance React Native BLE library built on Nitro Modules - drop-in replacement for react-native-ble-plx",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
