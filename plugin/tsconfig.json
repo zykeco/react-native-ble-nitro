@@ -2,7 +2,10 @@
   "extends": "expo-module-scripts/tsconfig.plugin",
   "compilerOptions": {
     "outDir": "./build",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "module": "ES2020",
+    "target": "ES2020",
+    "moduleResolution": "node"
   },
   "include": [
     "src/**/*"
