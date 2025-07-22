@@ -217,3 +217,4 @@ npx expo run:ios
 - Implement comprehensive error handling with platform-specific error codes
 - Support all BLE features: scanning, connecting, GATT operations, notifications, background mode
 - Keep maintainability in mind with clear separation of concerns
+- ALWAYS use .js file extensions for importing TypeScript files so that build output is compatible with both TypeScript and JavaScript environments.
