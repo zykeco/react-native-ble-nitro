@@ -5,8 +5,8 @@
  * by wrapping the Nitro implementation with compatibility shims
  */
 
-import { createBleManager } from './BleManagerFactory';
-import type { BleManager as BleManagerInterface } from './specs/BleManager.nitro';
+import { createBleManager } from './BleManagerFactory.js';
+import type { BleManager as BleManagerInterface } from './specs/BleManager.nitro.js';
 import type { 
   BleManagerOptions,
   UUID,
@@ -20,20 +20,18 @@ import type {
   NativeCharacteristic,
   NativeDescriptor,
   LogLevel,
-  State,
   Subscription
-} from './specs/types';
-import { DeviceWrapper } from './compatibility/deviceWrapper';
+} from './specs/types.js';
+import { DeviceWrapper } from './compatibility/deviceWrapper.js';
 import { 
   stateToString, 
-  stringToState,
   logLevelToString,
-  stringToLogLevel,
   normalizeLogLevel,
   normalizeCharacteristicSubscriptionType,
-  characteristicSubscriptionTypeToString
-} from './compatibility/enums';
-import { serviceDataMapToArray } from './compatibility/serviceData';
+  State as PlxState,
+  LogLevel as PlxLogLevel
+} from './compatibility/enums.js';
+
 
 /**
  * BleManager wrapper that provides react-native-ble-plx compatibility
@@ -51,13 +49,13 @@ export class BleManagerCompat {
   }
 
   // Common operations with compatibility
-  async setLogLevel(logLevel: LogLevel | string): Promise<string> {
+  async setLogLevel(logLevel: LogLevel | string): Promise<PlxLogLevel> {
     const normalizedLogLevel = normalizeLogLevel(logLevel);
     const result = await this.bleManager.setLogLevel(normalizedLogLevel);
     return logLevelToString(result);
   }
 
-  async logLevel(): Promise<string> {
+  async logLevel(): Promise<PlxLogLevel> {
     const result = await this.bleManager.logLevel();
     return logLevelToString(result);
   }
@@ -77,13 +75,13 @@ export class BleManagerCompat {
     return this;
   }
 
-  async state(): Promise<string> {
+  async state(): Promise<PlxState> {
     const result = await this.bleManager.state();
     return stateToString(result);
   }
 
   onStateChange(
-    listener: (newState: string) => void, 
+    listener: (newState: PlxState) => void, 
     emitCurrentState?: boolean
   ): Subscription {
     return this.bleManager.onStateChange((state) => {

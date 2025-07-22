@@ -3,11 +3,11 @@ import {
   BleATTErrorCode,
   BleIOSErrorCode,
   BleAndroidErrorCode
-} from '../specs/types';
+} from '../specs/types.js';
 import type {
   NativeBleError,
   BleErrorCodeMessageMapping
-} from '../specs/types';
+} from '../specs/types.js';
 
 /**
  * Default error messages for BLE error codes

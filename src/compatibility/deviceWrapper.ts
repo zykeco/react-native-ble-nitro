@@ -4,7 +4,7 @@
  * Wraps Nitro Device objects to provide the original react-native-ble-plx API
  */
 
-import type { Device as NitroDevice } from '../specs/Device.nitro';
+import type { Device as NitroDevice } from '../specs/Device.nitro.js';
 import type { 
   NativeDevice, 
   UUID, 
@@ -19,13 +19,13 @@ import type {
   NativeDescriptor,
   CharacteristicSubscriptionType,
   Subscription
-} from '../specs/types';
-import { serviceDataArrayToMap } from './serviceData';
+} from '../specs/types.js';
+import { serviceDataArrayToMap } from './serviceData.js';
 import { 
   normalizeCharacteristicSubscriptionType,
   stateToString,
   characteristicSubscriptionTypeToString 
-} from './enums';
+} from './enums.js';
 
 /**
  * Device wrapper that provides react-native-ble-plx compatibility

@@ -22,7 +22,7 @@ import type {
   BleRestoredState,
   Base64,
   Subscription
-} from './types';
+} from './types.js';
 
 export interface BleManager extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   // Lifecycle

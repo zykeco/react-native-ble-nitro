@@ -36,5 +36,7 @@ module.exports = {
   setupFiles: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {
     '^react-native$': '<rootDir>/node_modules/react-native',
+    // Map .js extensions to .ts files for ES module imports in tests
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   },
 };

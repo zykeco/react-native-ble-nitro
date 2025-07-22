@@ -1,6 +1,6 @@
 import { NitroModules } from 'react-native-nitro-modules';
-import type { BleManager as BleManagerInterface } from './specs/BleManager.nitro';
-import type { BleManagerOptions } from './specs/types';
+import type { BleManager as BleManagerInterface } from './specs/BleManager.nitro.js';
+import type { BleManagerOptions } from './specs/types.js';
 
 /**
  * Creates a BleManager instance using Nitro Modules

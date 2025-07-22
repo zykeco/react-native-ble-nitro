@@ -4,8 +4,8 @@
  * Copyright © 2025 Zyke (https://zyke.co)
  */
 
-import { BleManager } from '../index';
-import { State, LogLevel } from '../specs/types';
+import { BleManager } from '../index.js';
+import { State, LogLevel } from '../specs/types.js';
 
 // Create a mock Nitro manager
 const mockNitroManager = {
@@ -102,20 +102,20 @@ describe('BleManager', () => {
 
     it('should set log level', async () => {
       const result = await manager.setLogLevel(LogLevel.Info);
-      expect(result).toBe('Info'); // BleManagerCompat returns strings for compatibility
+      expect(result).toBe('Info'); // BleManagerCompat returns PlxLogLevel for compatibility
     });
 
     it('should get current log level', async () => {
       await manager.setLogLevel(LogLevel.Debug);
       const level = await manager.logLevel();
-      expect(level).toBe('Info'); // BleManagerCompat returns strings for compatibility
+      expect(level).toBe('Info'); // BleManagerCompat returns PlxLogLevel for compatibility
     });
   });
 
   describe('State Management', () => {
     it('should get current state', async () => {
       const state = await manager.state();
-      expect(state).toBe('PoweredOn'); // BleManagerCompat converts State.PoweredOn -> 'PoweredOn'
+      expect(state).toBe('PoweredOn'); // BleManagerCompat converts State.PoweredOn -> PlxState 'PoweredOn'
     });
 
     it('should listen to state changes', async () => {
@@ -314,10 +314,10 @@ describe('Device Wrapper Compatibility', () => {
     expect(typeof device.discoverAllServicesAndCharacteristics).toBe('function');
   });
 
-  it('should convert enum values to strings for compatibility', async () => {
+  it('should convert enum values to PlxState for compatibility', async () => {
     const state = await manager.state();
     
-    // State should be a string value (mocked return value is 'PoweredOn')
+    // State should be PlxState string literal type (mocked return value is 'PoweredOn')
     expect(typeof state).toBe('string');
     expect(state).toBe('PoweredOn');
     

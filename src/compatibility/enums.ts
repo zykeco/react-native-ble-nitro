@@ -1,160 +1,190 @@
 /**
- * Enum compatibility layer
+ * React Native BLE Plx Compatible Enums and Types
  * 
- * Provides conversion between Nitro's numeric enums and the original 
- * string-based enums from react-native-ble-plx
+ * These match the exact types from react-native-ble-plx for drop-in compatibility.
+ * This module provides conversion between Nitro's numeric enums and react-native-ble-plx types.
  */
 
+// Import Nitro's numeric enums with aliases to avoid naming conflicts
 import {
-  State,
-  LogLevel,
-  CharacteristicSubscriptionType,
-  RefreshGattMoment,
-} from '../specs/types';
+  State as NitroState,
+  LogLevel as NitroLogLevel,
+  CharacteristicSubscriptionType as NitroCharacteristicSubscriptionType,
+  RefreshGattMoment as NitroRefreshGattMoment,
+} from '../specs/types.js';
 
-// String mappings for backward compatibility
-export const StateString = {
-  [State.Unknown]: 'Unknown',
-  [State.Resetting]: 'Resetting',
-  [State.Unsupported]: 'Unsupported',
-  [State.Unauthorized]: 'Unauthorized',
-  [State.PoweredOff]: 'PoweredOff',
-  [State.PoweredOn]: 'PoweredOn',
-} as const;
-
-export const LogLevelString = {
-  [LogLevel.None]: 'None',
-  [LogLevel.Verbose]: 'Verbose',
-  [LogLevel.Debug]: 'Debug',
-  [LogLevel.Info]: 'Info',
-  [LogLevel.Warning]: 'Warning',
-  [LogLevel.Error]: 'Error',
-} as const;
-
-export const CharacteristicSubscriptionTypeString = {
-  [CharacteristicSubscriptionType.Notification]: 'notification',
-  [CharacteristicSubscriptionType.Indication]: 'indication',
-} as const;
-
-export const RefreshGattMomentString = {
-  [RefreshGattMoment.OnConnected]: 'OnConnected',
-} as const;
-
-// Reverse mappings for converting strings back to numeric enums
-const StringToState: { [key: string]: State } = {};
-const StringToLogLevel: { [key: string]: LogLevel } = {};
-const StringToCharacteristicSubscriptionType: { [key: string]: CharacteristicSubscriptionType } = {};
-const StringToRefreshGattMoment: { [key: string]: RefreshGattMoment } = {};
-
-// Build reverse mappings
-Object.entries(StateString).forEach(([num, str]) => {
-  StringToState[str] = parseInt(num) as State;
-});
-
-Object.entries(LogLevelString).forEach(([num, str]) => {
-  StringToLogLevel[str] = parseInt(num) as LogLevel;
-});
-
-Object.entries(CharacteristicSubscriptionTypeString).forEach(([num, str]) => {
-  StringToCharacteristicSubscriptionType[str] = parseInt(num) as CharacteristicSubscriptionType;
-});
-
-Object.entries(RefreshGattMomentString).forEach(([num, str]) => {
-  StringToRefreshGattMoment[str] = parseInt(num) as RefreshGattMoment;
-});
-
-// Conversion functions
-export function stateToString(state: State): string {
-  return StateString[state] ?? 'Unknown';
+// Define exact string enums and types matching react-native-ble-plx
+export enum State {
+  Unknown = 'Unknown',
+  Resetting = 'Resetting',
+  Unsupported = 'Unsupported',
+  Unauthorized = 'Unauthorized',
+  PoweredOff = 'PoweredOff',
+  PoweredOn = 'PoweredOn'
 }
 
-export function stringToState(stateString: string): State {
-  // Handle case insensitive lookup
-  const lowerString = stateString.toLowerCase();
-  for (const [key, value] of Object.entries(StringToState)) {
-    if (key.toLowerCase() === lowerString) {
-      return value;
-    }
-  }
-  return State.Unknown;
+export enum LogLevel {
+  None = 'None',
+  Verbose = 'Verbose',
+  Debug = 'Debug',
+  Info = 'Info',
+  Warning = 'Warning',
+  Error = 'Error'
 }
 
-export function logLevelToString(logLevel: LogLevel): string {
-  return LogLevelString[logLevel] ?? 'None';
+// These are type literals in react-native-ble-plx, not enums
+export type CharacteristicSubscriptionType = 'notification' | 'indication';
+export type RefreshGattMoment = 'OnConnected';
+
+// Conversion functions from Nitro numeric enums to react-native-ble-plx string enums/types
+export function stateToString(state: NitroState): State {
+  const mapping = {
+    [NitroState.Unknown]: State.Unknown,
+    [NitroState.Resetting]: State.Resetting,
+    [NitroState.Unsupported]: State.Unsupported,
+    [NitroState.Unauthorized]: State.Unauthorized,
+    [NitroState.PoweredOff]: State.PoweredOff,
+    [NitroState.PoweredOn]: State.PoweredOn,
+  };
+  return mapping[state] ?? State.Unknown;
 }
 
-export function stringToLogLevel(logLevelString: string): LogLevel {
-  // Handle case insensitive lookup
-  const lowerString = logLevelString.toLowerCase();
-  for (const [key, value] of Object.entries(StringToLogLevel)) {
-    if (key.toLowerCase() === lowerString) {
-      return value;
-    }
-  }
-  return LogLevel.None;
+export function logLevelToString(logLevel: NitroLogLevel): LogLevel {
+  const mapping = {
+    [NitroLogLevel.None]: LogLevel.None,
+    [NitroLogLevel.Verbose]: LogLevel.Verbose,
+    [NitroLogLevel.Debug]: LogLevel.Debug,
+    [NitroLogLevel.Info]: LogLevel.Info,
+    [NitroLogLevel.Warning]: LogLevel.Warning,
+    [NitroLogLevel.Error]: LogLevel.Error,
+  };
+  return mapping[logLevel] ?? LogLevel.None;
 }
 
 export function characteristicSubscriptionTypeToString(
-  type: CharacteristicSubscriptionType
-): string {
-  return CharacteristicSubscriptionTypeString[type] ?? 'notification';
+  type: NitroCharacteristicSubscriptionType
+): CharacteristicSubscriptionType {
+  const mapping = {
+    [NitroCharacteristicSubscriptionType.Notification]: 'notification' as const,
+    [NitroCharacteristicSubscriptionType.Indication]: 'indication' as const,
+  };
+  return mapping[type] ?? 'notification';
+}
+
+export function refreshGattMomentToString(_moment: NitroRefreshGattMoment): RefreshGattMoment {
+  return 'OnConnected'; // Only one value exists
+}
+
+// Conversion functions from react-native-ble-plx string enums/types to Nitro numeric enums
+export function stringToState(stateString: State | string): NitroState {
+  switch (stateString) {
+    case State.Unknown:
+    case 'Unknown':
+      return NitroState.Unknown;
+    case State.Resetting:
+    case 'Resetting':
+      return NitroState.Resetting;
+    case State.Unsupported:
+    case 'Unsupported':
+      return NitroState.Unsupported;
+    case State.Unauthorized:
+    case 'Unauthorized':
+      return NitroState.Unauthorized;
+    case State.PoweredOff:
+    case 'PoweredOff':
+      return NitroState.PoweredOff;
+    case State.PoweredOn:
+    case 'PoweredOn':
+      return NitroState.PoweredOn;
+    default:
+      return NitroState.Unknown;
+  }
+}
+
+export function stringToLogLevel(logLevelString: LogLevel | string): NitroLogLevel {
+  switch (logLevelString) {
+    case LogLevel.None:
+    case 'None':
+      return NitroLogLevel.None;
+    case LogLevel.Verbose:
+    case 'Verbose':
+      return NitroLogLevel.Verbose;
+    case LogLevel.Debug:
+    case 'Debug':
+      return NitroLogLevel.Debug;
+    case LogLevel.Info:
+    case 'Info':
+      return NitroLogLevel.Info;
+    case LogLevel.Warning:
+    case 'Warning':
+      return NitroLogLevel.Warning;
+    case LogLevel.Error:
+    case 'Error':
+      return NitroLogLevel.Error;
+    default:
+      return NitroLogLevel.None;
+  }
 }
 
 export function stringToCharacteristicSubscriptionType(
-  typeString: string
-): CharacteristicSubscriptionType {
-  // Handle case insensitive lookup
-  const lowerString = typeString.toLowerCase();
-  for (const [key, value] of Object.entries(StringToCharacteristicSubscriptionType)) {
-    if (key.toLowerCase() === lowerString) {
-      return value;
-    }
+  typeString: CharacteristicSubscriptionType | string
+): NitroCharacteristicSubscriptionType {
+  switch (typeString) {
+    case 'notification':
+      return NitroCharacteristicSubscriptionType.Notification;
+    case 'indication':
+      return NitroCharacteristicSubscriptionType.Indication;
+    default:
+      return NitroCharacteristicSubscriptionType.Notification;
   }
-  return CharacteristicSubscriptionType.Notification;
 }
 
-export function refreshGattMomentToString(moment: RefreshGattMoment): 'OnConnected' {
-  return RefreshGattMomentString[moment] as 'OnConnected';
+export function stringToRefreshGattMoment(_momentString: RefreshGattMoment): NitroRefreshGattMoment {
+  return NitroRefreshGattMoment.OnConnected;
 }
 
-export function stringToRefreshGattMoment(momentString: 'OnConnected'): RefreshGattMoment {
-  return StringToRefreshGattMoment[momentString] ?? RefreshGattMoment.OnConnected;
+// Generic converter that handles both string and numeric enum values
+export function normalizeState(state: NitroState | State | string): NitroState {
+  if (typeof state === 'string') {
+    return stringToState(state);
+  }
+  // If it's already a NitroState (numeric), return as-is
+  if (typeof state === 'number') {
+    return state as NitroState;
+  }
+  // If it's a string State enum value, convert it
+  return stringToState(state as string);
+}
+
+export function normalizeLogLevel(logLevel: NitroLogLevel | LogLevel | string): NitroLogLevel {
+  if (typeof logLevel === 'string') {
+    return stringToLogLevel(logLevel);
+  }
+  // If it's already a NitroLogLevel (numeric), return as-is
+  if (typeof logLevel === 'number') {
+    return logLevel as NitroLogLevel;
+  }
+  // If it's a string LogLevel enum value, convert it
+  return stringToLogLevel(logLevel as string);
+}
+
+export function normalizeCharacteristicSubscriptionType(
+  type: NitroCharacteristicSubscriptionType | CharacteristicSubscriptionType | string
+): NitroCharacteristicSubscriptionType {
+  if (typeof type === 'string') {
+    return stringToCharacteristicSubscriptionType(type);
+  }
+  // If it's already a NitroCharacteristicSubscriptionType (numeric), return as-is
+  return type as NitroCharacteristicSubscriptionType;
+}
+
+export function normalizeRefreshGattMoment(
+  _moment: NitroRefreshGattMoment | RefreshGattMoment | string
+): NitroRefreshGattMoment {
+  return NitroRefreshGattMoment.OnConnected; // Only one value exists
 }
 
 // Helper function to detect if a value is a string enum vs numeric enum
 export function isStringEnumValue(value: any): boolean {
   return typeof value === 'string';
-}
-
-// Generic converter that handles both string and numeric enum values
-export function normalizeState(state: State | string): State {
-  if (typeof state === 'string') {
-    return stringToState(state);
-  }
-  return state;
-}
-
-export function normalizeLogLevel(logLevel: LogLevel | string): LogLevel {
-  if (typeof logLevel === 'string') {
-    return stringToLogLevel(logLevel);
-  }
-  return logLevel;
-}
-
-export function normalizeCharacteristicSubscriptionType(
-  type: CharacteristicSubscriptionType | 'notification' | 'indication'
-): CharacteristicSubscriptionType {
-  if (typeof type === 'string') {
-    return stringToCharacteristicSubscriptionType(type);
-  }
-  return type;
-}
-
-export function normalizeRefreshGattMoment(
-  moment: RefreshGattMoment | 'OnConnected'
-): RefreshGattMoment {
-  if (typeof moment === 'string') {
-    return stringToRefreshGattMoment(moment);
-  }
-  return moment;
 }

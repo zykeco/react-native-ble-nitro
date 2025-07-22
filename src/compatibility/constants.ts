@@ -68,4 +68,4 @@ export {
   BleATTErrorCode,
   BleIOSErrorCode,
   BleAndroidErrorCode 
-} from '../specs/types';
+} from '../specs/types.js';

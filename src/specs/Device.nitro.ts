@@ -15,7 +15,7 @@ import type {
   DeviceDisconnectedListener,
   CharacteristicMonitorListener,
   Subscription
-} from './types';
+} from './types.js';
 
 export interface Device extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   // Device properties

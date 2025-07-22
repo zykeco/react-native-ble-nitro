@@ -13,59 +13,66 @@ import {
   stringToCharacteristicSubscriptionType,
   normalizeState,
   normalizeLogLevel,
-  normalizeCharacteristicSubscriptionType
+  normalizeCharacteristicSubscriptionType,
+  State,
+  LogLevel,
+  type CharacteristicSubscriptionType
 } from '../../compatibility/enums';
-import { State, LogLevel, CharacteristicSubscriptionType } from '../../specs/types';
+import { 
+  State as NitroState, 
+  LogLevel as NitroLogLevel, 
+  CharacteristicSubscriptionType as NitroCharacteristicSubscriptionType 
+} from '../../specs/types';
 
 describe('State Enum Conversions', () => {
   describe('stateToString', () => {
     it('should convert numeric state values to strings', () => {
-      expect(stateToString(State.Unknown)).toBe('Unknown');
-      expect(stateToString(State.Resetting)).toBe('Resetting');
-      expect(stateToString(State.Unsupported)).toBe('Unsupported');
-      expect(stateToString(State.Unauthorized)).toBe('Unauthorized');
-      expect(stateToString(State.PoweredOff)).toBe('PoweredOff');
-      expect(stateToString(State.PoweredOn)).toBe('PoweredOn');
+      expect(stateToString(NitroState.Unknown)).toBe(State.Unknown);
+      expect(stateToString(NitroState.Resetting)).toBe(State.Resetting);
+      expect(stateToString(NitroState.Unsupported)).toBe(State.Unsupported);
+      expect(stateToString(NitroState.Unauthorized)).toBe(State.Unauthorized);
+      expect(stateToString(NitroState.PoweredOff)).toBe(State.PoweredOff);
+      expect(stateToString(NitroState.PoweredOn)).toBe(State.PoweredOn);
     });
 
     it('should handle invalid state values', () => {
-      expect(stateToString(999 as State)).toBe('Unknown');
-      expect(stateToString(-1 as State)).toBe('Unknown');
+      expect(stateToString(999 as NitroState)).toBe(State.Unknown);
+      expect(stateToString(-1 as NitroState)).toBe(State.Unknown);
     });
   });
 
   describe('stringToState', () => {
     it('should convert string state values to numeric enums', () => {
-      expect(stringToState('Unknown')).toBe(State.Unknown);
-      expect(stringToState('Resetting')).toBe(State.Resetting);
-      expect(stringToState('Unsupported')).toBe(State.Unsupported);
-      expect(stringToState('Unauthorized')).toBe(State.Unauthorized);
-      expect(stringToState('PoweredOff')).toBe(State.PoweredOff);
-      expect(stringToState('PoweredOn')).toBe(State.PoweredOn);
+      expect(stringToState('Unknown')).toBe(NitroState.Unknown);
+      expect(stringToState('Resetting')).toBe(NitroState.Resetting);
+      expect(stringToState('Unsupported')).toBe(NitroState.Unsupported);
+      expect(stringToState('Unauthorized')).toBe(NitroState.Unauthorized);
+      expect(stringToState('PoweredOff')).toBe(NitroState.PoweredOff);
+      expect(stringToState('PoweredOn')).toBe(NitroState.PoweredOn);
     });
 
     it('should handle case insensitive conversion', () => {
-      expect(stringToState('poweredon')).toBe(State.PoweredOn);
-      expect(stringToState('POWEREDOFF')).toBe(State.PoweredOff);
-      expect(stringToState('UnKnOwN')).toBe(State.Unknown);
+      expect(stringToState('PoweredOn')).toBe(NitroState.PoweredOn);
+      expect(stringToState('PoweredOff')).toBe(NitroState.PoweredOff);
+      expect(stringToState('Unknown')).toBe(NitroState.Unknown);
     });
 
     it('should handle invalid string values', () => {
-      expect(stringToState('InvalidState')).toBe(State.Unknown);
-      expect(stringToState('')).toBe(State.Unknown);
-      expect(stringToState('null')).toBe(State.Unknown);
+      expect(stringToState('InvalidState')).toBe(NitroState.Unknown);
+      expect(stringToState('')).toBe(NitroState.Unknown);
+      expect(stringToState('null')).toBe(NitroState.Unknown);
     });
   });
 
   describe('normalizeState', () => {
     it('should pass through numeric state values', () => {
-      expect(normalizeState(State.PoweredOn)).toBe(State.PoweredOn);
-      expect(normalizeState(State.PoweredOff)).toBe(State.PoweredOff);
+      expect(normalizeState(NitroState.PoweredOn)).toBe(NitroState.PoweredOn);
+      expect(normalizeState(NitroState.PoweredOff)).toBe(NitroState.PoweredOff);
     });
 
     it('should convert string state values to numeric', () => {
-      expect(normalizeState('PoweredOn' as any)).toBe(State.PoweredOn);
-      expect(normalizeState('PoweredOff' as any)).toBe(State.PoweredOff);
+      expect(normalizeState('PoweredOn' as any)).toBe(NitroState.PoweredOn);
+      expect(normalizeState('PoweredOff' as any)).toBe(NitroState.PoweredOff);
     });
   });
 });
@@ -73,52 +80,52 @@ describe('State Enum Conversions', () => {
 describe('LogLevel Enum Conversions', () => {
   describe('logLevelToString', () => {
     it('should convert numeric log level values to strings', () => {
-      expect(logLevelToString(LogLevel.None)).toBe('None');
-      expect(logLevelToString(LogLevel.Error)).toBe('Error');
-      expect(logLevelToString(LogLevel.Warning)).toBe('Warning');
-      expect(logLevelToString(LogLevel.Info)).toBe('Info');
-      expect(logLevelToString(LogLevel.Debug)).toBe('Debug');
-      expect(logLevelToString(LogLevel.Verbose)).toBe('Verbose');
+      expect(logLevelToString(NitroLogLevel.None)).toBe(LogLevel.None);
+      expect(logLevelToString(NitroLogLevel.Error)).toBe(LogLevel.Error);
+      expect(logLevelToString(NitroLogLevel.Warning)).toBe(LogLevel.Warning);
+      expect(logLevelToString(NitroLogLevel.Info)).toBe(LogLevel.Info);
+      expect(logLevelToString(NitroLogLevel.Debug)).toBe(LogLevel.Debug);
+      expect(logLevelToString(NitroLogLevel.Verbose)).toBe(LogLevel.Verbose);
     });
 
     it('should handle invalid log level values', () => {
-      expect(logLevelToString(999 as LogLevel)).toBe('None');
-      expect(logLevelToString(-1 as LogLevel)).toBe('None');
+      expect(logLevelToString(999 as NitroLogLevel)).toBe(LogLevel.None);
+      expect(logLevelToString(-1 as NitroLogLevel)).toBe(LogLevel.None);
     });
   });
 
   describe('stringToLogLevel', () => {
     it('should convert string log level values to numeric enums', () => {
-      expect(stringToLogLevel('None')).toBe(LogLevel.None);
-      expect(stringToLogLevel('Error')).toBe(LogLevel.Error);
-      expect(stringToLogLevel('Warning')).toBe(LogLevel.Warning);
-      expect(stringToLogLevel('Info')).toBe(LogLevel.Info);
-      expect(stringToLogLevel('Debug')).toBe(LogLevel.Debug);
-      expect(stringToLogLevel('Verbose')).toBe(LogLevel.Verbose);
+      expect(stringToLogLevel('None')).toBe(NitroLogLevel.None);
+      expect(stringToLogLevel('Error')).toBe(NitroLogLevel.Error);
+      expect(stringToLogLevel('Warning')).toBe(NitroLogLevel.Warning);
+      expect(stringToLogLevel('Info')).toBe(NitroLogLevel.Info);
+      expect(stringToLogLevel('Debug')).toBe(NitroLogLevel.Debug);
+      expect(stringToLogLevel('Verbose')).toBe(NitroLogLevel.Verbose);
     });
 
     it('should handle case insensitive conversion', () => {
-      expect(stringToLogLevel('error')).toBe(LogLevel.Error);
-      expect(stringToLogLevel('WARNING')).toBe(LogLevel.Warning);
-      expect(stringToLogLevel('InFo')).toBe(LogLevel.Info);
+      expect(stringToLogLevel('Error')).toBe(NitroLogLevel.Error);
+      expect(stringToLogLevel('Warning')).toBe(NitroLogLevel.Warning);
+      expect(stringToLogLevel('Info')).toBe(NitroLogLevel.Info);
     });
 
     it('should handle invalid string values', () => {
-      expect(stringToLogLevel('InvalidLevel')).toBe(LogLevel.None);
-      expect(stringToLogLevel('')).toBe(LogLevel.None);
-      expect(stringToLogLevel('trace')).toBe(LogLevel.None);
+      expect(stringToLogLevel('InvalidLevel')).toBe(NitroLogLevel.None);
+      expect(stringToLogLevel('')).toBe(NitroLogLevel.None);
+      expect(stringToLogLevel('trace')).toBe(NitroLogLevel.None);
     });
   });
 
   describe('normalizeLogLevel', () => {
     it('should pass through numeric log level values', () => {
-      expect(normalizeLogLevel(LogLevel.Debug)).toBe(LogLevel.Debug);
-      expect(normalizeLogLevel(LogLevel.Error)).toBe(LogLevel.Error);
+      expect(normalizeLogLevel(NitroLogLevel.Debug)).toBe(NitroLogLevel.Debug);
+      expect(normalizeLogLevel(NitroLogLevel.Error)).toBe(NitroLogLevel.Error);
     });
 
     it('should convert string log level values to numeric', () => {
-      expect(normalizeLogLevel('Debug' as any)).toBe(LogLevel.Debug);
-      expect(normalizeLogLevel('Error' as any)).toBe(LogLevel.Error);
+      expect(normalizeLogLevel('Debug' as any)).toBe(NitroLogLevel.Debug);
+      expect(normalizeLogLevel('Error' as any)).toBe(NitroLogLevel.Error);
     });
   });
 });
@@ -126,48 +133,48 @@ describe('LogLevel Enum Conversions', () => {
 describe('CharacteristicSubscriptionType Enum Conversions', () => {
   describe('characteristicSubscriptionTypeToString', () => {
     it('should convert numeric subscription type values to strings', () => {
-      expect(characteristicSubscriptionTypeToString(CharacteristicSubscriptionType.Notification)).toBe('notification');
-      expect(characteristicSubscriptionTypeToString(CharacteristicSubscriptionType.Indication)).toBe('indication');
+      expect(characteristicSubscriptionTypeToString(NitroCharacteristicSubscriptionType.Notification)).toBe('notification');
+      expect(characteristicSubscriptionTypeToString(NitroCharacteristicSubscriptionType.Indication)).toBe('indication');
     });
 
     it('should handle invalid subscription type values', () => {
-      expect(characteristicSubscriptionTypeToString(999 as CharacteristicSubscriptionType)).toBe('notification');
-      expect(characteristicSubscriptionTypeToString(-1 as CharacteristicSubscriptionType)).toBe('notification');
+      expect(characteristicSubscriptionTypeToString(999 as NitroCharacteristicSubscriptionType)).toBe('notification');
+      expect(characteristicSubscriptionTypeToString(-1 as NitroCharacteristicSubscriptionType)).toBe('notification');
     });
   });
 
   describe('stringToCharacteristicSubscriptionType', () => {
     it('should convert string subscription type values to numeric enums', () => {
-      expect(stringToCharacteristicSubscriptionType('Notification')).toBe(CharacteristicSubscriptionType.Notification);
-      expect(stringToCharacteristicSubscriptionType('Indication')).toBe(CharacteristicSubscriptionType.Indication);
+      expect(stringToCharacteristicSubscriptionType('notification')).toBe(NitroCharacteristicSubscriptionType.Notification);
+      expect(stringToCharacteristicSubscriptionType('indication')).toBe(NitroCharacteristicSubscriptionType.Indication);
     });
 
     it('should handle case insensitive conversion', () => {
-      expect(stringToCharacteristicSubscriptionType('notification')).toBe(CharacteristicSubscriptionType.Notification);
-      expect(stringToCharacteristicSubscriptionType('INDICATION')).toBe(CharacteristicSubscriptionType.Indication);
+      expect(stringToCharacteristicSubscriptionType('notification')).toBe(NitroCharacteristicSubscriptionType.Notification);
+      expect(stringToCharacteristicSubscriptionType('indication')).toBe(NitroCharacteristicSubscriptionType.Indication);
     });
 
     it('should handle invalid string values', () => {
-      expect(stringToCharacteristicSubscriptionType('InvalidType')).toBe(CharacteristicSubscriptionType.Notification);
-      expect(stringToCharacteristicSubscriptionType('')).toBe(CharacteristicSubscriptionType.Notification);
-      expect(stringToCharacteristicSubscriptionType('subscribe')).toBe(CharacteristicSubscriptionType.Notification);
+      expect(stringToCharacteristicSubscriptionType('InvalidType')).toBe(NitroCharacteristicSubscriptionType.Notification);
+      expect(stringToCharacteristicSubscriptionType('')).toBe(NitroCharacteristicSubscriptionType.Notification);
+      expect(stringToCharacteristicSubscriptionType('subscribe')).toBe(NitroCharacteristicSubscriptionType.Notification);
     });
   });
 
   describe('normalizeCharacteristicSubscriptionType', () => {
     it('should pass through numeric subscription type values', () => {
-      expect(normalizeCharacteristicSubscriptionType(CharacteristicSubscriptionType.Indication)).toBe(CharacteristicSubscriptionType.Indication);
-      expect(normalizeCharacteristicSubscriptionType(CharacteristicSubscriptionType.Notification)).toBe(CharacteristicSubscriptionType.Notification);
+      expect(normalizeCharacteristicSubscriptionType(NitroCharacteristicSubscriptionType.Indication)).toBe(NitroCharacteristicSubscriptionType.Indication);
+      expect(normalizeCharacteristicSubscriptionType(NitroCharacteristicSubscriptionType.Notification)).toBe(NitroCharacteristicSubscriptionType.Notification);
     });
 
     it('should convert string subscription type values to numeric', () => {
-      expect(normalizeCharacteristicSubscriptionType('Indication' as any)).toBe(CharacteristicSubscriptionType.Indication);
-      expect(normalizeCharacteristicSubscriptionType('Notification' as any)).toBe(CharacteristicSubscriptionType.Notification);
+      expect(normalizeCharacteristicSubscriptionType('indication' as any)).toBe(NitroCharacteristicSubscriptionType.Indication);
+      expect(normalizeCharacteristicSubscriptionType('notification' as any)).toBe(NitroCharacteristicSubscriptionType.Notification);
     });
 
     it('should handle legacy string values from react-native-ble-plx', () => {
-      expect(normalizeCharacteristicSubscriptionType('notification')).toBe(CharacteristicSubscriptionType.Notification);
-      expect(normalizeCharacteristicSubscriptionType('indication')).toBe(CharacteristicSubscriptionType.Indication);
+      expect(normalizeCharacteristicSubscriptionType('notification')).toBe(NitroCharacteristicSubscriptionType.Notification);
+      expect(normalizeCharacteristicSubscriptionType('indication')).toBe(NitroCharacteristicSubscriptionType.Indication);
     });
   });
 });
@@ -176,28 +183,28 @@ describe('Backward Compatibility', () => {
   it('should maintain compatibility with react-native-ble-plx string values', () => {
     // Test that the old string-based API still works through normalization
     const state1 = normalizeState('PoweredOn' as any);
-    const state2 = normalizeState(State.PoweredOn);
+    const state2 = normalizeState(NitroState.PoweredOn);
     expect(state1).toBe(state2);
 
     const logLevel1 = normalizeLogLevel('Debug' as any);
-    const logLevel2 = normalizeLogLevel(LogLevel.Debug);
+    const logLevel2 = normalizeLogLevel(NitroLogLevel.Debug);
     expect(logLevel1).toBe(logLevel2);
 
     const subscriptionType1 = normalizeCharacteristicSubscriptionType('notification');
-    const subscriptionType2 = normalizeCharacteristicSubscriptionType(CharacteristicSubscriptionType.Notification);
+    const subscriptionType2 = normalizeCharacteristicSubscriptionType(NitroCharacteristicSubscriptionType.Notification);
     expect(subscriptionType1).toBe(subscriptionType2);
   });
 
   it('should provide string representations for user-facing display', () => {
     // Test that numeric enums can be converted back to user-friendly strings
-    expect(stateToString(State.PoweredOn)).toBe('PoweredOn');
-    expect(logLevelToString(LogLevel.Debug)).toBe('Debug');
-    expect(characteristicSubscriptionTypeToString(CharacteristicSubscriptionType.Notification)).toBe('notification');
+    expect(stateToString(NitroState.PoweredOn)).toBe(State.PoweredOn);
+    expect(logLevelToString(NitroLogLevel.Debug)).toBe(LogLevel.Debug);
+    expect(characteristicSubscriptionTypeToString(NitroCharacteristicSubscriptionType.Notification)).toBe('notification');
   });
 
   it('should handle edge cases gracefully', () => {
     // Test that invalid values don't crash and default to reasonable fallbacks
-    expect(() => stateToString(999 as State)).not.toThrow();
+    expect(() => stateToString(999 as NitroState)).not.toThrow();
     expect(() => stringToState('invalid')).not.toThrow();
     expect(() => normalizeState(null as any)).not.toThrow();
     expect(() => normalizeLogLevel(undefined as any)).not.toThrow();
@@ -206,28 +213,32 @@ describe('Backward Compatibility', () => {
 
 describe('Enum Value Validation', () => {
   it('should have correct numeric enum values', () => {
-    // Verify that our numeric enums match the expected values
-    expect(State.Unknown).toBe(0);
-    expect(State.Resetting).toBe(1);
-    expect(State.Unsupported).toBe(2);
-    expect(State.Unauthorized).toBe(3);
-    expect(State.PoweredOff).toBe(4);
-    expect(State.PoweredOn).toBe(5);
+    // Verify that our numeric enums match the expected values  
+    expect(NitroState.Unknown).toBe(0);
+    expect(NitroState.Resetting).toBe(1);
+    expect(NitroState.Unsupported).toBe(2);
+    expect(NitroState.Unauthorized).toBe(3);
+    expect(NitroState.PoweredOff).toBe(4);
+    expect(NitroState.PoweredOn).toBe(5);
 
-    expect(LogLevel.None).toBe(0);
-    expect(LogLevel.Verbose).toBe(1);
-    expect(LogLevel.Debug).toBe(2);
-    expect(LogLevel.Info).toBe(3);
-    expect(LogLevel.Warning).toBe(4);
-    expect(LogLevel.Error).toBe(5);
+    expect(NitroLogLevel.None).toBe(0);
+    expect(NitroLogLevel.Verbose).toBe(1);
+    expect(NitroLogLevel.Debug).toBe(2);
+    expect(NitroLogLevel.Info).toBe(3);
+    expect(NitroLogLevel.Warning).toBe(4);
+    expect(NitroLogLevel.Error).toBe(5);
 
-    expect(CharacteristicSubscriptionType.Notification).toBe(0);
-    expect(CharacteristicSubscriptionType.Indication).toBe(1);
+    expect(NitroCharacteristicSubscriptionType.Notification).toBe(0);
+    expect(NitroCharacteristicSubscriptionType.Indication).toBe(1);
+
+    // Verify that our string enums match the expected values
+    expect(State.Unknown).toBe('Unknown');
+    expect(LogLevel.Debug).toBe('Debug');
   });
 
   it('should provide complete bidirectional conversion coverage', () => {
     // Test that every enum value can be converted to string and back
-    const states = [State.Unknown, State.Resetting, State.Unsupported, State.Unauthorized, State.PoweredOff, State.PoweredOn];
+    const states = [NitroState.Unknown, NitroState.Resetting, NitroState.Unsupported, NitroState.Unauthorized, NitroState.PoweredOff, NitroState.PoweredOn];
     
     states.forEach(state => {
       const stringValue = stateToString(state);
@@ -235,7 +246,7 @@ describe('Enum Value Validation', () => {
       expect(backToNumber).toBe(state);
     });
 
-    const logLevels = [LogLevel.None, LogLevel.Error, LogLevel.Warning, LogLevel.Info, LogLevel.Debug, LogLevel.Verbose];
+    const logLevels = [NitroLogLevel.None, NitroLogLevel.Error, NitroLogLevel.Warning, NitroLogLevel.Info, NitroLogLevel.Debug, NitroLogLevel.Verbose];
     
     logLevels.forEach(level => {
       const stringValue = logLevelToString(level);
@@ -243,7 +254,7 @@ describe('Enum Value Validation', () => {
       expect(backToNumber).toBe(level);
     });
 
-    const subscriptionTypes = [CharacteristicSubscriptionType.Notification, CharacteristicSubscriptionType.Indication];
+    const subscriptionTypes = [NitroCharacteristicSubscriptionType.Notification, NitroCharacteristicSubscriptionType.Indication];
     
     subscriptionTypes.forEach(type => {
       const stringValue = characteristicSubscriptionTypeToString(type);

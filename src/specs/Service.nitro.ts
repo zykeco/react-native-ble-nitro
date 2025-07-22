@@ -10,7 +10,7 @@ import type {
   NativeDescriptor,
   CharacteristicMonitorListener,
   Subscription
-} from './types';
+} from './types.js';
 
 export interface Service extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   // Service properties

@@ -9,10 +9,11 @@
   "exports": {
     ".": {
       "react-native": "./src/index.ts",
+      "typescript": "./src/index.ts",
       "import": "./lib/index.js",
       "require": "./lib/index.js",
       "types": "./lib/index.d.ts",
-      "default": "./lib/index.js"
+      "default": "./src/index.ts"
     },
     "./plugin": {
       "import": "./plugin/build/index.js",

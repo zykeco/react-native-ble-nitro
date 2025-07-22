@@ -6,11 +6,11 @@
  * Nitro's type system constraints.
  */
 
-export * from './serviceData';
-export * from './deviceWrapper';
-export * from './constants';
+export * from './serviceData.js';
+export * from './deviceWrapper.js';
+export * from './constants.js';
 
-// Explicitly export enum utilities to avoid conflicts
+// Explicitly export enum utilities and enums to avoid conflicts
 export {
   stateToString,
   stringToState,
@@ -21,4 +21,12 @@ export {
   normalizeState,
   normalizeLogLevel,
   normalizeCharacteristicSubscriptionType,
-} from './enums';
+  State,
+  LogLevel
+} from './enums.js';
+
+// Export type literals (not enums) for exact react-native-ble-plx compatibility
+export type {
+  CharacteristicSubscriptionType,
+  RefreshGattMoment
+} from './enums.js';

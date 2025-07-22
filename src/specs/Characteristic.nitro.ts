@@ -9,7 +9,7 @@ import type {
   NativeDescriptor,
   CharacteristicMonitorListener,
   Subscription
-} from './types';
+} from './types.js';
 
 export interface Characteristic extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   // Characteristic properties
