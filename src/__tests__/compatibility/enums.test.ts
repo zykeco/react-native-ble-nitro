@@ -126,13 +126,13 @@ describe('LogLevel Enum Conversions', () => {
 describe('CharacteristicSubscriptionType Enum Conversions', () => {
   describe('characteristicSubscriptionTypeToString', () => {
     it('should convert numeric subscription type values to strings', () => {
-      expect(characteristicSubscriptionTypeToString(CharacteristicSubscriptionType.Notification)).toBe('Notification');
-      expect(characteristicSubscriptionTypeToString(CharacteristicSubscriptionType.Indication)).toBe('Indication');
+      expect(characteristicSubscriptionTypeToString(CharacteristicSubscriptionType.Notification)).toBe('notification');
+      expect(characteristicSubscriptionTypeToString(CharacteristicSubscriptionType.Indication)).toBe('indication');
     });
 
     it('should handle invalid subscription type values', () => {
-      expect(characteristicSubscriptionTypeToString(999 as CharacteristicSubscriptionType)).toBe('Notification');
-      expect(characteristicSubscriptionTypeToString(-1 as CharacteristicSubscriptionType)).toBe('Notification');
+      expect(characteristicSubscriptionTypeToString(999 as CharacteristicSubscriptionType)).toBe('notification');
+      expect(characteristicSubscriptionTypeToString(-1 as CharacteristicSubscriptionType)).toBe('notification');
     });
   });
 
@@ -192,7 +192,7 @@ describe('Backward Compatibility', () => {
     // Test that numeric enums can be converted back to user-friendly strings
     expect(stateToString(State.PoweredOn)).toBe('PoweredOn');
     expect(logLevelToString(LogLevel.Debug)).toBe('Debug');
-    expect(characteristicSubscriptionTypeToString(CharacteristicSubscriptionType.Notification)).toBe('Notification');
+    expect(characteristicSubscriptionTypeToString(CharacteristicSubscriptionType.Notification)).toBe('notification');
   });
 
   it('should handle edge cases gracefully', () => {
@@ -215,11 +215,11 @@ describe('Enum Value Validation', () => {
     expect(State.PoweredOn).toBe(5);
 
     expect(LogLevel.None).toBe(0);
-    expect(LogLevel.Error).toBe(1);
-    expect(LogLevel.Warning).toBe(2);
+    expect(LogLevel.Verbose).toBe(1);
+    expect(LogLevel.Debug).toBe(2);
     expect(LogLevel.Info).toBe(3);
-    expect(LogLevel.Debug).toBe(4);
-    expect(LogLevel.Verbose).toBe(5);
+    expect(LogLevel.Warning).toBe(4);
+    expect(LogLevel.Error).toBe(5);
 
     expect(CharacteristicSubscriptionType.Notification).toBe(0);
     expect(CharacteristicSubscriptionType.Indication).toBe(1);

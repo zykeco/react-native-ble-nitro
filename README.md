@@ -3,7 +3,7 @@
 [![npm version](https://badge.fury.io/js/react-native-ble-nitro.svg)](https://badge.fury.io/js/react-native-ble-nitro)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A high-performance React Native BLE library built on [Nitro Modules](https://nitro.margelo.com/) - **100% drop-in replacement** for `react-native-ble-plx` with significantly better performance and stability.
+A high-performance React Native BLE library built on [Nitro Modules](https://nitro.margelo.com/) - **drop-in replacement** for `react-native-ble-plx` with significantly better performance and stability.
 
 Originally developed for [Zyke Band](https://zykeband.com) - a fitness and health tracker created by a small team.
 
@@ -23,9 +23,7 @@ Originally developed for [Zyke Band](https://zykeband.com) - a fitness and healt
 ### Installation
 
 ```bash
-npm install react-native-ble-nitro
-# or
-yarn add react-native-ble-nitro
+npm install react-native-nitro-modules react-native-ble-nitro
 ```
 
 ### Expo Setup

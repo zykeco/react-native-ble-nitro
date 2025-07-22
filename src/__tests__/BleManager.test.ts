@@ -7,69 +7,80 @@
 import { BleManager } from '../index';
 import { State, LogLevel } from '../specs/types';
 
+// Create a mock Nitro manager
+const mockNitroManager = {
+  destroy: jest.fn().mockResolvedValue(undefined),
+  setLogLevel: jest.fn().mockResolvedValue(LogLevel.Info),
+  logLevel: jest.fn().mockResolvedValue(LogLevel.Info),
+  state: jest.fn().mockResolvedValue(State.PoweredOn),
+  onStateChange: jest.fn().mockReturnValue({ remove: jest.fn() }),
+  startDeviceScan: jest.fn().mockResolvedValue(undefined),
+  stopDeviceScan: jest.fn().mockResolvedValue(undefined),
+  connectToDevice: jest.fn().mockResolvedValue({
+    id: 'test-device',
+    name: 'Test Device',
+    deviceName: 'Test Device',
+    rssi: -50,
+    mtu: 23
+  }),
+  cancelDeviceConnection: jest.fn().mockResolvedValue({
+    id: 'test-device',
+    name: 'Test Device',
+    deviceName: 'Test Device'
+  }),
+  isDeviceConnected: jest.fn().mockResolvedValue(true),
+  discoverAllServicesAndCharacteristicsForDevice: jest.fn().mockResolvedValue({
+    id: 'test-device',
+    name: 'Test Device',
+    deviceName: 'Test Device'
+  }),
+  servicesForDevice: jest.fn().mockResolvedValue([
+    {
+      id: 1,
+      uuid: '12345678-1234-5678-9abc-123456789abc',
+      deviceID: 'test-device',
+      isPrimary: true
+    }
+  ]),
+  characteristicsForDevice: jest.fn().mockResolvedValue([
+    {
+      id: 1,
+      uuid: '87654321-4321-8765-cba9-987654321cba',
+      serviceID: 1,
+      serviceUUID: '12345678-1234-5678-9abc-123456789abc',
+      deviceID: 'test-device',
+      isReadable: true,
+      isWritableWithResponse: true,
+      isWritableWithoutResponse: false,
+      isNotifiable: true,
+      isNotifying: false,
+      isIndicatable: false,
+      value: null
+    }
+  ]),
+  readCharacteristicForDevice: jest.fn().mockResolvedValue({
+    id: 1,
+    uuid: '87654321-4321-8765-cba9-987654321cba',
+    value: 'dGVzdCB2YWx1ZQ==' // "test value" in base64
+  }),
+  writeCharacteristicWithResponseForDevice: jest.fn().mockResolvedValue({
+    id: 1,
+    uuid: '87654321-4321-8765-cba9-987654321cba',
+    value: 'dGVzdCB2YWx1ZQ=='
+  }),
+  monitorCharacteristicForDevice: jest.fn().mockReturnValue({ remove: jest.fn() }),
+};
+
 // Mock the Nitro module
 jest.mock('react-native-nitro-modules', () => ({
   NitroModules: {
-    createHybridObject: jest.fn(() => ({
-      destroy: jest.fn().mockResolvedValue(undefined),
-      setLogLevel: jest.fn().mockResolvedValue(LogLevel.Info),
-      logLevel: jest.fn().mockResolvedValue(LogLevel.Info),
-      state: jest.fn().mockResolvedValue(State.PoweredOn),
-      onStateChange: jest.fn().mockReturnValue({ remove: jest.fn() }),
-      startDeviceScan: jest.fn().mockResolvedValue(undefined),
-      stopDeviceScan: jest.fn().mockResolvedValue(undefined),
-      connectToDevice: jest.fn().mockResolvedValue({
-        id: 'test-device',
-        deviceName: 'Test Device',
-        rssi: -50,
-        mtu: 23
-      }),
-      cancelDeviceConnection: jest.fn().mockResolvedValue({
-        id: 'test-device',
-        deviceName: 'Test Device'
-      }),
-      isDeviceConnected: jest.fn().mockResolvedValue(true),
-      discoverAllServicesAndCharacteristicsForDevice: jest.fn().mockResolvedValue({
-        id: 'test-device',
-        deviceName: 'Test Device'
-      }),
-      servicesForDevice: jest.fn().mockResolvedValue([
-        {
-          id: 1,
-          uuid: '12345678-1234-5678-9abc-123456789abc',
-          deviceID: 'test-device',
-          isPrimary: true
-        }
-      ]),
-      characteristicsForDevice: jest.fn().mockResolvedValue([
-        {
-          id: 1,
-          uuid: '87654321-4321-8765-cba9-987654321cba',
-          serviceID: 1,
-          serviceUUID: '12345678-1234-5678-9abc-123456789abc',
-          deviceID: 'test-device',
-          isReadable: true,
-          isWritableWithResponse: true,
-          isWritableWithoutResponse: false,
-          isNotifiable: true,
-          isNotifying: false,
-          isIndicatable: false,
-          value: null
-        }
-      ]),
-      readCharacteristicForDevice: jest.fn().mockResolvedValue({
-        id: 1,
-        uuid: '87654321-4321-8765-cba9-987654321cba',
-        value: 'dGVzdCB2YWx1ZQ==' // "test value" in base64
-      }),
-      writeCharacteristicWithResponseForDevice: jest.fn().mockResolvedValue({
-        id: 1,
-        uuid: '87654321-4321-8765-cba9-987654321cba',
-        value: 'dGVzdCB2YWx1ZQ=='
-      }),
-      monitorCharacteristicForDevice: jest.fn().mockReturnValue({ remove: jest.fn() }),
-    })),
+    createHybridObject: jest.fn(() => mockNitroManager),
   },
+}));
+
+// Mock the BleManagerFactory
+jest.mock('../BleManagerFactory', () => ({
+  createBleManager: jest.fn(() => mockNitroManager),
 }));
 
 describe('BleManager', () => {
@@ -91,20 +102,20 @@ describe('BleManager', () => {
 
     it('should set log level', async () => {
       const result = await manager.setLogLevel(LogLevel.Info);
-      expect(result).toBe(LogLevel.Info);
+      expect(result).toBe('Info'); // BleManagerCompat returns strings for compatibility
     });
 
     it('should get current log level', async () => {
       await manager.setLogLevel(LogLevel.Debug);
       const level = await manager.logLevel();
-      expect(level).toBe(LogLevel.Info); // Mocked return value
+      expect(level).toBe('Info'); // BleManagerCompat returns strings for compatibility
     });
   });
 
   describe('State Management', () => {
     it('should get current state', async () => {
       const state = await manager.state();
-      expect(state).toBe(State.PoweredOn);
+      expect(state).toBe('PoweredOn'); // BleManagerCompat converts State.PoweredOn -> 'PoweredOn'
     });
 
     it('should listen to state changes', async () => {
@@ -122,7 +133,7 @@ describe('BleManager', () => {
       await manager.startDeviceScan(null, null, listener);
       
       // Verify that the native method was called
-      expect(manager['nitroManager'].startDeviceScan).toHaveBeenCalledWith(
+      expect(mockNitroManager.startDeviceScan).toHaveBeenCalledWith(
         null,
         null,
         expect.any(Function)
@@ -132,7 +143,7 @@ describe('BleManager', () => {
     it('should stop device scan', async () => {
       await manager.stopDeviceScan();
       
-      expect(manager['nitroManager'].stopDeviceScan).toHaveBeenCalled();
+      expect(mockNitroManager.stopDeviceScan).toHaveBeenCalled();
     });
 
     it('should filter UUIDs when scanning', async () => {
@@ -141,7 +152,7 @@ describe('BleManager', () => {
       
       await manager.startDeviceScan(uuids, null, listener);
       
-      expect(manager['nitroManager'].startDeviceScan).toHaveBeenCalledWith(
+      expect(mockNitroManager.startDeviceScan).toHaveBeenCalledWith(
         uuids,
         null,
         expect.any(Function)
@@ -157,7 +168,7 @@ describe('BleManager', () => {
       
       expect(device.id).toBe(deviceId);
       expect(device.name).toBe('Test Device');
-      expect(manager['nitroManager'].connectToDevice).toHaveBeenCalledWith(
+      expect(mockNitroManager.connectToDevice).toHaveBeenCalledWith(
         deviceId,
         expect.any(Object)
       );
@@ -230,7 +241,7 @@ describe('BleManager', () => {
       );
       
       expect(subscription).toHaveProperty('remove');
-      expect(manager['nitroManager'].monitorCharacteristicForDevice).toHaveBeenCalledWith(
+      expect(mockNitroManager.monitorCharacteristicForDevice).toHaveBeenCalledWith(
         deviceId,
         serviceUUID,
         characteristicUUID,
@@ -245,14 +256,14 @@ describe('BleManager', () => {
     it('should handle connection errors gracefully', async () => {
       // Mock a connection failure
       const mockError = new Error('Connection failed');
-      (manager['nitroManager'].connectToDevice as jest.Mock).mockRejectedValueOnce(mockError);
+      (mockNitroManager.connectToDevice as jest.Mock).mockRejectedValueOnce(mockError);
 
       await expect(manager.connectToDevice('invalid-device')).rejects.toThrow('Connection failed');
     });
 
     it('should handle scan start errors', async () => {
       const mockError = new Error('Scan failed');
-      (manager['nitroManager'].startDeviceScan as jest.Mock).mockRejectedValueOnce(mockError);
+      (mockNitroManager.startDeviceScan as jest.Mock).mockRejectedValueOnce(mockError);
 
       const listener = jest.fn();
       await expect(manager.startDeviceScan(null, null, listener)).rejects.toThrow('Scan failed');
@@ -262,7 +273,7 @@ describe('BleManager', () => {
   describe('Cleanup', () => {
     it('should destroy manager and cleanup resources', async () => {
       await manager.destroy();
-      expect(manager['nitroManager'].destroy).toHaveBeenCalled();
+      expect(mockNitroManager.destroy).toHaveBeenCalled();
     });
   });
 });
@@ -306,9 +317,9 @@ describe('Device Wrapper Compatibility', () => {
   it('should convert enum values to strings for compatibility', async () => {
     const state = await manager.state();
     
-    // State should be a numeric enum value but compatible with string comparison
-    expect(typeof state).toBe('number');
-    expect(state).toBe(State.PoweredOn);
+    // State should be a string value (mocked return value is 'PoweredOn')
+    expect(typeof state).toBe('string');
+    expect(state).toBe('PoweredOn');
     
     // The compatibility layer should handle string/number conversion
     expect(State.PoweredOn).toBe(5); // Numeric enum value

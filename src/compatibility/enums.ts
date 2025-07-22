@@ -65,31 +65,52 @@ Object.entries(RefreshGattMomentString).forEach(([num, str]) => {
 
 // Conversion functions
 export function stateToString(state: State): string {
-  return StateString[state];
+  return StateString[state] ?? 'Unknown';
 }
 
 export function stringToState(stateString: string): State {
-  return StringToState[stateString] ?? State.Unknown;
+  // Handle case insensitive lookup
+  const lowerString = stateString.toLowerCase();
+  for (const [key, value] of Object.entries(StringToState)) {
+    if (key.toLowerCase() === lowerString) {
+      return value;
+    }
+  }
+  return State.Unknown;
 }
 
 export function logLevelToString(logLevel: LogLevel): string {
-  return LogLevelString[logLevel];
+  return LogLevelString[logLevel] ?? 'None';
 }
 
 export function stringToLogLevel(logLevelString: string): LogLevel {
-  return StringToLogLevel[logLevelString] ?? LogLevel.None;
+  // Handle case insensitive lookup
+  const lowerString = logLevelString.toLowerCase();
+  for (const [key, value] of Object.entries(StringToLogLevel)) {
+    if (key.toLowerCase() === lowerString) {
+      return value;
+    }
+  }
+  return LogLevel.None;
 }
 
 export function characteristicSubscriptionTypeToString(
   type: CharacteristicSubscriptionType
-): 'notification' | 'indication' {
-  return CharacteristicSubscriptionTypeString[type] as 'notification' | 'indication';
+): string {
+  return CharacteristicSubscriptionTypeString[type] ?? 'notification';
 }
 
 export function stringToCharacteristicSubscriptionType(
-  typeString: 'notification' | 'indication'
+  typeString: string
 ): CharacteristicSubscriptionType {
-  return StringToCharacteristicSubscriptionType[typeString] ?? CharacteristicSubscriptionType.Notification;
+  // Handle case insensitive lookup
+  const lowerString = typeString.toLowerCase();
+  for (const [key, value] of Object.entries(StringToCharacteristicSubscriptionType)) {
+    if (key.toLowerCase() === lowerString) {
+      return value;
+    }
+  }
+  return CharacteristicSubscriptionType.Notification;
 }
 
 export function refreshGattMomentToString(moment: RefreshGattMoment): 'OnConnected' {

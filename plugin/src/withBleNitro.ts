@@ -57,7 +57,7 @@ export const withBleNitroAndroid: ConfigPlugin<BleNitroPluginProps> = (config, p
     const androidManifest = config.modResults;
 
     // Add required permissions
-    AndroidConfig.Permissions.ensurePermissions(config, [
+    AndroidConfig.Permissions.ensurePermissions(config.modResults, [
       ...BLUETOOTH_PERMISSIONS,
       ...BLUETOOTH_PERMISSIONS_API_31,
     ]);
@@ -73,11 +73,11 @@ export const withBleNitroAndroid: ConfigPlugin<BleNitroPluginProps> = (config, p
     const bleFeature = {
       $: {
         'android:name': 'android.hardware.bluetooth_le',
-        'android:required': isBackgroundEnabled ? 'true' : 'false',
+        'android:required': (isBackgroundEnabled ? 'true' : 'false') as any,
       },
     };
 
-    if (!usesFeatures.find(f => f.$?.['android:name'] === 'android.hardware.bluetooth_le')) {
+    if (!usesFeatures.find((f: any) => f.$?.['android:name'] === 'android.hardware.bluetooth_le')) {
       usesFeatures.push(bleFeature);
     }
 
@@ -121,8 +121,8 @@ export const withBleNitroIOS: ConfigPlugin<BleNitroPluginProps> = (config, props
       }
       
       backgroundModes.forEach(mode => {
-        if (!config.modResults.UIBackgroundModes.includes(mode)) {
-          config.modResults.UIBackgroundModes.push(mode);
+        if (!config.modResults.UIBackgroundModes!.includes(mode)) {
+          config.modResults.UIBackgroundModes!.push(mode);
         }
       });
     }
