@@ -1,6 +1,6 @@
 {
   "name": "react-native-ble-nitro",
-  "version": "1.0.0-beta.6",
+  "version": "1.0.0-beta.7",
   "description": "High-performance React Native BLE library built on Nitro Modules - drop-in replacement for react-native-ble-plx",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -31,7 +31,7 @@
     "build:plugin": "tsc --project plugin/tsconfig.json",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build && npm run test",
-    "nitro-codegen": "nitro-codegen generate",
+    "nitro-codegen": "nitro-codegen src",
     "clean": "rm -rf lib && rm -rf plugin/build",
     "test": "jest",
     "lint": "eslint src/ --ext .ts,.tsx",

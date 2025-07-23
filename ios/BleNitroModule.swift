@@ -19,13 +19,15 @@ public class BleNitroModule: NSObject {
     public func constantsToExport() -> [String: Any] {
         return [:]
     }
-}
-
-/**
- * Nitro module factory for creating BLE manager instances
- */
-@_cdecl("create_ble_nitro_manager")
-public func createBleNitroManager() -> UnsafeMutableRawPointer {
-    let manager = BleNitroBleManager()
-    return Unmanaged.passRetained(manager).toOpaque()
+    
+    override init() {
+        super.init()
+        // Register the BleManager HybridObject
+        HybridObjectRegistry.registerHybridObjectConstructor(
+            name: "BleManager",
+            constructor: {
+                return BleNitroBleManager()
+            }
+        )
+    }
 }

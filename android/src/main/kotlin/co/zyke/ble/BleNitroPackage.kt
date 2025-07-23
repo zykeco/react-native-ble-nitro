@@ -10,18 +10,18 @@ import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
-import com.margelo.nitro.NitroModules
+import com.margelo.nitro.HybridObjectRegistry
 
 /**
  * React Native package for BLE Nitro
- * Registers the Nitro module factory with React Native
+ * Registers the HybridObject manually through the registry
  */
 class BleNitroPackage : ReactPackage {
     
     companion object {
         init {
-            // Register the Nitro module factory
-            NitroModules.registerModule("BleNitroManager") { context ->
+            // Register the BleManager HybridObject
+            HybridObjectRegistry.registerHybridObjectConstructor("BleManager") { context ->
                 BleNitroBleManager(context as ReactApplicationContext)
             }
         }

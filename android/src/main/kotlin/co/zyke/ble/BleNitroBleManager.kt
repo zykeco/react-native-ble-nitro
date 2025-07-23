@@ -15,7 +15,7 @@ import android.util.Base64
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.ReactApplicationContext
-import com.margelo.nitro.NitroModules
+import com.margelo.nitro.co.zyke.ble.HybridBleManagerSpec
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import no.nordicsemi.android.ble.BleManager
