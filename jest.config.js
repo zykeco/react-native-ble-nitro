@@ -1,4 +1,4 @@
-module.exports = {
+export default {
   preset: 'ts-jest/presets/js-with-ts',
   testEnvironment: 'node',
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
@@ -39,4 +39,4 @@ module.exports = {
     // Map .js extensions to .ts files for ES module imports in tests
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
-};
+}
