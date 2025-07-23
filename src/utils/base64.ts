@@ -1,4 +1,4 @@
-import type { Base64 } from '../specs/types.js';
+import type { Base64 } from '../specs/types';
 
 /**
  * Utility functions for Base64 encoding/decoding

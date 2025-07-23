@@ -5,7 +5,7 @@ import type {
   DeviceId,
   Base64,
   TransactionId
-} from './types.js';
+} from './types';
 
 export interface Descriptor extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   // Descriptor properties

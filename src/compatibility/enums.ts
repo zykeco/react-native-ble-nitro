@@ -11,7 +11,7 @@ import {
   LogLevel as NitroLogLevel,
   CharacteristicSubscriptionType as NitroCharacteristicSubscriptionType,
   RefreshGattMoment as NitroRefreshGattMoment,
-} from '../specs/types.js';
+} from '../specs/types';
 
 // Define exact string enums and types matching react-native-ble-plx
 export enum State {

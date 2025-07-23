@@ -4,8 +4,8 @@
  * Copyright © 2025 Zyke (https://zyke.co)
  */
 
-import { BleManager } from '../index.js';
-import { State, LogLevel } from '../specs/types.js';
+import { BleManager } from '../index';
+import { State, LogLevel } from '../specs/types';
 
 // Create a mock Nitro manager
 const mockNitroManager = {

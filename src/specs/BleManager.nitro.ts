@@ -19,7 +19,7 @@ import type {
   NativeDescriptor,
   Base64,
   Subscription
-} from './types.js';
+} from './types';
 
 // Nitro-compatible options interface (simplified without functions)
 export interface BleManagerNitroOptions {

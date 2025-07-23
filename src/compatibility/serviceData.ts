@@ -5,7 +5,7 @@
  * and the original { [uuid: string]: Base64 } format from react-native-ble-plx
  */
 
-import type { ServiceDataEntry, UUID, Base64 } from '../specs/types.js';
+import type { ServiceDataEntry, UUID, Base64 } from '../specs/types';
 
 /**
  * Convert ServiceDataEntry array to the original index signature format

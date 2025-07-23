@@ -1,6 +1,6 @@
 import { NitroModules } from 'react-native-nitro-modules';
-import type { BleManager as BleManagerInterface, BleManagerNitroOptions } from './specs/BleManager.nitro.js';
-import type { BleManagerOptions } from './specs/types.js';
+import type { BleManager as BleManagerInterface, BleManagerNitroOptions } from './specs/BleManager.nitro';
+import type { BleManagerOptions } from './specs/types';
 
 // Store callbacks that can't be passed to Nitro
 const storedCallbacks = new WeakMap<BleManagerInterface, {

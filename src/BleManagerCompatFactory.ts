@@ -5,8 +5,8 @@
  * by wrapping the Nitro implementation with compatibility shims
  */
 
-import { createBleManager } from './BleManagerFactory.js';
-import type { BleManager as BleManagerInterface } from './specs/BleManager.nitro.js';
+import { createBleManager } from './BleManagerFactory';
+import type { BleManager as BleManagerInterface } from './specs/BleManager.nitro';
 import type { 
   BleManagerOptions,
   UUID,
@@ -21,16 +21,16 @@ import type {
   NativeDescriptor,
   LogLevel,
   Subscription
-} from './specs/types.js';
-import { DeviceWrapper } from './compatibility/deviceWrapper.js';
+} from './specs/types';
+import { DeviceWrapper } from './compatibility/deviceWrapper';
 import { 
-  stateToString, 
+  stateToString,
   logLevelToString,
   normalizeLogLevel,
   normalizeCharacteristicSubscriptionType,
   State as PlxState,
   LogLevel as PlxLogLevel
-} from './compatibility/enums.js';
+} from './compatibility/enums';
 
 
 /**

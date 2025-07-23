@@ -1,5 +1,5 @@
 import { ConfigPlugin } from '@expo/config-plugins';
-import withBleNitro, { withBleNitroAndroid, withBleNitroIOS, type BleNitroPluginProps } from './withBleNitro.js';
+import withBleNitro, { withBleNitroAndroid, withBleNitroIOS, type BleNitroPluginProps } from './withBleNitro';
 
 /**
  * Expo Config Plugin for react-native-ble-nitro

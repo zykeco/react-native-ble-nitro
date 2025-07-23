@@ -1,2 +1,2 @@
-export * from './uuid.js';
-export * from './base64.js';
+export * from './uuid';
+export * from './base64';
