@@ -335,6 +335,7 @@ public class BleNitroBleManager: HybridBleManagerSpec, CBCentralManagerDelegate 
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
         let state = mapCBManagerState(central.state)
         stateChangeListener?(state)
+        print("BleNitro: Central manager state changed to: \(central.state.rawValue)")
     }
     
     public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
@@ -556,14 +557,6 @@ extension BleNitroBleManager: CBPeripheralDelegate {
         }
     }
     
-    public func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        let newState = convertCBManagerStateToState(central.state)
-        
-        // Notify state change listener if available
-        stateChangeListener?(newState)
-        
-        print("BleNitro: Central manager state changed to: \(central.state.rawValue)")
-    }
 }
 
 /**
