@@ -3,7 +3,7 @@ module.exports = {
     platforms: {
       android: {
         sourceDir: './android',
-        packageImportPath: 'import co.zyke.ble.BleNitroPackage;',
+        // No packageImportPath needed - autolinking handles registration
       },
       ios: {
         project: './ios/BleNitro.xcodeproj',

@@ -20,14 +20,5 @@ public class BleNitroModule: NSObject {
         return [:]
     }
     
-    override init() {
-        super.init()
-        // Register the BleManager HybridObject
-        HybridObjectRegistry.registerHybridObjectConstructor(
-            name: "BleManager",
-            constructor: {
-                return BleNitroBleManager()
-            }
-        )
-    }
+    // Autolinking handles the Nitro registration automatically
 }

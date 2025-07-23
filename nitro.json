@@ -8,7 +8,12 @@
     "androidNamespace": ["co", "zyke", "ble"],
     "androidCxxLibName": "BleNitro"
   },
-  "autolinking": {},
+  "autolinking": {
+    "BleManager": {
+      "swift": "BleNitroBleManager",
+      "kotlin": "BleNitroBleManager"
+    }
+  },
   "ignorePaths": [
     "**/node_modules"
   ]
