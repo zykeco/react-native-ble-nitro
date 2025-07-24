@@ -5,13 +5,13 @@
  */
 
 import { BleManager } from '../index';
-import { State, LogLevel } from '../specs/types';
+import { State, BleLogLevel } from '../specs/types';
 
 // Create a mock Nitro manager
 const mockNitroManager = {
   destroy: jest.fn().mockResolvedValue(undefined),
-  setLogLevel: jest.fn().mockResolvedValue(LogLevel.Info),
-  logLevel: jest.fn().mockResolvedValue(LogLevel.Info),
+  setLogLevel: jest.fn().mockResolvedValue(BleLogLevel.Info),
+  logLevel: jest.fn().mockResolvedValue(BleLogLevel.Info),
   state: jest.fn().mockResolvedValue(State.PoweredOn),
   onStateChange: jest.fn().mockReturnValue({ remove: jest.fn() }),
   startDeviceScan: jest.fn().mockResolvedValue(undefined),
@@ -101,12 +101,12 @@ describe('BleManager', () => {
     });
 
     it('should set log level', async () => {
-      const result = await manager.setLogLevel(LogLevel.Info);
+      const result = await manager.setLogLevel(BleLogLevel.Info);
       expect(result).toBe('Info'); // BleManagerCompat returns PlxLogLevel for compatibility
     });
 
     it('should get current log level', async () => {
-      await manager.setLogLevel(LogLevel.Debug);
+      await manager.setLogLevel(BleLogLevel.DebugLevel);
       const level = await manager.logLevel();
       expect(level).toBe('Info'); // BleManagerCompat returns PlxLogLevel for compatibility
     });

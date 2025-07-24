@@ -19,7 +19,7 @@ import {
 } from '../../compatibility/enums';
 import { 
   State as NitroState, 
-  LogLevel as NitroLogLevel, 
+  BleLogLevel as NitroLogLevel, 
   CharacteristicSubscriptionType as NitroCharacteristicSubscriptionType 
 } from '../../specs/types';
 
@@ -83,7 +83,7 @@ describe('LogLevel Enum Conversions', () => {
       expect(logLevelToString(NitroLogLevel.Error)).toBe(LogLevel.Error);
       expect(logLevelToString(NitroLogLevel.Warning)).toBe(LogLevel.Warning);
       expect(logLevelToString(NitroLogLevel.Info)).toBe(LogLevel.Info);
-      expect(logLevelToString(NitroLogLevel.Debug)).toBe(LogLevel.Debug);
+      expect(logLevelToString(NitroLogLevel.DebugLevel)).toBe(LogLevel.Debug);
       expect(logLevelToString(NitroLogLevel.Verbose)).toBe(LogLevel.Verbose);
     });
 
@@ -99,7 +99,7 @@ describe('LogLevel Enum Conversions', () => {
       expect(stringToLogLevel('Error')).toBe(NitroLogLevel.Error);
       expect(stringToLogLevel('Warning')).toBe(NitroLogLevel.Warning);
       expect(stringToLogLevel('Info')).toBe(NitroLogLevel.Info);
-      expect(stringToLogLevel('Debug')).toBe(NitroLogLevel.Debug);
+      expect(stringToLogLevel('Debug')).toBe(NitroLogLevel.DebugLevel);
       expect(stringToLogLevel('Verbose')).toBe(NitroLogLevel.Verbose);
     });
 
@@ -118,12 +118,12 @@ describe('LogLevel Enum Conversions', () => {
 
   describe('normalizeLogLevel', () => {
     it('should pass through numeric log level values', () => {
-      expect(normalizeLogLevel(NitroLogLevel.Debug)).toBe(NitroLogLevel.Debug);
+      expect(normalizeLogLevel(NitroLogLevel.DebugLevel)).toBe(NitroLogLevel.DebugLevel);
       expect(normalizeLogLevel(NitroLogLevel.Error)).toBe(NitroLogLevel.Error);
     });
 
     it('should convert string log level values to numeric', () => {
-      expect(normalizeLogLevel('Debug' as any)).toBe(NitroLogLevel.Debug);
+      expect(normalizeLogLevel('Debug' as any)).toBe(NitroLogLevel.DebugLevel);
       expect(normalizeLogLevel('Error' as any)).toBe(NitroLogLevel.Error);
     });
   });
@@ -186,7 +186,7 @@ describe('Backward Compatibility', () => {
     expect(state1).toBe(state2);
 
     const logLevel1 = normalizeLogLevel('Debug' as any);
-    const logLevel2 = normalizeLogLevel(NitroLogLevel.Debug);
+    const logLevel2 = normalizeLogLevel(NitroLogLevel.DebugLevel);
     expect(logLevel1).toBe(logLevel2);
 
     const subscriptionType1 = normalizeCharacteristicSubscriptionType('notification');
@@ -197,7 +197,7 @@ describe('Backward Compatibility', () => {
   it('should provide string representations for user-facing display', () => {
     // Test that numeric enums can be converted back to user-friendly strings
     expect(stateToString(NitroState.PoweredOn)).toBe(State.PoweredOn);
-    expect(logLevelToString(NitroLogLevel.Debug)).toBe(LogLevel.Debug);
+    expect(logLevelToString(NitroLogLevel.DebugLevel)).toBe(LogLevel.Debug);
     expect(characteristicSubscriptionTypeToString(NitroCharacteristicSubscriptionType.Notification)).toBe('notification');
   });
 
@@ -222,7 +222,7 @@ describe('Enum Value Validation', () => {
 
     expect(NitroLogLevel.None).toBe(0);
     expect(NitroLogLevel.Verbose).toBe(1);
-    expect(NitroLogLevel.Debug).toBe(2);
+    expect(NitroLogLevel.DebugLevel).toBe(2);
     expect(NitroLogLevel.Info).toBe(3);
     expect(NitroLogLevel.Warning).toBe(4);
     expect(NitroLogLevel.Error).toBe(5);
@@ -245,7 +245,7 @@ describe('Enum Value Validation', () => {
       expect(backToNumber).toBe(state);
     });
 
-    const logLevels = [NitroLogLevel.None, NitroLogLevel.Error, NitroLogLevel.Warning, NitroLogLevel.Info, NitroLogLevel.Debug, NitroLogLevel.Verbose];
+    const logLevels = [NitroLogLevel.None, NitroLogLevel.Error, NitroLogLevel.Warning, NitroLogLevel.Info, NitroLogLevel.DebugLevel, NitroLogLevel.Verbose];
     
     logLevels.forEach(level => {
       const stringValue = logLevelToString(level);

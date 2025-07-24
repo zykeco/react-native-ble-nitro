@@ -1,7 +1,7 @@
 import type { HybridObject } from 'react-native-nitro-modules';
 import type {
   State,
-  LogLevel,
+  BleLogLevel,
   UUID,
   DeviceId,
   TransactionId,
@@ -42,8 +42,8 @@ export interface BleManager extends HybridObject<{ ios: 'swift'; android: 'kotli
   getRestoredState(): Promise<BleRestoredState | null>;
 
   // Common operations
-  setLogLevel(logLevel: LogLevel): Promise<LogLevel>;
-  logLevel(): Promise<LogLevel>;
+  setLogLevel(logLevel: BleLogLevel): Promise<BleLogLevel>;
+  logLevel(): Promise<BleLogLevel>;
   cancelTransaction(transactionId: TransactionId): Promise<void>;
 
   // State management

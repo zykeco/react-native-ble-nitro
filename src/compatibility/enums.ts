@@ -8,7 +8,7 @@
 // Import Nitro's numeric enums with aliases to avoid naming conflicts
 import {
   State as NitroState,
-  LogLevel as NitroLogLevel,
+  BleLogLevel as NitroLogLevel,
   CharacteristicSubscriptionType as NitroCharacteristicSubscriptionType,
   RefreshGattMoment as NitroRefreshGattMoment,
 } from '../specs/types';
@@ -53,7 +53,7 @@ export function logLevelToString(logLevel: NitroLogLevel): LogLevel {
   const mapping = {
     [NitroLogLevel.None]: LogLevel.None,
     [NitroLogLevel.Verbose]: LogLevel.Verbose,
-    [NitroLogLevel.Debug]: LogLevel.Debug,
+    [NitroLogLevel.DebugLevel]: LogLevel.Debug,
     [NitroLogLevel.Info]: LogLevel.Info,
     [NitroLogLevel.Warning]: LogLevel.Warning,
     [NitroLogLevel.Error]: LogLevel.Error,
@@ -111,7 +111,7 @@ export function stringToLogLevel(logLevelString: LogLevel | string): NitroLogLev
       return NitroLogLevel.Verbose;
     case LogLevel.Debug:
     case 'Debug':
-      return NitroLogLevel.Debug;
+      return NitroLogLevel.DebugLevel;
     case LogLevel.Info:
     case 'Info':
       return NitroLogLevel.Info;

@@ -31,10 +31,10 @@ export enum State {
   PoweredOn = 5
 }
 
-export enum LogLevel {
+export enum BleLogLevel {
   None = 0,
   Verbose = 1,
-  Debug = 2,
+  DebugLevel = 2,
   Info = 3,
   Warning = 4,
   Error = 5

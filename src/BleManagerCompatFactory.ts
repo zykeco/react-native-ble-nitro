@@ -19,7 +19,7 @@ import type {
   NativeService,
   NativeCharacteristic,
   NativeDescriptor,
-  LogLevel,
+  BleLogLevel,
   Subscription
 } from './specs/types';
 import { DeviceWrapper } from './compatibility/deviceWrapper';
@@ -49,7 +49,7 @@ export class BleManagerCompat {
   }
 
   // Common operations with compatibility
-  async setLogLevel(logLevel: LogLevel | string): Promise<PlxLogLevel> {
+  async setLogLevel(logLevel: BleLogLevel | string): Promise<PlxLogLevel> {
     const normalizedLogLevel = normalizeLogLevel(logLevel);
     const result = await this.bleManager.setLogLevel(normalizedLogLevel);
     return logLevelToString(result);
