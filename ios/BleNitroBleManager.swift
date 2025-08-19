@@ -1,0 +1,399 @@
+import Foundation
+import CoreBluetooth
+import NitroModules
+
+/**
+ * iOS implementation of the BLE Nitro Manager
+ * Implements the HybridNativeBleNitroSpec protocol for Core Bluetooth operations
+ */
+public class BleNitroBleManager: HybridNativeBleNitroSpec {
+    
+    // MARK: - Private Properties
+    private var centralManager: CBCentralManager!
+    private var connectedPeripherals: [String: CBPeripheral] = [:]
+    private var peripheralDelegates: [String: BlePeripheralDelegate] = [:]
+    private var scanCallback: ((BLEDevice) -> Void)?
+    private var stateChangeCallback: ((BLEState) -> Void)?
+    private var isCurrentlyScanning = false
+    private var currentScanFilter: ScanFilter?
+    
+    // MARK: - Initialization
+    public override init() {
+        super.init()
+        setupCentralManager()
+    }
+    
+    private func setupCentralManager() {
+        centralManager = CBCentralManager(delegate: self, queue: DispatchQueue.main)
+    }
+    
+    // MARK: - State Management
+    public func state(callback: @escaping (BLEState) -> Void) throws {
+        let bleState = mapCBManagerStateToBLEState(centralManager.state)
+        callback(bleState)
+    }
+    
+    public func isBluetoothEnabled(callback: @escaping (Bool) -> Void) throws {
+        let isEnabled = centralManager.state == .poweredOn
+        callback(isEnabled)
+    }
+    
+    public func requestBluetoothEnable(callback: @escaping (Bool, String) -> Void) throws {
+        // iOS doesn't allow programmatic Bluetooth enabling
+        // We can only check the current state
+        if centralManager.state == .poweredOn {
+            callback(true, "")
+        } else {
+            callback(false, "Bluetooth must be enabled manually in Settings")
+        }
+    }
+    
+    public func subscribeToStateChange(
+        stateCallback: @escaping (BLEState) -> Void,
+        resultCallback: @escaping (Bool, String) -> Void
+    ) throws {
+        self.stateChangeCallback = stateCallback
+        resultCallback(true, "")
+    }
+    
+    // MARK: - Scanning Operations
+    public func startScan(filter: ScanFilter, callback: @escaping (BLEDevice) -> Void) throws {
+        guard centralManager.state == .poweredOn else {
+            throw NSError(domain: "BleNitroError", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Bluetooth is not powered on"
+            ])
+        }
+        
+        self.scanCallback = callback
+        self.currentScanFilter = filter
+        self.isCurrentlyScanning = true
+        
+        // Convert service UUIDs to CBUUIDs
+        let serviceUUIDs = filter.serviceUUIDs.isEmpty ? nil : filter.serviceUUIDs.compactMap { CBUUID(string: $0) }
+        
+        // Configure scan options
+        var options: [String: Any] = [:]
+        if filter.allowDuplicates {
+            options[CBCentralManagerScanOptionAllowDuplicatesKey] = true
+        }
+        
+        centralManager.scanForPeripherals(withServices: serviceUUIDs, options: options)
+    }
+    
+    public func stopScan(callback: @escaping (Bool, String) -> Void) throws {
+        centralManager.stopScan()
+        isCurrentlyScanning = false
+        scanCallback = nil
+        currentScanFilter = nil
+        callback(true, "")
+    }
+    
+    public func isScanning(callback: @escaping (Bool) -> Void) throws {
+        callback(isCurrentlyScanning)
+    }
+    
+    // MARK: - Connection Management
+    public func connect(deviceId: String, callback: @escaping (Bool, String, String) -> Void) throws {
+        // Find peripheral by identifier
+        guard let peripheral = findPeripheral(by: deviceId) else {
+            callback(false, "", "Peripheral not found")
+            return
+        }
+        
+        // Check if already connected
+        if peripheral.state == .connected {
+            callback(true, deviceId, "")
+            return
+        }
+        
+        // Store connection callback
+        let delegate = BlePeripheralDelegate(deviceId: deviceId, manager: self)
+        delegate.connectionCallback = callback
+        peripheralDelegates[deviceId] = delegate
+        peripheral.delegate = delegate
+        
+        // Connect to peripheral
+        centralManager.connect(peripheral, options: nil)
+    }
+    
+    public func disconnect(deviceId: String, callback: @escaping (Bool, String) -> Void) throws {
+        guard let peripheral = connectedPeripherals[deviceId] else {
+            callback(false, "Peripheral not connected")
+            return
+        }
+        
+        // Store disconnect callback in delegate
+        peripheralDelegates[deviceId]?.disconnectionCallback = callback
+        
+        centralManager.cancelPeripheralConnection(peripheral)
+    }
+    
+    public func isConnected(deviceId: String, callback: @escaping (Bool) -> Void) throws {
+        if let peripheral = connectedPeripherals[deviceId] {
+            callback(peripheral.state == .connected)
+        } else {
+            callback(false)
+        }
+    }
+    
+    // MARK: - Service Discovery
+    public func discoverServices(deviceId: String, callback: @escaping (Bool, String) -> Void) throws {
+        guard let peripheral = connectedPeripherals[deviceId] else {
+            callback(false, "Peripheral not connected")
+            return
+        }
+        
+        peripheralDelegates[deviceId]?.serviceDiscoveryCallback = callback
+        peripheral.discoverServices(nil)
+    }
+    
+    public func getServices(deviceId: String, callback: @escaping ([String]) -> Void) throws {
+        guard let peripheral = connectedPeripherals[deviceId] else {
+            callback([])
+            return
+        }
+        
+        let serviceUUIDs = peripheral.services?.map { $0.uuid.uuidString } ?? []
+        callback(serviceUUIDs)
+    }
+    
+    public func getCharacteristics(
+        deviceId: String,
+        serviceId: String,
+        callback: @escaping ([String]) -> Void
+    ) throws {
+        guard let peripheral = connectedPeripherals[deviceId],
+              let service = peripheral.services?.first(where: { $0.uuid.uuidString == serviceId }) else {
+            callback([])
+            return
+        }
+        
+        let characteristicUUIDs = service.characteristics?.map { $0.uuid.uuidString } ?? []
+        callback(characteristicUUIDs)
+    }
+    
+    // MARK: - Characteristic Operations
+    public func readCharacteristic(
+        deviceId: String,
+        serviceId: String,
+        characteristicId: String,
+        callback: @escaping (Bool, String) -> Void
+    ) throws {
+        guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
+            callback(false, "Characteristic not found")
+            return
+        }
+        
+        peripheralDelegates[deviceId]?.readCallbacks[characteristicId] = callback
+        characteristic.service?.peripheral?.readValue(for: characteristic)
+    }
+    
+    public func writeCharacteristic(
+        deviceId: String,
+        serviceId: String,
+        characteristicId: String,
+        data: [Double],
+        withResponse: Bool,
+        callback: @escaping (Bool, String) -> Void
+    ) throws {
+        guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
+            callback(false, "Characteristic not found")
+            return
+        }
+        
+        let writeData = Data(data.map { UInt8($0) })
+        let writeType: CBCharacteristicWriteType = withResponse ? .withResponse : .withoutResponse
+        
+        if withResponse {
+            peripheralDelegates[deviceId]?.writeCallbacks[characteristicId] = callback
+        }
+        
+        characteristic.service?.peripheral?.writeValue(writeData, for: characteristic, type: writeType)
+        
+        if !withResponse {
+            callback(true, "")
+        }
+    }
+    
+    public func subscribeToCharacteristic(
+        deviceId: String,
+        serviceId: String,
+        characteristicId: String,
+        updateCallback: @escaping (String, [Double]) -> Void,
+        resultCallback: @escaping (Bool, String) -> Void
+    ) throws {
+        guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
+            resultCallback(false, "Characteristic not found")
+            return
+        }
+        
+        peripheralDelegates[deviceId]?.notificationCallbacks[characteristicId] = updateCallback
+        peripheralDelegates[deviceId]?.subscriptionCallbacks[characteristicId] = resultCallback
+        
+        characteristic.service?.peripheral?.setNotifyValue(true, for: characteristic)
+    }
+    
+    public func unsubscribeFromCharacteristic(
+        deviceId: String,
+        serviceId: String,
+        characteristicId: String,
+        callback: @escaping (Bool, String) -> Void
+    ) throws {
+        guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
+            callback(false, "Characteristic not found")
+            return
+        }
+        
+        peripheralDelegates[deviceId]?.notificationCallbacks.removeValue(forKey: characteristicId)
+        peripheralDelegates[deviceId]?.unsubscriptionCallbacks[characteristicId] = callback
+        
+        characteristic.service?.peripheral?.setNotifyValue(false, for: characteristic)
+    }
+    
+    // MARK: - Helper Methods
+    private func findPeripheral(by deviceId: String) -> CBPeripheral? {
+        return connectedPeripherals[deviceId] ?? centralManager.retrievePeripherals(withIdentifiers: [UUID(uuidString: deviceId)!]).first
+    }
+    
+    private func findCharacteristic(deviceId: String, serviceId: String, characteristicId: String) -> CBCharacteristic? {
+        guard let peripheral = connectedPeripherals[deviceId],
+              let service = peripheral.services?.first(where: { $0.uuid.uuidString == serviceId }),
+              let characteristic = service.characteristics?.first(where: { $0.uuid.uuidString == characteristicId }) else {
+            return nil
+        }
+        return characteristic
+    }
+    
+    private func mapCBManagerStateToBLEState(_ state: CBManagerState) -> BLEState {
+        switch state {
+        case .unknown:
+            return .unknown
+        case .resetting:
+            return .resetting
+        case .unsupported:
+            return .unsupported
+        case .unauthorized:
+            return .unauthorized
+        case .poweredOff:
+            return .poweredoff
+        case .poweredOn:
+            return .poweredon
+        @unknown default:
+            return .unknown
+        }
+    }
+}
+
+// MARK: - CBCentralManagerDelegate
+extension BleNitroBleManager: CBCentralManagerDelegate {
+    
+    public func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        let bleState = mapCBManagerStateToBLEState(central.state)
+        stateChangeCallback?(bleState)
+    }
+    
+    public func centralManager(
+        _ central: CBCentralManager,
+        didDiscover peripheral: CBPeripheral,
+        advertisementData: [String: Any],
+        rssi RSSI: NSNumber
+    ) {
+        // Apply RSSI filter if specified
+        if let filter = currentScanFilter, RSSI.doubleValue < filter.rssiThreshold {
+            return
+        }
+        
+        // Create BLE device
+        let device = createBLEDevice(
+            peripheral: peripheral,
+            advertisementData: advertisementData,
+            rssi: RSSI.doubleValue
+        )
+        
+        scanCallback?(device)
+    }
+    
+    public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        let deviceId = peripheral.identifier.uuidString
+        connectedPeripherals[deviceId] = peripheral
+        
+        if let delegate = peripheralDelegates[deviceId] {
+            delegate.connectionCallback?(true, deviceId, "")
+            delegate.connectionCallback = nil
+        }
+    }
+    
+    public func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        let deviceId = peripheral.identifier.uuidString
+        let errorMessage = error?.localizedDescription ?? "Connection failed"
+        
+        if let delegate = peripheralDelegates[deviceId] {
+            delegate.connectionCallback?(false, "", errorMessage)
+            delegate.connectionCallback = nil
+        }
+        
+        peripheralDelegates.removeValue(forKey: deviceId)
+    }
+    
+    public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        let deviceId = peripheral.identifier.uuidString
+        connectedPeripherals.removeValue(forKey: deviceId)
+        
+        if let delegate = peripheralDelegates[deviceId] {
+            if let callback = delegate.disconnectionCallback {
+                callback(error == nil, error?.localizedDescription ?? "")
+                delegate.disconnectionCallback = nil
+            }
+        }
+        
+        peripheralDelegates.removeValue(forKey: deviceId)
+    }
+    
+    private func createBLEDevice(
+        peripheral: CBPeripheral,
+        advertisementData: [String: Any],
+        rssi: Double
+    ) -> BLEDevice {
+        let deviceId = peripheral.identifier.uuidString
+        let deviceName = peripheral.name ?? advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? "Unknown"
+        
+        // Extract service UUIDs
+        let serviceUUIDs = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID])?.map { $0.uuidString } ?? []
+        
+        // Extract manufacturer data
+        let manufacturerData = extractManufacturerData(from: advertisementData)
+        
+        // Check if connectable
+        let isConnectable = (advertisementData[CBAdvertisementDataIsConnectable] as? Bool) ?? true
+        
+        return BLEDevice(
+            id: deviceId,
+            name: deviceName,
+            rssi: rssi,
+            manufacturerData: manufacturerData,
+            serviceUUIDs: serviceUUIDs,
+            isConnectable: isConnectable
+        )
+    }
+    
+    private func extractManufacturerData(from advertisementData: [String: Any]) -> ManufacturerData {
+        guard let manufacturerDataRaw = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data else {
+            return ManufacturerData(companyIdentifiers: [])
+        }
+        
+        // Parse manufacturer data (first 2 bytes are company identifier)
+        guard manufacturerDataRaw.count >= 2 else {
+            return ManufacturerData(companyIdentifiers: [])
+        }
+        
+        let companyId = manufacturerDataRaw.prefix(2).withUnsafeBytes { $0.load(as: UInt16.self) }
+        let data = Array(manufacturerDataRaw.dropFirst(2)).map { Double($0) }
+        
+        let entry = ManufacturerDataEntry(
+            id: String(companyId),
+            data: data
+        )
+        
+        return ManufacturerData(companyIdentifiers: [entry])
+    }
+}
