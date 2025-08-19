@@ -121,7 +121,6 @@ Create entries in this format for each release:
 ## [1.0.0] - 2025-01-XX
 
 ### Added
-- Initial release with 100% react-native-ble-plx compatibility
 - Nitro Modules integration for high performance
 - iOS Swift and Android Kotlin native implementations
 - Expo config plugin with platform-specific functions
@@ -241,7 +240,6 @@ Track these metrics for each release:
 ### Common Post-Release Tasks
 - Monitor GitHub issues for bug reports
 - Answer questions in discussions
-- Help users with migration from react-native-ble-plx
 - Collect feedback for next release
 
 ### Emergency Procedures

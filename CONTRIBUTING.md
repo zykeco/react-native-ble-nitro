@@ -37,7 +37,6 @@ This project follows a code of conduct to ensure a welcoming environment for all
 react-native-ble-nitro/
 ├── src/                      # TypeScript source code
 │   ├── specs/               # Nitro module specifications
-│   ├── compatibility/       # react-native-ble-plx compatibility layer
 │   ├── utils/              # Utility functions
 │   └── __tests__/          # Unit tests
 ├── ios/                     # iOS native implementation (Swift)
@@ -99,9 +98,8 @@ This library is built on [Nitro Modules](https://nitro.margelo.com/), which prov
 ### Key Components
 
 1. **Nitro Specs** (`src/specs/`): TypeScript interfaces that define the native API
-2. **Compatibility Layer** (`src/compatibility/`): Maintains 100% API compatibility with react-native-ble-plx
-3. **Native Implementation**: Platform-specific BLE implementations
-4. **Generated Code** (`nitrogen/generated/`): Auto-generated native bindings
+2. **Native Implementation**: Platform-specific BLE implementations
+3. **Generated Code** (`nitrogen/generated/`): Auto-generated native bindings
 
 ### Data Flow
 
@@ -150,7 +148,6 @@ JavaScript/TypeScript → Compatibility Layer → Nitro Specs → Generated Nati
 
 - **Never edit `nitrogen/generated/`** - these files are auto-generated
 - **Always run `nitro-codegen`** after modifying Nitro specs
-- **Maintain API compatibility** with react-native-ble-plx
 - **Add tests** for new functionality
 
 ## 🧪 Testing
@@ -175,8 +172,7 @@ npm test -- BleManager.test.ts
 
 1. **Unit Tests** (`src/__tests__/`): Test individual components
 2. **Integration Tests**: Test component interactions
-3. **Compatibility Tests**: Ensure react-native-ble-plx compatibility
-4. **Native Tests**: Test platform-specific functionality
+3. **Native Tests**: Test platform-specific functionality
 
 ### Writing Tests
 
