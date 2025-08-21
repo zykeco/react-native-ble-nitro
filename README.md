@@ -482,6 +482,7 @@ MIT License - see [LICENSE](./LICENSE) file.
 - [Marc Rousavy](https://github.com/mrousavy) - Creator of Nitro Modules and CEO of Margelo
 - [Nitro Modules](https://nitro.margelo.com/) - High-performance native module framework
 - [Margelo](https://margelo.com/) - Nitro Modules creators
+- [Alvinotuya84](https://github.com/Alvinotuya84) - For the API inspiration I took from his repo [react-native-bluetooth-nitro-nexus](https://github.com/Alvinotuya84/react-native-bluetooth-nitro-nexus)
 
 ## 📞 Support
 
