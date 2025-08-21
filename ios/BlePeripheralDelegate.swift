@@ -15,17 +15,18 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     // Callback storage
     var connectionCallback: ((Bool, String, String) -> Void)?
     var disconnectionCallback: ((Bool, String) -> Void)?
+    var disconnectEventCallback: ((String, Bool, String) -> Void)?
     var serviceDiscoveryCallback: ((Bool, String) -> Void)?
     var characteristicDiscoveryCallbacks: [String: (Bool, String) -> Void] = [:]
     
-    // Operation callbacks
-    var readCallbacks: [String: (Bool, String) -> Void] = [:]
-    var writeCallbacks: [String: (Bool, String) -> Void] = [:]
-    var subscriptionCallbacks: [String: (Bool, String) -> Void] = [:]
-    var unsubscriptionCallbacks: [String: (Bool, String) -> Void] = [:]
+    // Operation callbacks - using CBUUID as key for reliable UUID matching
+    var readCallbacks: [CBUUID: (Bool, [Double], String) -> Void] = [:]
+    var writeCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
+    var subscriptionCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
+    var unsubscriptionCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
     
     // Notification callbacks
-    var notificationCallbacks: [String: (String, [Double]) -> Void] = [:]
+    var notificationCallbacks: [CBUUID: (String, [Double]) -> Void] = [:]
     
     // MARK: - Initialization
     init(deviceId: String, manager: BleNitroBleManager) {
@@ -70,23 +71,26 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         didUpdateValueFor characteristic: CBCharacteristic,
         error: Error?
     ) {
-        let characteristicId = characteristic.uuid.uuidString
+        let characteristicUUID = characteristic.uuid
         
-        // Handle read callback
-        if let readCallback = readCallbacks[characteristicId] {
+        // Handle read callback using CBUUID - no normalization needed
+        if let readCallback = readCallbacks[characteristicUUID] {
             if let error = error {
-                readCallback(false, error.localizedDescription)
+                readCallback(false, [], error.localizedDescription)
+            } else if let data = characteristic.value {
+                let doubleArray = data.map { Double($0) }
+                readCallback(true, doubleArray, "")
             } else {
-                readCallback(true, "")
+                readCallback(false, [], "No data received")
             }
-            readCallbacks.removeValue(forKey: characteristicId)
+            readCallbacks.removeValue(forKey: characteristicUUID)
         }
         
-        // Handle notification callback
-        if let notificationCallback = notificationCallbacks[characteristicId],
+        // Handle notification callback using CBUUID
+        if let notificationCallback = notificationCallbacks[characteristicUUID],
            let data = characteristic.value {
             let doubleArray = data.map { Double($0) }
-            notificationCallback(characteristicId, doubleArray)
+            notificationCallback(characteristicUUID.uuidString, doubleArray)
         }
     }
     
@@ -96,15 +100,16 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         didWriteValueFor characteristic: CBCharacteristic,
         error: Error?
     ) {
-        let characteristicId = characteristic.uuid.uuidString
+        let characteristicUUID = characteristic.uuid
         
-        if let writeCallback = writeCallbacks[characteristicId] {
+        // Handle write callback using CBUUID
+        if let writeCallback = writeCallbacks[characteristicUUID] {
             if let error = error {
                 writeCallback(false, error.localizedDescription)
             } else {
                 writeCallback(true, "")
             }
-            writeCallbacks.removeValue(forKey: characteristicId)
+            writeCallbacks.removeValue(forKey: characteristicUUID)
         }
     }
     
@@ -114,26 +119,26 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         didUpdateNotificationStateFor characteristic: CBCharacteristic,
         error: Error?
     ) {
-        let characteristicId = characteristic.uuid.uuidString
+        let characteristicUUID = characteristic.uuid
         
-        // Handle subscription callback
-        if let subscriptionCallback = subscriptionCallbacks[characteristicId] {
+        // Handle subscription callback using CBUUID
+        if let subscriptionCallback = subscriptionCallbacks[characteristicUUID] {
             if let error = error {
                 subscriptionCallback(false, error.localizedDescription)
             } else {
                 subscriptionCallback(characteristic.isNotifying, "")
             }
-            subscriptionCallbacks.removeValue(forKey: characteristicId)
+            subscriptionCallbacks.removeValue(forKey: characteristicUUID)
         }
         
-        // Handle unsubscription callback
-        if let unsubscriptionCallback = unsubscriptionCallbacks[characteristicId] {
+        // Handle unsubscription callback using CBUUID
+        if let unsubscriptionCallback = unsubscriptionCallbacks[characteristicUUID] {
             if let error = error {
                 unsubscriptionCallback(false, error.localizedDescription)
             } else {
                 unsubscriptionCallback(!characteristic.isNotifying, "")
             }
-            unsubscriptionCallbacks.removeValue(forKey: characteristicId)
+            unsubscriptionCallbacks.removeValue(forKey: characteristicUUID)
         }
     }
     
@@ -157,6 +162,7 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         // Clear all callbacks to prevent memory leaks
         connectionCallback = nil
         disconnectionCallback = nil
+        disconnectEventCallback = nil
         serviceDiscoveryCallback = nil
         characteristicDiscoveryCallbacks.removeAll()
         readCallbacks.removeAll()

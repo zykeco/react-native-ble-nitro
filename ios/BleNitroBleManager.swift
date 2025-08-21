@@ -13,6 +13,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     private var connectedPeripherals: [String: CBPeripheral] = [:]
     private var discoveredPeripherals: [String: CBPeripheral] = [:]
     private var peripheralDelegates: [String: BlePeripheralDelegate] = [:]
+    private var intentionalDisconnections: Set<String> = []
     private var scanCallback: ((BLEDevice) -> Void)?
     private var stateChangeCallback: ((BLEState) -> Void)?
     private var isCurrentlyScanning = false
@@ -58,6 +59,13 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         self.stateChangeCallback = stateCallback
         resultCallback(true, "")
     }
+
+    public func unsubscribeFromStateChange(
+        resultCallback: @escaping (Bool, String) -> Void
+    ) throws {
+        self.stateChangeCallback = nil
+        resultCallback(true, "")
+    }
     
     // MARK: - Scanning Operations
     public func startScan(filter: ScanFilter, callback: @escaping (BLEDevice) -> Void) throws {
@@ -96,8 +104,28 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         callback(isCurrentlyScanning)
     }
     
+    // MARK: - Device Discovery
+    public func getConnectedDevices(callback: @escaping ([BLEDevice]) -> Void) throws {
+        var connectedDevices: [BLEDevice] = []
+        
+        for (deviceId, peripheral) in connectedPeripherals {
+            // Create BLEDevice from connected peripheral
+            let device = BLEDevice(
+                id: deviceId,
+                name: peripheral.name ?? "Unknown Device",
+                rssi: 0, // RSSI not available for connected devices without explicit read
+                manufacturerData: ManufacturerData(companyIdentifiers: []), // Not available for connected devices
+                serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
+                isConnectable: true // Already connected, so it was connectable
+            )
+            connectedDevices.append(device)
+        }
+        
+        callback(connectedDevices)
+    }
+    
     // MARK: - Connection Management
-    public func connect(deviceId: String, callback: @escaping (Bool, String, String) -> Void) throws {
+    public func connect(deviceId: String, callback: @escaping (Bool, String, String) -> Void, disconnectCallback: ((String, Bool, String) -> Void)?) throws {
         // Find peripheral by identifier
         guard let peripheral = findPeripheral(by: deviceId) else {
             callback(false, "", "Peripheral not found")
@@ -110,9 +138,10 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
             return
         }
         
-        // Store connection callback
+        // Store connection callback and disconnect callback
         let delegate = BlePeripheralDelegate(deviceId: deviceId, manager: self)
         delegate.connectionCallback = callback
+        delegate.disconnectEventCallback = disconnectCallback
         peripheralDelegates[deviceId] = delegate
         peripheral.delegate = delegate
         
@@ -128,6 +157,9 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         
         // Store disconnect callback in delegate
         peripheralDelegates[deviceId]?.disconnectionCallback = callback
+        
+        // Mark this as an intentional disconnection
+        intentionalDisconnections.insert(deviceId)
         
         centralManager.cancelPeripheralConnection(peripheral)
     }
@@ -187,14 +219,23 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         deviceId: String,
         serviceId: String,
         characteristicId: String,
-        callback: @escaping (Bool, String) -> Void
+        callback: @escaping (Bool, [Double], String) -> Void
     ) throws {
         guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
-            callback(false, "Characteristic not found")
+            callback(false, [], "Characteristic not found")
             return
         }
         
-        peripheralDelegates[deviceId]?.readCallbacks[characteristicId] = callback
+        // Ensure peripheral delegate exists
+        guard let delegate = peripheralDelegates[deviceId] else {
+            callback(false, [], "Device not properly connected or delegate not found")
+            return
+        }
+        
+        // Store callback in delegate using CBUUID for reliable matching
+        delegate.readCallbacks[characteristic.uuid] = callback
+        
+        // Read characteristic value - the delegate will handle the response
         characteristic.service?.peripheral?.readValue(for: characteristic)
     }
     
@@ -215,7 +256,12 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         let writeType: CBCharacteristicWriteType = withResponse ? .withResponse : .withoutResponse
         
         if withResponse {
-            peripheralDelegates[deviceId]?.writeCallbacks[characteristicId] = callback
+            // Ensure peripheral delegate exists for response handling
+            guard let delegate = peripheralDelegates[deviceId] else {
+                callback(false, "Device not properly connected or delegate not found")
+                return
+            }
+            delegate.writeCallbacks[characteristic.uuid] = callback
         }
         
         characteristic.service?.peripheral?.writeValue(writeData, for: characteristic, type: writeType)
@@ -237,8 +283,14 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
             return
         }
         
-        peripheralDelegates[deviceId]?.notificationCallbacks[characteristicId] = updateCallback
-        peripheralDelegates[deviceId]?.subscriptionCallbacks[characteristicId] = resultCallback
+        // Ensure peripheral delegate exists
+        guard let delegate = peripheralDelegates[deviceId] else {
+            resultCallback(false, "Device not properly connected or delegate not found")
+            return
+        }
+        
+        delegate.notificationCallbacks[characteristic.uuid] = updateCallback
+        delegate.subscriptionCallbacks[characteristic.uuid] = resultCallback
         
         characteristic.service?.peripheral?.setNotifyValue(true, for: characteristic)
     }
@@ -254,8 +306,14 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
             return
         }
         
-        peripheralDelegates[deviceId]?.notificationCallbacks.removeValue(forKey: characteristicId)
-        peripheralDelegates[deviceId]?.unsubscriptionCallbacks[characteristicId] = callback
+        // Ensure peripheral delegate exists
+        guard let delegate = peripheralDelegates[deviceId] else {
+            callback(false, "Device not properly connected or delegate not found")
+            return
+        }
+        
+        delegate.notificationCallbacks.removeValue(forKey: characteristic.uuid)
+        delegate.unsubscriptionCallbacks[characteristic.uuid] = callback
         
         characteristic.service?.peripheral?.setNotifyValue(false, for: characteristic)
     }
@@ -367,10 +425,22 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         let deviceId = peripheral.identifier.uuidString
         connectedPeripherals.removeValue(forKey: deviceId)
         
+        // Determine if this was an intentional or interrupted disconnection
+        let wasIntentional = intentionalDisconnections.contains(deviceId)
+        let interrupted = !wasIntentional
+        intentionalDisconnections.remove(deviceId)
+        
         if let delegate = peripheralDelegates[deviceId] {
+            // Handle the disconnect() method callback (for intentional disconnections)
             if let callback = delegate.disconnectionCallback {
                 callback(error == nil, error?.localizedDescription ?? "")
                 delegate.disconnectionCallback = nil
+            }
+            
+            // Handle the disconnect event callback (for both intentional and interrupted)
+            if let disconnectEventCallback = delegate.disconnectEventCallback {
+                let errorMessage = error?.localizedDescription ?? ""
+                disconnectEventCallback(deviceId, interrupted, errorMessage)
             }
         }
         

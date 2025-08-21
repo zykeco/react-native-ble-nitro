@@ -2,9 +2,21 @@ import { StatusBar } from 'expo-status-bar';
 import { AppState, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { createBle } from './src/bluetooth';
 import { useLayoutEffect, useRef, useState } from 'react';
-import { BLEDevice } from 'react-native-ble-nitro';
+import { BLEDevice, Subscription } from 'react-native-ble-nitro';
 
-const HEART_RATE_SERVICE_UUID = '0000180d-0000-1000-8000-00805f9b34fb';
+const HEART_RATE_SERVICE_UUID = '0000180d-0000-1000-8000-00805f9b34fb'.toLowerCase();
+const HEART_RATE_MEASUREMENT_UUID = '00002A37-0000-1000-8000-00805f9b34fb'.toLowerCase();
+const BODY_SENSOR_LOCATION_UUID = '00002A38-0000-1000-8000-00805f9b34fb'.toLowerCase();
+
+const BATTERY_SERVICE_UUID = '0000180f-0000-1000-8000-00805f9b34fb'.toLowerCase();
+const BATTERY_CHARACTERISTIC_LEVEL_UUID = '00002a19-0000-1000-8000-00805f9b34fb'.toLowerCase();
+
+const CUSTOM_SERVICE_UUID = 'AAE28F00-71B5-42A1-8C3C-F9CF6AC969D0'.toLowerCase();
+const RX_CHAR_UUID = 'AAE28F01-71B5-42A1-8C3C-F9CF6AC969D0'.toLowerCase();
+const TX_CHAR_UUID = 'AAE28F02-71B5-42A1-8C3C-F9CF6AC969D0'.toLowerCase();
+
+let unsubscribeRx: Subscription['remove'] | null = null;
+let unsubscribeHr: Subscription['remove'] | null = null;
 
 export default function App() {
   const [isEnabled, setIsEnabled] = useState(false);
@@ -14,6 +26,9 @@ export default function App() {
   const [connectedDeviceId, setConnectedDeviceId] = useState<string | null>(null);
   const [connectedDeviceServiceUUIDs, setConnectedDeviceServiceUUIDs] = useState<string[]>([]);
   const [connectedDeviceCharacteristics, setConnectedDeviceCharacteristics] = useState<Record<string, string[]>>({});
+  const [bleNotificationSubscription, setBleNotificationSubscription] = useState<boolean>(false);
+  const [hrNotificationSubscription, setHrNotificationSubscription] = useState<boolean>(false);
+  const [logs, setLogs] = useState<string[]>([]);
   const bleModule = useRef(createBle({
     onEnabledChange: (enabled) => setIsEnabled(enabled),
   }));
@@ -21,7 +36,7 @@ export default function App() {
 
   useLayoutEffect(() => {
     ble.mount().then(() => {
-      console.log('mounted');
+      console.log('BLE Module mounted');
     });
     const unsub = AppState.addEventListener('change', async (state) => {
       if (state === 'active' && isEnabled === false) {
@@ -31,6 +46,10 @@ export default function App() {
     });
     return () => {
       unsub.remove();
+      disconnectDevice();
+      resetScannedDevices();
+      stopScan();
+      clearLogs();
     };
   }, []);
 
@@ -67,31 +86,193 @@ export default function App() {
   };
 
   const connectDevice = async (deviceId: string) => {
-    setConnectedDeviceId(null);
-    setConnectedDeviceServiceUUIDs([]);
-    await stopScan().catch(() => {});
-    const connectedId = await ble.instance.connect(deviceId);
-    setConnectedDeviceId(connectedId);
-    await ble.instance.discoverServices(connectedId);
-    const services = await ble.instance.getServices(connectedId);
-    setConnectedDeviceServiceUUIDs(services);
-    services.map(async (s) => {
-      const characteristics = await ble.instance.getCharacteristics(connectedId, s);
-      setConnectedDeviceCharacteristics((prev) => {
-        prev[s] = characteristics;
-        return prev;
+    try {
+      clearLogs();
+      setConnectedDeviceId(null);
+      setConnectedDeviceServiceUUIDs([]);
+      await stopScan().catch(() => {});
+      logMessage(`1 Connecting to ${deviceId}`);
+      const connectedId = await ble.instance.connect(deviceId, async (_, interrupted) => {
+        if (interrupted) {
+          logMessage('Disconnected because connection was interrupted');
+        } else {
+          logMessage('Disconnected intentionally');
+        }
+        setConnectedDeviceId(null);
+        setConnectedDeviceServiceUUIDs([]);
+        setConnectedDeviceCharacteristics({});
+        await unlistenToBleNotifications();
+        await unlistenToHrNotifications();
       });
-    });
+      setConnectedDeviceId(connectedId);
+      logMessage(`2 Connected to ${connectedId}`);
+      await ble.instance.discoverServices(connectedId);
+      logMessage(`3 Discovered services for ${connectedId}`);
+      const services = await ble.instance.getServices(connectedId);
+      setConnectedDeviceServiceUUIDs(services);
+      resetScannedDevices();
+      services.map(async (s) => {
+        const characteristics = await ble.instance.getCharacteristics(connectedId, s);
+        setConnectedDeviceCharacteristics((prev) => {
+          prev[s] = characteristics;
+          return prev;
+        });
+      });
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const disconnectDevice = async () => {
     if (!connectedDeviceId) {
       return;
     }
+    await unlistenToBleNotifications();
+    await unlistenToHrNotifications();
     await ble.instance.disconnect(connectedDeviceId);
-    setConnectedDeviceId(null);
-    setConnectedDeviceServiceUUIDs([]);
-    setConnectedDeviceCharacteristics({});
+  }
+
+  const readBatteryLevel = async () => {
+    if (!connectedDeviceId) {
+      throw new Error('No device connected');
+    }
+    const batteryLevel = await ble.instance.readCharacteristic(
+      connectedDeviceId,
+      BATTERY_SERVICE_UUID,
+      BATTERY_CHARACTERISTIC_LEVEL_UUID,
+    );
+    logMessage('Battery Level', batteryLevel[0]);
+  };
+
+  const readBodySensorLocation = async () => {
+    if (!connectedDeviceId) {
+      throw new Error('No device connected');
+    }
+    const [bodySensorLocation] = await ble.instance.readCharacteristic(
+      connectedDeviceId,
+      HEART_RATE_SERVICE_UUID,
+      BODY_SENSOR_LOCATION_UUID,
+    );
+    const map = ['Other', 'Chest', 'Wrist', 'Finger', 'Hand', 'Earlobe', 'Foot'];
+    const key = bodySensorLocation && map[bodySensorLocation] ? map[bodySensorLocation] : 'Unknown';
+    logMessage('Body Sensor Location', key);
+  }
+
+  const logMessage = async (...message: (string | number)[]) => {
+    const date = new Date().toLocaleTimeString('de-DE');
+    setLogs((prev) => [...prev, `${date} - ${message.join(' ')}`]);
+  }
+
+  const clearLogs = () => {
+    setLogs([]);
+  }
+
+  const sendCommand = async (command: 'enable-led' | 'disable-led') => {
+    if (!connectedDeviceId) {
+      throw new Error('No device connected');
+    }
+    
+    console.log('Will send command', command);
+
+    switch (command) {
+      case 'enable-led':
+        let enableLedCommand = [0x00, 0x1f, 0x01];
+        console.log('Will enable led with command:', 0x0e, enableLedCommand);
+        enableLedCommand = ble.buildCommand(0x0e, ...enableLedCommand);
+        console.log('Will enable led with command:', 0x0e, enableLedCommand);
+        await ble.instance.writeCharacteristic(connectedDeviceId, CUSTOM_SERVICE_UUID, TX_CHAR_UUID, enableLedCommand);
+        logMessage('Led enabled');
+        break;
+      case 'disable-led':
+        let disableLedCommand = [0x00, 0x1f, 0x00];
+        disableLedCommand = ble.buildCommand(0x0e, ...disableLedCommand);
+        console.log('Will disable led with command:', 0x0e, disableLedCommand);
+        await ble.instance.writeCharacteristic(connectedDeviceId, CUSTOM_SERVICE_UUID, TX_CHAR_UUID, disableLedCommand);
+        logMessage('Led disabled');
+        break;
+      default:
+        break;
+    }
+  };
+
+  const listenToBleNotifications = async () => {
+    if (!connectedDeviceId) {
+      throw new Error('No device connected');
+    }
+    if (bleNotificationSubscription) {
+      unsubscribeRx?.();
+      setBleNotificationSubscription(false);
+    }
+    const sub = await ble.instance.subscribeToCharacteristic(connectedDeviceId, CUSTOM_SERVICE_UUID, RX_CHAR_UUID, (_, data) => {
+      logMessage('Received data', JSON.stringify(data));
+    });
+    logMessage('Subscribed to notifications');
+    unsubscribeRx = sub.remove;
+    setBleNotificationSubscription(true);
+  };
+
+  const unlistenToBleNotifications = async () => {
+    if (bleNotificationSubscription) {
+      setBleNotificationSubscription(false);
+      await unsubscribeRx?.().catch(() => {});
+      logMessage('Unsubscribed from notifications');
+    }
+  }
+
+  const listenToHrNotifications = async () => {
+    if (!connectedDeviceId) {
+      throw new Error('No device connected');
+    }
+    if (hrNotificationSubscription) {
+      unsubscribeHr?.();
+      setHrNotificationSubscription(false);
+    }
+    const sub = await ble.instance.subscribeToCharacteristic(connectedDeviceId, HEART_RATE_SERVICE_UUID, HEART_RATE_MEASUREMENT_UUID, (_, data) => {
+      const [type, hr] = data;
+      logMessage('Heart Rate', hr);
+      if (type === 0) return;
+      if (type === 0x10) {
+        const bytes = data;
+
+        const flags = bytes[0];
+        const rrPresent = (flags & 0b00010000) !== 0; // Bit4 = RR-Intervalle vorhanden
+
+        let offset = 1;
+        if ((flags & 0b00000001) !== 0) {
+          // Heart Rate 16-bit
+          offset += 2;
+        } else {
+          // Heart Rate 8-bit
+          offset += 1;
+        }
+
+        // Energy Expended überspringen, falls vorhanden
+        if ((flags & 0b00001000) !== 0) {
+          offset += 2;
+        }
+
+        const rrMs: number[] = [];
+        if (rrPresent) {
+          for (let i = offset; i + 1 < bytes.length; i += 2) {
+            const rr = bytes[i] | (bytes[i + 1] << 8); // little endian
+            rrMs.push(Number(((rr * 1000) / 1024).toFixed(0)));
+          }
+        }
+
+        logMessage('RR-Intervals', ...rrMs);
+      }
+    });
+    logMessage('Subscribed to heart rate');
+    unsubscribeHr = sub.remove;
+    setHrNotificationSubscription(true);
+  };
+
+  const unlistenToHrNotifications = async () => {
+    if (hrNotificationSubscription) {
+      setHrNotificationSubscription(false);
+      await unsubscribeHr?.().catch(() => {});
+      logMessage('Unsubscribed from heart rate');
+    }
   }
 
   return (
@@ -158,6 +339,52 @@ export default function App() {
                       {connectedDeviceCharacteristics[s]?.map((c) => (
                         <Text key={c}>{c}</Text>
                       ))}
+                      {s === BATTERY_SERVICE_UUID && connectedDeviceCharacteristics[s]?.includes(BATTERY_CHARACTERISTIC_LEVEL_UUID) && (
+                        <TouchableOpacity style={styles.button} onPress={readBatteryLevel}>
+                          <Text>Read Battery Level</Text>
+                        </TouchableOpacity>
+                      )}
+                      {s === CUSTOM_SERVICE_UUID && connectedDeviceCharacteristics[s]?.includes(TX_CHAR_UUID) && (
+                        <>
+                          <TouchableOpacity style={styles.button} onPress={() => sendCommand('enable-led')}>
+                            <Text>Enable LED</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.button} onPress={() => sendCommand('disable-led')}>
+                            <Text>Disable LED</Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
+                      {s === CUSTOM_SERVICE_UUID && connectedDeviceCharacteristics[s]?.includes(RX_CHAR_UUID) && (
+                        <>
+                          {!bleNotificationSubscription && (
+                            <TouchableOpacity style={styles.button} onPress={listenToBleNotifications}>
+                              <Text>Listen to BLE Notifications</Text>
+                            </TouchableOpacity>
+                          )}
+                          {bleNotificationSubscription && (
+                            <TouchableOpacity style={styles.button} onPress={unlistenToBleNotifications}>
+                              <Text>Stop Listening to BLE Notifications</Text>
+                            </TouchableOpacity>
+                          )}
+                        </>
+                      )}
+                      {s === HEART_RATE_SERVICE_UUID && connectedDeviceCharacteristics[s]?.includes(HEART_RATE_MEASUREMENT_UUID) && (
+                        <>
+                          {!hrNotificationSubscription && (
+                            <TouchableOpacity style={styles.button} onPress={listenToHrNotifications}>
+                              <Text>Listen to HR Notifications</Text>
+                            </TouchableOpacity>
+                          )}
+                          {hrNotificationSubscription && (
+                            <TouchableOpacity style={styles.button} onPress={unlistenToHrNotifications}>
+                              <Text>Stop Listening to HR Notifications</Text>
+                            </TouchableOpacity>
+                          )}
+                          <TouchableOpacity style={styles.button} onPress={readBodySensorLocation}>
+                            <Text>Read Body Sensor Location</Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
                     </View>
                   ))}
                   <TouchableOpacity style={styles.button} onPress={disconnectDevice}>
@@ -167,6 +394,21 @@ export default function App() {
               </>
             )}
           </>
+        )}
+        {(logs.length > 0) && (
+          <View>
+            <Text style={{ marginTop: 16 }}>Logs:</Text>
+            <ScrollView style={{ marginTop: 8, backgroundColor: '#f4f4f4ff', borderRadius: 4, padding: 8, maxHeight: 200 }}>
+              {logs.sort((a, b) => {
+                return b.toLocaleLowerCase().localeCompare(a.toLocaleLowerCase());
+              }).map((log, i) => (
+                <Text key={i} style={{ fontSize: 11, fontFamily: 'monospace', color: '#444', borderBottomWidth: i === logs.length - 1 ? 0 : 1, padding: 6 }}>{log}</Text>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={styles.button} onPress={clearLogs}>
+              <Text>Clear Logs</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>

@@ -35,12 +35,15 @@ export interface ScanFilter {
 }
 
 export type ScanCallback = (device: BLEDevice) => void;
+export type DevicesCallback = (devices: BLEDevice[]) => void;
 export type ConnectionCallback = (success: boolean, deviceId: string, error: string) => void;
+export type DisconnectionEventCallback = (deviceId: string, interrupted: boolean, error: string) => void;
 export type OperationCallback = (success: boolean, error: string) => void;
 export type CharacteristicCallback = (characteristicId: string, data: number[]) => void;
 export type StateCallback = (state: BLEState) => void;
 export type BooleanCallback = (result: boolean) => void;
 export type StringArrayCallback = (result: string[]) => void;
+export type ReadCharacteristicCallback = (success: boolean, data: number[], error: string) => void;
 
 /**
  * Native BLE Nitro Module Specification
@@ -52,8 +55,11 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
   stopScan(callback: OperationCallback): void;
   isScanning(callback: BooleanCallback): void;
 
+  // Device discovery
+  getConnectedDevices(callback: DevicesCallback): void;
+
   // Connection management
-  connect(deviceId: string, callback: ConnectionCallback): void;
+  connect(deviceId: string, callback: ConnectionCallback, disconnectCallback?: DisconnectionEventCallback): void;
   disconnect(deviceId: string, callback: OperationCallback): void;
   isConnected(deviceId: string, callback: BooleanCallback): void;
 
@@ -63,7 +69,7 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
   getCharacteristics(deviceId: string, serviceId: string, callback: StringArrayCallback): void;
 
   // Characteristic operations
-  readCharacteristic(deviceId: string, serviceId: string, characteristicId: string, callback: OperationCallback): void;
+  readCharacteristic(deviceId: string, serviceId: string, characteristicId: string, callback: ReadCharacteristicCallback): void;
   writeCharacteristic(deviceId: string, serviceId: string, characteristicId: string, data: number[], withResponse: boolean, callback: OperationCallback): void;
   subscribeToCharacteristic(deviceId: string, serviceId: string, characteristicId: string, updateCallback: CharacteristicCallback, resultCallback: OperationCallback): void;
   unsubscribeFromCharacteristic(deviceId: string, serviceId: string, characteristicId: string, callback: OperationCallback): void;
@@ -73,5 +79,6 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
   requestBluetoothEnable(callback: OperationCallback): void;
   state(callback: StateCallback): void;
   subscribeToStateChange(stateCallback: StateCallback, resultCallback: OperationCallback): void;
+  unsubscribeFromStateChange(resultCallback: OperationCallback): void;
   openSettings(): Promise<void>;
 }

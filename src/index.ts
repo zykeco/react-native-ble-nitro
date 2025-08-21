@@ -35,6 +35,11 @@ export type ConnectionCallback = (
   deviceId: string,
   error: string
 ) => void;
+export type DisconnectEventCallback = (
+  deviceId: string,
+  interrupted: boolean,
+  error: string
+) => void;
 export type OperationCallback = (success: boolean, error: string) => void;
 export type CharacteristicUpdateCallback = (
   characteristicId: string,
@@ -42,7 +47,7 @@ export type CharacteristicUpdateCallback = (
 ) => void;
 
 export type Subscription = {
-  remove: () => void
+  remove: () => Promise<void>;
 };
 
 export enum BLEState {
@@ -177,11 +182,32 @@ export class BleNitro {
   }
 
   /**
+   * Get all currently connected devices
+   * @returns Promise resolving to array of connected devices
+   */
+  public getConnectedDevices(): Promise<BLEDevice[]> {
+    return new Promise((resolve) => {
+      BleNitroNative.getConnectedDevices((devices: BLEDevice[]) => {
+        // Normalize service UUIDs for connected devices
+        const normalizedDevices = devices.map(device => ({
+          ...device,
+          serviceUUIDs: BleNitro.normalizeGattUUIDs(device.serviceUUIDs)
+        }));
+        resolve(normalizedDevices);
+      });
+    });
+  }
+
+  /**
    * Connect to a Bluetooth device
    * @param deviceId ID of the device to connect to
+   * @param onDisconnect Optional callback for disconnect events
    * @returns Promise resolving when connected
    */
-  public connect(deviceId: string): Promise<string> {
+  public connect(
+    deviceId: string, 
+    onDisconnect?: DisconnectEventCallback
+  ): Promise<string> {
     return new Promise((resolve, reject) => {
       // Check if already connected
       if (this._connectedDevices[deviceId]) {
@@ -198,7 +224,12 @@ export class BleNitro {
           } else {
             reject(new Error(error));
           }
-        }
+        },
+        onDisconnect ? (deviceId: string, interrupted: boolean, error: string) => {
+          // Remove from connected devices when disconnected
+          delete this._connectedDevices[deviceId];
+          onDisconnect(deviceId, interrupted, error);
+        } : undefined
       );
     });
   }
@@ -326,13 +357,13 @@ export class BleNitro {
    * @param deviceId ID of the device
    * @param serviceId ID of the service
    * @param characteristicId ID of the characteristic
-   * @returns Promise resolving when read is complete
+   * @returns Promise resolving to the characteristic data as byte array
    */
   public readCharacteristic(
     deviceId: string,
     serviceId: string,
     characteristicId: string
-  ): Promise<boolean> {
+  ): Promise<number[]> {
     return new Promise((resolve, reject) => {
       // Check if connected first
       if (!this._connectedDevices[deviceId]) {
@@ -344,9 +375,9 @@ export class BleNitro {
         deviceId,
         BleNitro.normalizeGattUUID(serviceId),
         BleNitro.normalizeGattUUID(characteristicId),
-        (success: boolean, error: string) => {
+        (success: boolean, data: number[], error: string) => {
           if (success) {
-            resolve(true);
+            resolve(data);
           } else {
             reject(new Error(error));
           }
@@ -427,11 +458,13 @@ export class BleNitro {
           if (success) {
             resolve({
               remove: () => {
-                this.unsubscribeFromCharacteristic(
-                  deviceId,
-                  serviceId,
-                  characteristicId
-                ).catch(() => {});
+                return new Promise((resolve, reject) => {
+                  this.unsubscribeFromCharacteristic(
+                    deviceId,
+                    serviceId,
+                    characteristicId
+                  ).then(resolve).catch(reject);
+                });
               },
             });
           } else {
@@ -540,7 +573,15 @@ export class BleNitro {
         if (success) {
           resolve({
             remove: () => {
-              // TODO: implement native unsubscribe method
+              return new Promise((resolve, reject) => {
+                BleNitroNative.unsubscribeFromStateChange((success, error) => {
+                  if (success) {
+                    resolve();
+                  } else {
+                    reject(new Error(error));
+                  }
+                });
+              });
             },
           });
         } else {
