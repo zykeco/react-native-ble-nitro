@@ -35,6 +35,7 @@
     "test": "jest",
     "lint": "eslint src/ --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
+    "prepack": "npm run build",
     "version": "npm run build",
     "postversion": "git push && git push --tags"
   },

@@ -73,4 +73,5 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
   requestBluetoothEnable(callback: OperationCallback): void;
   state(callback: StateCallback): void;
   subscribeToStateChange(stateCallback: StateCallback, resultCallback: OperationCallback): void;
+  openSettings(): Promise<void>;
 }

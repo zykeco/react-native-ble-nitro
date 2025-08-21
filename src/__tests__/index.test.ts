@@ -23,7 +23,7 @@ jest.mock('../specs/NativeBleNitro', () => ({
   BLEState: { PoweredOn: 5, PoweredOff: 4 },
 }));
 
-import BleNitro from '../index';
+import { ble as BleNitro } from '../index';
 
 // Get reference to the mocked module
 const mockNative = require('../specs/NativeBleNitro').default; // eslint-disable-line @typescript-eslint/no-var-requires
@@ -34,7 +34,7 @@ describe('BleNitro', () => {
   });
 
   test('startScan calls native with correct parameters', async () => {
-    mockNative.startScan.mockImplementation((filter, callback) => {
+    mockNative.startScan.mockImplementation((filter, callback) => { // eslint-disable-line @typescript-eslint/no-unused-vars
       // Just call the callback to simulate finding a device
     });
 

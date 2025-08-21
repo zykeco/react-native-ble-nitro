@@ -1,8 +1,8 @@
 import BleNitroNative from './specs/NativeBleNitro';
-import type {
+import {
   ScanFilter as NativeScanFilter,
   BLEDevice as NativeBLEDevice,
-  BLEState,
+  BLEState as NativeBLEState,
 } from './specs/NativeBleNitro';
 
 export interface ScanFilter {
@@ -41,50 +41,34 @@ export type CharacteristicUpdateCallback = (
   data: number[]
 ) => void;
 
-export type { BLEState };
+export type Subscription = {
+  remove: () => void
+};
 
-/**
- * Utility function to convert a key-value map to the codegen-compatible format
- */
-export function mapToManufacturerData(
-  map: Record<string, number[]>
-): ManufacturerData {
-  const result: ManufacturerData = {
-    companyIdentifiers: [],
+export enum BLEState {
+  Unknown = 'Unknown',
+  Resetting = 'Resetting',
+  Unsupported = 'Unsupported',
+  Unauthorized = 'Unauthorized',
+  PoweredOff = 'PoweredOff',
+  PoweredOn = 'PoweredOn',
+};
+
+function mapNativeBLEStateToBLEState(nativeState: NativeBLEState): BLEState {
+  const map = {
+    0: BLEState.Unknown,
+    1: BLEState.Resetting,
+    2: BLEState.Unsupported,
+    3: BLEState.Unauthorized,
+    4: BLEState.PoweredOff,
+    5: BLEState.PoweredOn,
   };
-
-  for (const [key, value] of Object.entries(map)) {
-    result.companyIdentifiers.push({
-      id: key,
-      data: value,
-    });
-  }
-
-  return result;
-}
-
-/**
- * Utility function to convert from codegen-compatible format to a key-value map
- */
-export function manufacturerDataToMap(
-  data: ManufacturerData
-): Record<string, number[]> {
-  const result: Record<string, number[]> = {};
-
-  for (const entry of data.companyIdentifiers) {
-    result[entry.id] = entry.data;
-  }
-
-  return result;
+  return map[nativeState];
 }
 
 let _instance: BleNitro;
 
-/**
- * Bluetooth Nexus Core class
- * Singleton implementation for React Native
- */
-class BleNitro {
+export class BleNitro {
   private _isScanning: boolean = false;
   private _connectedDevices: { [deviceId: string]: boolean } = {};
 
@@ -93,6 +77,30 @@ class BleNitro {
       _instance = new BleNitro();
     }
     return _instance;
+  }
+
+  /**
+   * Converts a 16- oder 32-Bit UUID to a 128-Bit UUID
+   *
+   * @param uuid 16-, 32- or 128-Bit UUID as string
+   * @returns Full 128-Bit UUID
+   */
+  public static normalizeGattUUID(uuid: string): string {
+    const cleanUuid = uuid.toLowerCase();
+
+    // 128-Bit UUID → normalisieren
+    if (cleanUuid.length === 36 && cleanUuid.includes("-")) {
+      return cleanUuid;
+    }
+
+    // GATT-Service UUIDs
+    // 16- oder 32-Bit UUID → 128-Bit UUID
+    const padded = cleanUuid.padStart(8, "0");
+    return `${padded}-0000-1000-8000-00805f9b34fb`;
+  }
+
+  public static normalizeGattUUIDs(uuids: string[]): string[] {
+    return uuids.map((uuid) => BleNitro.normalizeGattUUID(uuid));
   }
 
   /**
@@ -121,6 +129,7 @@ class BleNitro {
 
       // Create callback wrapper
       const scanCallback = (device: NativeBLEDevice) => {
+        device.serviceUUIDs = BleNitro.normalizeGattUUIDs(device.serviceUUIDs);
         callback(device);
       };
 
@@ -267,15 +276,20 @@ class BleNitro {
    * @returns Promise resolving to array of service UUIDs
    */
   public getServices(deviceId: string): Promise<string[]> {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       // Check if connected first
       if (!this._connectedDevices[deviceId]) {
         reject(new Error('Device not connected'));
         return;
       }
 
+      const success = await this.discoverServices(deviceId);
+      if (!success) {
+        reject(new Error('Failed to discover services'));
+        return;
+      }
       BleNitroNative.getServices(deviceId, (services: string[]) => {
-        resolve(services);
+        resolve(BleNitro.normalizeGattUUIDs(services));
       });
     });
   }
@@ -299,9 +313,9 @@ class BleNitro {
 
       BleNitroNative.getCharacteristics(
         deviceId,
-        serviceId,
+        BleNitro.normalizeGattUUID(serviceId),
         (characteristics: string[]) => {
-          resolve(characteristics);
+          resolve(BleNitro.normalizeGattUUIDs(characteristics));
         }
       );
     });
@@ -328,8 +342,8 @@ class BleNitro {
 
       BleNitroNative.readCharacteristic(
         deviceId,
-        serviceId,
-        characteristicId,
+        BleNitro.normalizeGattUUID(serviceId),
+        BleNitro.normalizeGattUUID(characteristicId),
         (success: boolean, error: string) => {
           if (success) {
             resolve(true);
@@ -366,8 +380,8 @@ class BleNitro {
 
       BleNitroNative.writeCharacteristic(
         deviceId,
-        serviceId,
-        characteristicId,
+        BleNitro.normalizeGattUUID(serviceId),
+        BleNitro.normalizeGattUUID(characteristicId),
         data,
         withResponse,
         (success: boolean, error: string) => {
@@ -394,7 +408,7 @@ class BleNitro {
     serviceId: string,
     characteristicId: string,
     callback: CharacteristicUpdateCallback
-  ): Promise<boolean> {
+  ): Promise<Subscription> {
     return new Promise((resolve, reject) => {
       // Check if connected first
       if (!this._connectedDevices[deviceId]) {
@@ -404,14 +418,22 @@ class BleNitro {
 
       BleNitroNative.subscribeToCharacteristic(
         deviceId,
-        serviceId,
-        characteristicId,
+        BleNitro.normalizeGattUUID(serviceId),
+        BleNitro.normalizeGattUUID(characteristicId),
         (charId: string, data: number[]) => {
           callback(charId, data);
         },
         (success: boolean, error: string) => {
           if (success) {
-            resolve(true);
+            resolve({
+              remove: () => {
+                this.unsubscribeFromCharacteristic(
+                  deviceId,
+                  serviceId,
+                  characteristicId
+                ).catch(() => {});
+              },
+            });
           } else {
             reject(new Error(error));
           }
@@ -431,7 +453,7 @@ class BleNitro {
     deviceId: string,
     serviceId: string,
     characteristicId: string
-  ): Promise<boolean> {
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       // Check if connected first
       if (!this._connectedDevices[deviceId]) {
@@ -441,11 +463,11 @@ class BleNitro {
 
       BleNitroNative.unsubscribeFromCharacteristic(
         deviceId,
-        serviceId,
-        characteristicId,
+        BleNitro.normalizeGattUUID(serviceId),
+        BleNitro.normalizeGattUUID(characteristicId),
         (success: boolean, error: string) => {
           if (success) {
-            resolve(true);
+            resolve();
           } else {
             reject(new Error(error));
           }
@@ -491,8 +513,8 @@ class BleNitro {
    */
   public state(): Promise<BLEState> {
     return new Promise((resolve) => {
-      BleNitroNative.state((state: BLEState) => {
-        resolve(state);
+      BleNitroNative.state((state: NativeBLEState) => {
+        resolve(mapNativeBLEStateToBLEState(state));
       });
     });
   }
@@ -500,23 +522,42 @@ class BleNitro {
   /**
    * Subscribe to Bluetooth state changes
    * @param callback Callback function called when state changes
+   * @param emitInitial Whether to emit initial state callback
    * @returns Promise resolving when subscription is complete
    * @see BLEState
    */
-  public subscribeToStateChange(callback: (state: BLEState) => void): Promise<boolean> {
-    return new Promise((resolve, reject) => {
-      BleNitroNative.subscribeToStateChange((state: BLEState) => {
+  public subscribeToStateChange(callback: (state: BLEState) => void, emitInitial = false): Promise<Subscription> {
+    return new Promise(async (resolve, reject) => {
+      if (emitInitial) {
+        const state = await this.state().catch(() => {
+          return BLEState.Unknown;
+        });
         callback(state);
+      }
+      BleNitroNative.subscribeToStateChange((nativeState: NativeBLEState) => {
+        callback(mapNativeBLEStateToBLEState(nativeState));
       }, (success: boolean, error: string) => {
         if (success) {
-          resolve(true);
+          resolve({
+            remove: () => {
+              // TODO: implement native unsubscribe method
+            },
+          });
         } else {
           reject(new Error(error));
         }
       });
     })
   }
+
+  /**
+   * Open Bluetooth settings
+   * @returns Promise resolving when settings are opened
+   */
+  public openSettings(): Promise<void> {
+    return BleNitroNative.openSettings();
+  }
 }
 
-// Export the singleton instance
-export default BleNitro.instance();
+// Singleton instance
+export const ble = BleNitro.instance();

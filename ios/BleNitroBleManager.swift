@@ -11,11 +11,13 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     // MARK: - Private Properties
     private var centralManager: CBCentralManager!
     private var connectedPeripherals: [String: CBPeripheral] = [:]
+    private var discoveredPeripherals: [String: CBPeripheral] = [:]
     private var peripheralDelegates: [String: BlePeripheralDelegate] = [:]
     private var scanCallback: ((BLEDevice) -> Void)?
     private var stateChangeCallback: ((BLEState) -> Void)?
     private var isCurrentlyScanning = false
     private var currentScanFilter: ScanFilter?
+    private var centralManagerDelegate: BleCentralManagerDelegate!
     
     // MARK: - Initialization
     public override init() {
@@ -24,7 +26,8 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     }
     
     private func setupCentralManager() {
-        centralManager = CBCentralManager(delegate: self, queue: DispatchQueue.main)
+        centralManagerDelegate = BleCentralManagerDelegate(manager: self)
+        centralManager = CBCentralManager(delegate: centralManagerDelegate, queue: DispatchQueue.main)
     }
     
     // MARK: - State Management
@@ -85,6 +88,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         isCurrentlyScanning = false
         scanCallback = nil
         currentScanFilter = nil
+        // Keep discovered peripherals for potential connections
         callback(true, "")
     }
     
@@ -162,8 +166,14 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         serviceId: String,
         callback: @escaping ([String]) -> Void
     ) throws {
-        guard let peripheral = connectedPeripherals[deviceId],
-              let service = peripheral.services?.first(where: { $0.uuid.uuidString == serviceId }) else {
+        guard let peripheral = connectedPeripherals[deviceId] else {
+            callback([])
+            return
+        }
+        
+        // Find service using CBUUID comparison
+        let serviceUUID = CBUUID(string: serviceId)
+        guard let service = peripheral.services?.first(where: { $0.uuid == serviceUUID }) else {
             callback([])
             return
         }
@@ -252,19 +262,37 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     
     // MARK: - Helper Methods
     private func findPeripheral(by deviceId: String) -> CBPeripheral? {
-        return connectedPeripherals[deviceId] ?? centralManager.retrievePeripherals(withIdentifiers: [UUID(uuidString: deviceId)!]).first
+        // Check connected peripherals first
+        if let peripheral = connectedPeripherals[deviceId] {
+            return peripheral
+        }
+        
+        // Check discovered peripherals
+        if let peripheral = discoveredPeripherals[deviceId] {
+            return peripheral
+        }
+        
+        // Try to retrieve by UUID as fallback
+        guard let uuid = UUID(uuidString: deviceId) else { return nil }
+        return centralManager.retrievePeripherals(withIdentifiers: [uuid]).first
     }
     
     private func findCharacteristic(deviceId: String, serviceId: String, characteristicId: String) -> CBCharacteristic? {
-        guard let peripheral = connectedPeripherals[deviceId],
-              let service = peripheral.services?.first(where: { $0.uuid.uuidString == serviceId }),
-              let characteristic = service.characteristics?.first(where: { $0.uuid.uuidString == characteristicId }) else {
+        guard let peripheral = connectedPeripherals[deviceId] else {
+            return nil
+        }
+        
+        let serviceUUID = CBUUID(string: serviceId)
+        let characteristicUUID = CBUUID(string: characteristicId)
+        
+        guard let service = peripheral.services?.first(where: { $0.uuid == serviceUUID }),
+              let characteristic = service.characteristics?.first(where: { $0.uuid == characteristicUUID }) else {
             return nil
         }
         return characteristic
     }
     
-    private func mapCBManagerStateToBLEState(_ state: CBManagerState) -> BLEState {
+    internal func mapCBManagerStateToBLEState(_ state: CBManagerState) -> BLEState {
         switch state {
         case .unknown:
             return .unknown
@@ -282,38 +310,38 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
             return .unknown
         }
     }
-}
 
-// MARK: - CBCentralManagerDelegate
-extension BleNitroBleManager: CBCentralManagerDelegate {
+    // MARK: - Helper Methods
     
-    public func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        let bleState = mapCBManagerStateToBLEState(central.state)
-        stateChangeCallback?(bleState)
+    internal func handleStateChange(_ state: BLEState) {
+        stateChangeCallback?(state)
     }
     
-    public func centralManager(
-        _ central: CBCentralManager,
-        didDiscover peripheral: CBPeripheral,
+    internal func handleDeviceDiscovered(
+        _ peripheral: CBPeripheral,
         advertisementData: [String: Any],
-        rssi RSSI: NSNumber
+        rssi: NSNumber
     ) {
         // Apply RSSI filter if specified
-        if let filter = currentScanFilter, RSSI.doubleValue < filter.rssiThreshold {
+        if let filter = currentScanFilter, rssi.doubleValue < filter.rssiThreshold {
             return
         }
+        
+        // Store discovered peripheral for future connections
+        let deviceId = peripheral.identifier.uuidString
+        discoveredPeripherals[deviceId] = peripheral
         
         // Create BLE device
         let device = createBLEDevice(
             peripheral: peripheral,
             advertisementData: advertisementData,
-            rssi: RSSI.doubleValue
+            rssi: rssi.doubleValue
         )
         
         scanCallback?(device)
     }
     
-    public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+    internal func handleDeviceConnected(_ peripheral: CBPeripheral) {
         let deviceId = peripheral.identifier.uuidString
         connectedPeripherals[deviceId] = peripheral
         
@@ -323,7 +351,7 @@ extension BleNitroBleManager: CBCentralManagerDelegate {
         }
     }
     
-    public func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+    internal func handleDeviceConnectionFailed(_ peripheral: CBPeripheral, error: Error?) {
         let deviceId = peripheral.identifier.uuidString
         let errorMessage = error?.localizedDescription ?? "Connection failed"
         
@@ -335,7 +363,7 @@ extension BleNitroBleManager: CBCentralManagerDelegate {
         peripheralDelegates.removeValue(forKey: deviceId)
     }
     
-    public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+    internal func handleDeviceDisconnected(_ peripheral: CBPeripheral, error: Error?) {
         let deviceId = peripheral.identifier.uuidString
         connectedPeripherals.removeValue(forKey: deviceId)
         
@@ -395,5 +423,51 @@ extension BleNitroBleManager: CBCentralManagerDelegate {
         )
         
         return ManufacturerData(companyIdentifiers: [entry])
+    }
+
+    public func openSettings() throws -> NitroModules.Promise<Void> {
+        return Promise.async {
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+                // Ask the system to open that URL.
+                await UIApplication.shared.open(url)
+            }
+        }
+    }
+}
+
+// MARK: - CBCentralManagerDelegate Implementation
+class BleCentralManagerDelegate: NSObject, CBCentralManagerDelegate {
+    weak var manager: BleNitroBleManager?
+    
+    init(manager: BleNitroBleManager) {
+        self.manager = manager
+        super.init()
+    }
+    
+    func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        guard let manager = manager else { return }
+        let bleState = manager.mapCBManagerStateToBLEState(central.state)
+        manager.handleStateChange(bleState)
+    }
+    
+    func centralManager(
+        _ central: CBCentralManager,
+        didDiscover peripheral: CBPeripheral,
+        advertisementData: [String: Any],
+        rssi RSSI: NSNumber
+    ) {
+        manager?.handleDeviceDiscovered(peripheral, advertisementData: advertisementData, rssi: RSSI)
+    }
+    
+    func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        manager?.handleDeviceConnected(peripheral)
+    }
+    
+    func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        manager?.handleDeviceConnectionFailed(peripheral, error: error)
+    }
+    
+    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        manager?.handleDeviceDisconnected(peripheral, error: error)
     }
 }

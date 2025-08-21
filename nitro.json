@@ -9,7 +9,7 @@
     "androidCxxLibName": "BleNitro"
   },
   "autolinking": {
-    "BleManager": {
+    "NativeBleNitro": {
       "swift": "BleNitroBleManager",
       "kotlin": "BleNitroBleManager"
     }
