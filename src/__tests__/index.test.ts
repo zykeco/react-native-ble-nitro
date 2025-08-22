@@ -51,20 +51,19 @@ describe('BleNitro', () => {
     );
   });
 
-  test('stopScan calls native and resolves', async () => {
-    mockNative.stopScan.mockImplementation((callback) => {
-      callback(true, '');
+  test('stopScan calls native and resolves', () => {
+    mockNative.stopScan.mockImplementation(() => {
+      // stopScan is void, no callback needed
     });
 
-    const result = await BleNitro.stopScan();
+    BleNitro.stopScan();
     
     expect(mockNative.stopScan).toHaveBeenCalled();
-    expect(result).toBe(true);
   });
 
   test('connect calls native and resolves with device id', async () => {
     const deviceId = 'test-device';
-    mockNative.connect.mockImplementation((id, callback, disconnectCallback) => {
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
       callback(true, id, '');
     });
 
@@ -75,21 +74,19 @@ describe('BleNitro', () => {
   });
 
   test('connect rejects on error', async () => {
-    mockNative.connect.mockImplementation((id, callback, disconnectCallback) => {
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
       callback(false, '', 'Connection failed');
     });
 
     await expect(BleNitro.connect('test')).rejects.toThrow('Connection failed');
   });
 
-  test('isBluetoothEnabled calls native', async () => {
-    mockNative.isBluetoothEnabled.mockImplementation((callback) => {
-      callback(true);
-    });
+  test('isBluetoothEnabled calls native', () => {
+    mockNative.state.mockReturnValue(5); // PoweredOn
 
-    const result = await BleNitro.isBluetoothEnabled();
+    const result = BleNitro.isBluetoothEnabled();
     
-    expect(mockNative.isBluetoothEnabled).toHaveBeenCalled();
+    expect(mockNative.state).toHaveBeenCalled();
     expect(result).toBe(true);
   });
 
@@ -101,13 +98,13 @@ describe('BleNitro', () => {
 
   test('readCharacteristic works after connection', async () => {
     // First connect
-    mockNative.connect.mockImplementation((id, callback, disconnectCallback) => {
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
       callback(true, id, '');
     });
     await BleNitro.connect('device');
 
     // Then read
-    mockNative.readCharacteristic.mockImplementation((device, service, char, callback) => {
+    mockNative.readCharacteristic.mockImplementation((_device: string, _service: string, _char: string, callback: (success: boolean, data: number[], error: string) => void) => {
       callback(true, [85], ''); // Battery level 85%
     });
 
@@ -125,38 +122,38 @@ describe('BleNitro', () => {
 
   test('disconnect calls native', async () => {
     // First connect
-    mockNative.connect.mockImplementation((id, callback, disconnectCallback) => {
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
       callback(true, id, '');
     });
     await BleNitro.connect('device');
 
     // Then disconnect
-    mockNative.disconnect.mockImplementation((id, callback) => {
+    mockNative.disconnect.mockImplementation((_id: string, callback: (success: boolean, error: string) => void) => {
       callback(true, '');
     });
 
     const result = await BleNitro.disconnect('device');
     
     expect(mockNative.disconnect).toHaveBeenCalledWith('device', expect.any(Function));
-    expect(result).toBe(true);
+    expect(result).toBe(undefined);
   });
 
   test('subscribeToCharacteristic calls callback', async () => {
     // First connect
-    mockNative.connect.mockImplementation((id, callback, disconnectCallback) => {
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
       callback(true, id, '');
     });
     await BleNitro.connect('device');
 
     // Mock subscription
-    mockNative.subscribeToCharacteristic.mockImplementation((device, service, char, updateCallback, resultCallback) => {
+    mockNative.subscribeToCharacteristic.mockImplementation((_device: string, _service: string, _char: string, updateCallback: (charId: string, data: number[]) => void, resultCallback: (success: boolean, error: string) => void) => {
       resultCallback(true, '');
       // Simulate notification
       updateCallback('char-id', [1, 2, 3]);
     });
 
     const notificationCallback = jest.fn();
-    await BleNitro.subscribeToCharacteristic('device', 'service', 'char', notificationCallback);
+    BleNitro.subscribeToCharacteristic('device', 'service', 'char', notificationCallback);
     
     expect(mockNative.subscribeToCharacteristic).toHaveBeenCalled();
     expect(notificationCallback).toHaveBeenCalledWith('char-id', [1, 2, 3]);
@@ -166,7 +163,7 @@ describe('BleNitro', () => {
     const deviceId = 'test-device-2'; // Use different device ID to avoid state conflicts
     const onDisconnect = jest.fn();
     
-    mockNative.connect.mockImplementation((id, callback, disconnectCallback) => {
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
       callback(true, id, '');
       // Simulate a disconnect event later  
       if (disconnectCallback) {
