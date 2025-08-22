@@ -5,7 +5,7 @@
 
 A high-performance React Native BLE library built on [Nitro Modules](https://nitro.margelo.com/).
 
-Originally developed for [Zyke Band](https://zykeband.com) - a fitness and health tracker created by a small team.
+Originally developed for [Zyke Band](https://zykeband.com?utm_source=github&utm_medium=readme&utm_campaign=opensource) - a fitness and health tracker created by a small team.
 
 ## ✨ Features
 
@@ -481,7 +481,7 @@ MIT License - see [LICENSE](./LICENSE) file.
 
 ## 🙏 Acknowledgments
 
-- [Zyke Band](https://zykeband.com) - The fitness tracker project that inspired this library
+- [Zyke Band](https://zykeband.com?utm_source=github&utm_medium=readme&utm_campaign=opensource) - The fitness tracker project that inspired this library
 - [Marc Rousavy](https://github.com/mrousavy) - Creator of Nitro Modules and CEO of Margelo
 - [Nitro Modules](https://nitro.margelo.com/) - High-performance native module framework
 - [Margelo](https://margelo.com/) - Nitro Modules creators
