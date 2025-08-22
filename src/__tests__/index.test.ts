@@ -21,9 +21,10 @@ jest.mock('../specs/NativeBleNitro', () => ({
     subscribeToStateChange: jest.fn(),
   },
   BLEState: { PoweredOn: 5, PoweredOff: 4 },
+  AndroidScanMode: { LowPower: 0, Balanced: 1, LowLatency: 2, Opportunistic: -1 },
 }));
 
-import { ble as BleNitro } from '../index';
+import { ble as BleNitro, AndroidScanMode } from '../index';
 
 // Get reference to the mocked module
 const mockNative = require('../specs/NativeBleNitro').default; // eslint-disable-line @typescript-eslint/no-var-requires
@@ -31,21 +32,26 @@ const mockNative = require('../specs/NativeBleNitro').default; // eslint-disable
 describe('BleNitro', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Mock scanning state to ensure clean test environment
+    mockNative.stopScan.mockReturnValue(true);
+    mockNative.isScanning.mockReturnValue(false);
+    BleNitro.stopScan();
   });
 
-  test('startScan calls native with correct parameters', async () => {
+  test('startScan calls native with correct parameters', () => {
     mockNative.startScan.mockImplementation((filter, callback) => { // eslint-disable-line @typescript-eslint/no-unused-vars
       // Just call the callback to simulate finding a device
     });
 
     const scanCallback = jest.fn();
-    await BleNitro.startScan({ serviceUUIDs: ['test'] }, scanCallback);
+    BleNitro.startScan({ serviceUUIDs: ['test'] }, scanCallback);
 
     expect(mockNative.startScan).toHaveBeenCalledWith(
       {
         serviceUUIDs: ['test'],
         rssiThreshold: -100,
         allowDuplicates: false,
+        androidScanMode: AndroidScanMode.LowLatency,
       },
       expect.any(Function)
     );
@@ -181,5 +187,48 @@ describe('BleNitro', () => {
     // Wait for disconnect callback
     await new Promise(resolve => setTimeout(resolve, 30));
     expect(onDisconnect).toHaveBeenCalledWith(deviceId, true, 'Connection lost');
+  });
+
+  test('startScan with custom Android scan mode', () => {
+    mockNative.startScan.mockImplementation((_filter, _callback) => {
+      // Just call the callback to simulate finding a device
+    });
+
+    const scanCallback = jest.fn();
+    BleNitro.startScan({ 
+      serviceUUIDs: ['test'],
+      androidScanMode: AndroidScanMode.LowPower 
+    }, scanCallback);
+
+    expect(mockNative.startScan).toHaveBeenCalledWith(
+      {
+        serviceUUIDs: ['test'],
+        rssiThreshold: -100,
+        allowDuplicates: false,
+        androidScanMode: AndroidScanMode.LowPower,
+      },
+      expect.any(Function)
+    );
+  });
+
+  test('startScan with balanced scan mode', () => {
+    mockNative.startScan.mockImplementation((_filter, _callback) => {
+      // Just call the callback to simulate finding a device
+    });
+
+    const scanCallback = jest.fn();
+    BleNitro.startScan({ 
+      androidScanMode: AndroidScanMode.Balanced 
+    }, scanCallback);
+
+    expect(mockNative.startScan).toHaveBeenCalledWith(
+      {
+        serviceUUIDs: [],
+        rssiThreshold: -100,
+        allowDuplicates: false,
+        androidScanMode: AndroidScanMode.Balanced,
+      },
+      expect.any(Function)
+    );
   });
 });

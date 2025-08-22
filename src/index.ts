@@ -3,12 +3,14 @@ import {
   ScanFilter as NativeScanFilter,
   BLEDevice as NativeBLEDevice,
   BLEState as NativeBLEState,
+  AndroidScanMode,
 } from './specs/NativeBleNitro';
 
 export interface ScanFilter {
   serviceUUIDs?: string[];
   rssiThreshold?: number;
   allowDuplicates?: boolean;
+  androidScanMode?: AndroidScanMode;
 }
 
 export interface ManufacturerDataEntry {
@@ -58,6 +60,9 @@ export enum BLEState {
   PoweredOff = 'PoweredOff',
   PoweredOn = 'PoweredOn',
 };
+
+// Re-export AndroidScanMode for users
+export { AndroidScanMode };
 
 function mapNativeBLEStateToBLEState(nativeState: NativeBLEState): BLEState {
   const map = {
@@ -127,6 +132,7 @@ export class BleNitro {
       serviceUUIDs: filter.serviceUUIDs || [],
       rssiThreshold: filter.rssiThreshold ?? -100,
       allowDuplicates: filter.allowDuplicates ?? false,
+      androidScanMode: filter.androidScanMode ?? AndroidScanMode.LowLatency,
     };
 
     // Create callback wrapper
@@ -150,6 +156,7 @@ export class BleNitro {
     }
 
     BleNitroNative.stopScan();
+    this._isScanning = false;
   }
 
   /**

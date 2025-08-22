@@ -10,6 +10,14 @@ export enum BLEState {
   PoweredOn = 5,
 }
 
+// Android scan modes (ignored on iOS)
+export enum AndroidScanMode {
+  LowPower = 0,
+  Balanced = 1,
+  LowLatency = 2,
+  Opportunistic = -1,
+}
+
 export interface ManufacturerDataEntry {
   id: string;
   data: number[];
@@ -32,6 +40,7 @@ export interface ScanFilter {
   serviceUUIDs: string[];
   rssiThreshold: number;
   allowDuplicates: boolean;
+  androidScanMode: AndroidScanMode;
 }
 
 export type ScanCallback = (device: BLEDevice) => void;
