@@ -47,7 +47,7 @@ export type CharacteristicUpdateCallback = (
 ) => void;
 
 export type Subscription = {
-  remove: () => Promise<void>;
+  remove: () => void;
 };
 
 export enum BLEState {
@@ -117,85 +117,62 @@ export class BleNitro {
   public startScan(
     filter: ScanFilter = {},
     callback: ScanCallback
-  ): Promise<boolean> {
-    return new Promise((resolve) => {
-      // Don't start scanning if already scanning
-      if (this._isScanning) {
-        resolve(true);
-        return;
-      }
+  ): void {
+    if (this._isScanning) {
+      return;
+    }
 
-      // Create native scan filter with defaults
-      const nativeFilter: NativeScanFilter = {
-        serviceUUIDs: filter.serviceUUIDs || [],
-        rssiThreshold: filter.rssiThreshold ?? -100,
-        allowDuplicates: filter.allowDuplicates ?? false,
-      };
+    // Create native scan filter with defaults
+    const nativeFilter: NativeScanFilter = {
+      serviceUUIDs: filter.serviceUUIDs || [],
+      rssiThreshold: filter.rssiThreshold ?? -100,
+      allowDuplicates: filter.allowDuplicates ?? false,
+    };
 
-      // Create callback wrapper
-      const scanCallback = (device: NativeBLEDevice) => {
-        device.serviceUUIDs = BleNitro.normalizeGattUUIDs(device.serviceUUIDs);
-        callback(device);
-      };
+    // Create callback wrapper
+    const scanCallback = (device: NativeBLEDevice) => {
+      device.serviceUUIDs = BleNitro.normalizeGattUUIDs(device.serviceUUIDs);
+      callback(device);
+    };
 
-      // Start scan
-      BleNitroNative.startScan(nativeFilter, scanCallback);
-      this._isScanning = true;
-      resolve(true);
-    });
+    // Start scan
+    BleNitroNative.startScan(nativeFilter, scanCallback);
+    this._isScanning = true;
   }
 
   /**
    * Stop scanning for Bluetooth devices
    * @returns Promise resolving to success state
    */
-  public stopScan(): Promise<boolean> {
-    return new Promise((resolve, reject) => {
-      // Don't stop scanning if not scanning
-      if (!this._isScanning) {
-        resolve(true);
-        return;
-      }
+  public stopScan(): void {
+    if (!this._isScanning) {
+      return;
+    }
 
-      BleNitroNative.stopScan((success: boolean, error: string) => {
-        if (success) {
-          this._isScanning = false;
-          resolve(true);
-        } else {
-          reject(new Error(error));
-        }
-      });
-    });
+    BleNitroNative.stopScan();
   }
 
   /**
    * Check if currently scanning for devices
    * @returns Promise resolving to scanning state
    */
-  public isScanning(): Promise<boolean> {
-    return new Promise((resolve) => {
-      BleNitroNative.isScanning((scanning: boolean) => {
-        this._isScanning = scanning;
-        resolve(scanning);
-      });
-    });
+  public isScanning(): boolean {
+    this._isScanning = BleNitroNative.isScanning();
+    return this._isScanning;
   }
 
   /**
    * Get all currently connected devices
-   * @returns Promise resolving to array of connected devices
+   * @param services Optional list of service UUIDs to filter by
+   * @returns Array of connected devices
    */
-  public getConnectedDevices(): Promise<BLEDevice[]> {
-    return new Promise((resolve) => {
-      BleNitroNative.getConnectedDevices((devices: BLEDevice[]) => {
-        // Normalize service UUIDs for connected devices
-        const normalizedDevices = devices.map(device => ({
-          ...device,
-          serviceUUIDs: BleNitro.normalizeGattUUIDs(device.serviceUUIDs)
-        }));
-        resolve(normalizedDevices);
-      });
-    });
+  public getConnectedDevices(services?: string[]): BLEDevice[] {
+    const devices = BleNitroNative.getConnectedDevices(services || []);
+    // Normalize service UUIDs for connected devices
+    return devices.map(device => ({
+      ...device,
+      serviceUUIDs: BleNitro.normalizeGattUUIDs(device.serviceUUIDs)
+    }));
   }
 
   /**
@@ -239,11 +216,11 @@ export class BleNitro {
    * @param deviceId ID of the device to disconnect from
    * @returns Promise resolving when disconnected
    */
-  public disconnect(deviceId: string): Promise<boolean> {
+  public disconnect(deviceId: string): Promise<void> {
     return new Promise((resolve, reject) => {
       // Check if already disconnected
       if (!this._connectedDevices[deviceId]) {
-        resolve(true);
+        resolve();
         return;
       }
 
@@ -252,7 +229,7 @@ export class BleNitro {
         (success: boolean, error: string) => {
           if (success) {
             delete this._connectedDevices[deviceId];
-            resolve(true);
+            resolve();
           } else {
             reject(new Error(error));
           }
@@ -266,13 +243,8 @@ export class BleNitro {
    * @param deviceId ID of the device to check
    * @returns Promise resolving to connection state
    */
-  public isConnected(deviceId: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      BleNitroNative.isConnected(deviceId, (connected: boolean) => {
-        this._connectedDevices[deviceId] = connected;
-        resolve(connected);
-      });
-    });
+  public isConnected(deviceId: string): boolean {
+    return BleNitroNative.isConnected(deviceId);
   }
 
   /**
@@ -319,9 +291,8 @@ export class BleNitro {
         reject(new Error('Failed to discover services'));
         return;
       }
-      BleNitroNative.getServices(deviceId, (services: string[]) => {
-        resolve(BleNitro.normalizeGattUUIDs(services));
-      });
+      const services = BleNitroNative.getServices(deviceId);
+      resolve(BleNitro.normalizeGattUUIDs(services));
     });
   }
 
@@ -334,22 +305,16 @@ export class BleNitro {
   public getCharacteristics(
     deviceId: string,
     serviceId: string
-  ): Promise<string[]> {
-    return new Promise((resolve, reject) => {
-      // Check if connected first
-      if (!this._connectedDevices[deviceId]) {
-        reject(new Error('Device not connected'));
-        return;
-      }
+  ): string[] {
+    if (!this._connectedDevices[deviceId]) {
+      throw new Error('Device not connected');
+    }
 
-      BleNitroNative.getCharacteristics(
-        deviceId,
-        BleNitro.normalizeGattUUID(serviceId),
-        (characteristics: string[]) => {
-          resolve(BleNitro.normalizeGattUUIDs(characteristics));
-        }
-      );
-    });
+    const characteristics = BleNitroNative.getCharacteristics(
+      deviceId,
+      BleNitro.normalizeGattUUID(serviceId),
+    );
+    return BleNitro.normalizeGattUUIDs(characteristics);
   }
 
   /**
@@ -439,40 +404,41 @@ export class BleNitro {
     serviceId: string,
     characteristicId: string,
     callback: CharacteristicUpdateCallback
-  ): Promise<Subscription> {
-    return new Promise((resolve, reject) => {
-      // Check if connected first
-      if (!this._connectedDevices[deviceId]) {
-        reject(new Error('Device not connected'));
-        return;
-      }
+  ): Subscription {
+    // Check if connected first
+    if (!this._connectedDevices[deviceId]) {
+      throw new Error('Device not connected');
+    }
 
-      BleNitroNative.subscribeToCharacteristic(
-        deviceId,
-        BleNitro.normalizeGattUUID(serviceId),
-        BleNitro.normalizeGattUUID(characteristicId),
-        (charId: string, data: number[]) => {
-          callback(charId, data);
-        },
-        (success: boolean, error: string) => {
-          if (success) {
-            resolve({
-              remove: () => {
-                return new Promise((resolve, reject) => {
-                  this.unsubscribeFromCharacteristic(
-                    deviceId,
-                    serviceId,
-                    characteristicId
-                  ).then(resolve).catch(reject);
-                });
-              },
-            });
-          } else {
-            reject(new Error(error));
-          }
+    let _success = false;
+
+    BleNitroNative.subscribeToCharacteristic(
+      deviceId,
+      BleNitro.normalizeGattUUID(serviceId),
+      BleNitro.normalizeGattUUID(characteristicId),
+      (charId: string, data: number[]) => {
+        callback(charId, data);
+      },
+      (success, error) => {
+        _success = success;
+        if (!success) {
+          throw new Error(error);
         }
-      );
-    });
+      }
+    );
+
+    return {
+      remove: () => {
+        if (!_success) {
+          return;
+        }
+        this.unsubscribeFromCharacteristic(
+          deviceId,
+          serviceId,
+          characteristicId
+        ).catch(() => {});
+      }
+    };
   }
 
   /**
@@ -513,16 +479,13 @@ export class BleNitro {
    * Check if Bluetooth is enabled
    * @returns Promise resolving to Bluetooth state
    */
-  public isBluetoothEnabled(): Promise<boolean> {
-    return new Promise((resolve) => {
-      BleNitroNative.isBluetoothEnabled((enabled: boolean) => {
-        resolve(enabled);
-      });
-    });
+  public isBluetoothEnabled(): boolean {
+    return this.state() === BLEState.PoweredOn;
   }
 
   /**
    * Request to enable Bluetooth
+   * Only works on Android
    * @returns Promise resolving when Bluetooth is enabled
    */
   public requestBluetoothEnable(): Promise<boolean> {
@@ -544,12 +507,8 @@ export class BleNitro {
    * @returns Promise resolving to Bluetooth state
    * @see BLEState
    */
-  public state(): Promise<BLEState> {
-    return new Promise((resolve) => {
-      BleNitroNative.state((state: NativeBLEState) => {
-        resolve(mapNativeBLEStateToBLEState(state));
-      });
-    });
+  public state(): BLEState {
+    return mapNativeBLEStateToBLEState(BleNitroNative.state());
   }
 
   /**
@@ -559,36 +518,21 @@ export class BleNitro {
    * @returns Promise resolving when subscription is complete
    * @see BLEState
    */
-  public subscribeToStateChange(callback: (state: BLEState) => void, emitInitial = false): Promise<Subscription> {
-    return new Promise(async (resolve, reject) => {
+  public subscribeToStateChange(callback: (state: BLEState) => void, emitInitial = false): Subscription {
       if (emitInitial) {
-        const state = await this.state().catch(() => {
-          return BLEState.Unknown;
-        });
+        const state = this.state();
         callback(state);
       }
+
       BleNitroNative.subscribeToStateChange((nativeState: NativeBLEState) => {
         callback(mapNativeBLEStateToBLEState(nativeState));
-      }, (success: boolean, error: string) => {
-        if (success) {
-          resolve({
-            remove: () => {
-              return new Promise((resolve, reject) => {
-                BleNitroNative.unsubscribeFromStateChange((success, error) => {
-                  if (success) {
-                    resolve();
-                  } else {
-                    reject(new Error(error));
-                  }
-                });
-              });
-            },
-          });
-        } else {
-          reject(new Error(error));
-        }
       });
-    })
+
+      return {
+        remove: () => {
+          BleNitroNative.unsubscribeFromStateChange();
+        },
+      };
   }
 
   /**

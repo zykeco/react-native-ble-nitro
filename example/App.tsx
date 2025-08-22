@@ -54,12 +54,16 @@ export default function App() {
   }, []);
 
   const requestBluetoothEnable = async () => {
-    const enabled = await ble.instance.requestBluetoothEnable();
-    setIsEnabled(enabled);
+    await ble.instance.requestBluetoothEnable().catch((e) => {
+      console.error(e);
+      if (e instanceof Error && e.message === 'Not supported') {
+        logMessage('requestBluetoothEnable only works on Android');
+      }
+    });
   };
 
   const startScan = async () => {
-    const scanning = await ble.instance.startScan({
+    ble.instance.startScan({
       serviceUUIDs: scanServiceUUIDs.replaceAll(' ', '').split(',') ?? [],
       rssiThreshold: -100,
       allowDuplicates: false,
@@ -73,16 +77,21 @@ export default function App() {
         return prev;
       });
     });
-    setIsScanning(scanning);
+    setIsScanning(true);
   };
 
-  const stopScan = async () => {
-    const stopped = await ble.instance.stopScan();
-    setIsScanning(!stopped);
+  const stopScan = () => {
+    ble.instance.stopScan();
+    setIsScanning(false);
   };
 
   const resetScannedDevices = () => {
     setScanResults([]);
+  };
+
+  const getConnectedDevices = () => {
+    const devices = ble.instance.getConnectedDevices([HEART_RATE_SERVICE_UUID, BATTERY_SERVICE_UUID]);
+    setScanResults(devices);
   };
 
   const connectDevice = async (deviceId: string) => {
@@ -90,7 +99,7 @@ export default function App() {
       clearLogs();
       setConnectedDeviceId(null);
       setConnectedDeviceServiceUUIDs([]);
-      await stopScan().catch(() => {});
+      stopScan();
       logMessage(`1 Connecting to ${deviceId}`);
       const connectedId = await ble.instance.connect(deviceId, async (_, interrupted) => {
         if (interrupted) {
@@ -112,12 +121,13 @@ export default function App() {
       setConnectedDeviceServiceUUIDs(services);
       resetScannedDevices();
       services.map(async (s) => {
-        const characteristics = await ble.instance.getCharacteristics(connectedId, s);
+        const characteristics = ble.instance.getCharacteristics(connectedId, s);
         setConnectedDeviceCharacteristics((prev) => {
           prev[s] = characteristics;
           return prev;
         });
       });
+      logMessage('Device is connected', String());
     } catch (e) {
       console.error(e);
     }
@@ -214,7 +224,7 @@ export default function App() {
   const unlistenToBleNotifications = async () => {
     if (bleNotificationSubscription) {
       setBleNotificationSubscription(false);
-      await unsubscribeRx?.().catch(() => {});
+      unsubscribeRx?.();
       logMessage('Unsubscribed from notifications');
     }
   }
@@ -270,7 +280,7 @@ export default function App() {
   const unlistenToHrNotifications = async () => {
     if (hrNotificationSubscription) {
       setHrNotificationSubscription(false);
-      await unsubscribeHr?.().catch(() => {});
+      unsubscribeHr?.();
       logMessage('Unsubscribed from heart rate');
     }
   }
@@ -285,7 +295,7 @@ export default function App() {
             <TouchableOpacity style={styles.button} onPress={requestBluetoothEnable}>
               <Text>Enable Bluetooth</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.button} onPress={() => ble.instance.openSettings()}>
+            <TouchableOpacity style={styles.button} onPress={() => ble.instance.openSettings().catch((e) => { console.error(e) })}>
               <Text>Open Bluetooth Settings</Text>
             </TouchableOpacity>
           </>
@@ -305,6 +315,9 @@ export default function App() {
                   <Text>Start Scan</Text>
                 </TouchableOpacity>
               )}
+              <TouchableOpacity style={styles.button} onPress={getConnectedDevices}>
+                <Text>Get connected devices</Text>
+              </TouchableOpacity>
               {scanResults.length > 0 && (
                 <View style={{ borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: 16 }}>
                   <Text>Scanned Devices:</Text>

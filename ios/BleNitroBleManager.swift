@@ -1,7 +1,6 @@
 import Foundation
 import CoreBluetooth
 import NitroModules
-
 /**
  * iOS implementation of the BLE Nitro Manager
  * Implements the HybridNativeBleNitroSpec protocol for Core Bluetooth operations
@@ -19,7 +18,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     private var isCurrentlyScanning = false
     private var currentScanFilter: ScanFilter?
     private var centralManagerDelegate: BleCentralManagerDelegate!
-    
+
     // MARK: - Initialization
     public override init() {
         super.init()
@@ -32,39 +31,27 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     }
     
     // MARK: - State Management
-    public func state(callback: @escaping (BLEState) -> Void) throws {
+    public func state() throws -> BLEState {
         let bleState = mapCBManagerStateToBLEState(centralManager.state)
-        callback(bleState)
-    }
-    
-    public func isBluetoothEnabled(callback: @escaping (Bool) -> Void) throws {
-        let isEnabled = centralManager.state == .poweredOn
-        callback(isEnabled)
+        return bleState
     }
     
     public func requestBluetoothEnable(callback: @escaping (Bool, String) -> Void) throws {
         // iOS doesn't allow programmatic Bluetooth enabling
         // We can only check the current state
-        if centralManager.state == .poweredOn {
-            callback(true, "")
-        } else {
-            callback(false, "Bluetooth must be enabled manually in Settings")
-        }
+        callback(false, "Not supported")
     }
     
     public func subscribeToStateChange(
-        stateCallback: @escaping (BLEState) -> Void,
-        resultCallback: @escaping (Bool, String) -> Void
-    ) throws {
+        stateCallback: @escaping (BLEState) -> Void
+    ) throws -> OperationResult {
         self.stateChangeCallback = stateCallback
-        resultCallback(true, "")
+        return OperationResult(success: true, error: nil)
     }
 
-    public func unsubscribeFromStateChange(
-        resultCallback: @escaping (Bool, String) -> Void
-    ) throws {
+    public func unsubscribeFromStateChange() throws -> OperationResult {
         self.stateChangeCallback = nil
-        resultCallback(true, "")
+        return OperationResult(success: true, error: nil)
     }
     
     // MARK: - Scanning Operations
@@ -91,25 +78,25 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         centralManager.scanForPeripherals(withServices: serviceUUIDs, options: options)
     }
     
-    public func stopScan(callback: @escaping (Bool, String) -> Void) throws {
+    public func stopScan() throws -> Bool {
         centralManager.stopScan()
         isCurrentlyScanning = false
         scanCallback = nil
         currentScanFilter = nil
         // Keep discovered peripherals for potential connections
-        callback(true, "")
+        return true
     }
     
-    public func isScanning(callback: @escaping (Bool) -> Void) throws {
-        callback(isCurrentlyScanning)
+    public func isScanning() throws -> Bool {
+        return isCurrentlyScanning
     }
     
     // MARK: - Device Discovery
-    public func getConnectedDevices(callback: @escaping ([BLEDevice]) -> Void) throws {
+    public func getConnectedDevices(services: [String]) throws -> [BLEDevice] {
         var connectedDevices: [BLEDevice] = []
         
+        // First check our tracked connected peripherals
         for (deviceId, peripheral) in connectedPeripherals {
-            // Create BLEDevice from connected peripheral
             let device = BLEDevice(
                 id: deviceId,
                 name: peripheral.name ?? "Unknown Device",
@@ -121,7 +108,58 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
             connectedDevices.append(device)
         }
         
-        callback(connectedDevices)
+        // Check previously discovered peripherals to see if any are still connected
+        for (deviceId, peripheral) in discoveredPeripherals {
+            // Skip if we already know it's connected
+            if connectedPeripherals.keys.contains(deviceId) {
+                continue
+            }
+            
+            // Check if this peripheral is actually connected by checking its state
+            if peripheral.state == .connected {
+                let device = BLEDevice(
+                    id: deviceId,
+                    name: peripheral.name ?? "Unknown Device",
+                    rssi: 0,
+                    manufacturerData: ManufacturerData(companyIdentifiers: []),
+                    serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
+                    isConnectable: true
+                )
+                connectedDevices.append(device)
+                
+                // Add to our tracking dictionary
+                connectedPeripherals[deviceId] = peripheral
+            }
+        }
+        
+        // Query system connected peripherals with specified services
+        let withServices: [CBUUID] = services.compactMap { CBUUID(string: $0) }
+        
+        for service in withServices {
+            let peripherals = centralManager.retrieveConnectedPeripherals(withServices: [service])
+            for peripheral in peripherals {
+                let deviceId = peripheral.identifier.uuidString
+                
+                // Only add if we don't already have it in our list
+                if !connectedPeripherals.keys.contains(deviceId) {
+                    let device = BLEDevice(
+                        id: deviceId,
+                        name: peripheral.name ?? "Unknown Device",
+                        rssi: 0,
+                        manufacturerData: ManufacturerData(companyIdentifiers: []),
+                        serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
+                        isConnectable: true
+                    )
+                    connectedDevices.append(device)
+                    
+                    // Add to our tracking dictionaries for future use
+                    discoveredPeripherals[deviceId] = peripheral
+                    connectedPeripherals[deviceId] = peripheral
+                }
+            }
+        }
+        
+        return connectedDevices
     }
     
     // MARK: - Connection Management
@@ -164,11 +202,11 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         centralManager.cancelPeripheralConnection(peripheral)
     }
     
-    public func isConnected(deviceId: String, callback: @escaping (Bool) -> Void) throws {
+    public func isConnected(deviceId: String) throws -> Bool {
         if let peripheral = connectedPeripherals[deviceId] {
-            callback(peripheral.state == .connected)
+            return peripheral.state == .connected
         } else {
-            callback(false)
+            return false
         }
     }
     
@@ -183,35 +221,31 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         peripheral.discoverServices(nil)
     }
     
-    public func getServices(deviceId: String, callback: @escaping ([String]) -> Void) throws {
+    public func getServices(deviceId: String) throws -> [String] {
         guard let peripheral = connectedPeripherals[deviceId] else {
-            callback([])
-            return
+            return []
         }
         
         let serviceUUIDs = peripheral.services?.map { $0.uuid.uuidString } ?? []
-        callback(serviceUUIDs)
+        return serviceUUIDs
     }
     
     public func getCharacteristics(
         deviceId: String,
         serviceId: String,
-        callback: @escaping ([String]) -> Void
-    ) throws {
+    ) throws -> [String] {
         guard let peripheral = connectedPeripherals[deviceId] else {
-            callback([])
-            return
+            return []
         }
         
         // Find service using CBUUID comparison
         let serviceUUID = CBUUID(string: serviceId)
         guard let service = peripheral.services?.first(where: { $0.uuid == serviceUUID }) else {
-            callback([])
-            return
+            return []
         }
         
         let characteristicUUIDs = service.characteristics?.map { $0.uuid.uuidString } ?? []
-        callback(characteristicUUIDs)
+        return characteristicUUIDs
     }
     
     // MARK: - Characteristic Operations

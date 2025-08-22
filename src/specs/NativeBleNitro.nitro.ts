@@ -45,6 +45,11 @@ export type BooleanCallback = (result: boolean) => void;
 export type StringArrayCallback = (result: string[]) => void;
 export type ReadCharacteristicCallback = (success: boolean, data: number[], error: string) => void;
 
+export type OperationResult = {
+  success: boolean;
+  error?: string;
+};
+
 /**
  * Native BLE Nitro Module Specification
  * Defines the interface between TypeScript and native implementations
@@ -52,21 +57,21 @@ export type ReadCharacteristicCallback = (success: boolean, data: number[], erro
 export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   // Scanning operations
   startScan(filter: ScanFilter, callback: ScanCallback): void;
-  stopScan(callback: OperationCallback): void;
-  isScanning(callback: BooleanCallback): void;
+  stopScan(): boolean;
+  isScanning(): boolean;
 
   // Device discovery
-  getConnectedDevices(callback: DevicesCallback): void;
+  getConnectedDevices(services: string[]): BLEDevice[];
 
   // Connection management
   connect(deviceId: string, callback: ConnectionCallback, disconnectCallback?: DisconnectionEventCallback): void;
   disconnect(deviceId: string, callback: OperationCallback): void;
-  isConnected(deviceId: string, callback: BooleanCallback): void;
+  isConnected(deviceId: string): boolean;
 
   // Service discovery
   discoverServices(deviceId: string, callback: OperationCallback): void;
-  getServices(deviceId: string, callback: StringArrayCallback): void;
-  getCharacteristics(deviceId: string, serviceId: string, callback: StringArrayCallback): void;
+  getServices(deviceId: string): string[];
+  getCharacteristics(deviceId: string, serviceId: string): string[];
 
   // Characteristic operations
   readCharacteristic(deviceId: string, serviceId: string, characteristicId: string, callback: ReadCharacteristicCallback): void;
@@ -75,10 +80,9 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
   unsubscribeFromCharacteristic(deviceId: string, serviceId: string, characteristicId: string, callback: OperationCallback): void;
 
   // Bluetooth state management
-  isBluetoothEnabled(callback: BooleanCallback): void;
   requestBluetoothEnable(callback: OperationCallback): void;
-  state(callback: StateCallback): void;
-  subscribeToStateChange(stateCallback: StateCallback, resultCallback: OperationCallback): void;
-  unsubscribeFromStateChange(resultCallback: OperationCallback): void;
+  state(): BLEState;
+  subscribeToStateChange(stateCallback: StateCallback): OperationResult;
+  unsubscribeFromStateChange(): OperationResult;
   openSettings(): Promise<void>;
 }

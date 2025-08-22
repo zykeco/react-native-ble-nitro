@@ -7,7 +7,7 @@ export function createBle(opts: {
 }) {
   return {
     mount: async () => {
-      const state = await ble.state();
+      const state = ble.state();
       console.log('Initial State', state);
       const subState = () => ble.subscribeToStateChange((state: BLEState) => {
         opts.onEnabledChange?.(state === BLEState.PoweredOn);

@@ -83,22 +83,22 @@ const ble = BleNitro.instance();
 
 ```typescript
 // Check if Bluetooth is enabled
-const isEnabled = await ble.isBluetoothEnabled();
+const isEnabled = ble.isBluetoothEnabled();
 
 // Get current Bluetooth state
-const state = await ble.state();
+const state = ble.state();
 // Returns: BLEState.PoweredOn, BLEState.PoweredOff, etc.
 
 // Request to enable Bluetooth (Android only)
 await ble.requestBluetoothEnable();
 
 // Subscribe to state changes
-const subscription = await ble.subscribeToStateChange((state) => {
+const subscription = ble.subscribeToStateChange((state) => {
   console.log('Bluetooth state changed:', state);
 }, true); // true = emit initial state
 
 // Unsubscribe from state changes
-await subscription.remove();
+subscription.remove();
 
 // Open Bluetooth settings
 await ble.openSettings();
@@ -108,7 +108,7 @@ await ble.openSettings();
 
 ```typescript
 // Start scanning for devices
-await ble.startScan({
+ble.startScan({
   serviceUUIDs: ['180d'], // Optional: filter by service UUIDs
   rssiThreshold: -80,     // Optional: minimum signal strength
   allowDuplicates: false  // Optional: allow duplicate discoveries
@@ -117,13 +117,13 @@ await ble.startScan({
 });
 
 // Stop scanning
-await ble.stopScan();
+ble.stopScan();
 
 // Check if currently scanning
-const isScanning = await ble.isScanning();
+const isScanning = ble.isScanning();
 
 // Get already connected devices
-const connectedDevices = await ble.getConnectedDevices();
+const connectedDevices = ble.getConnectedDevices(['180d']); // Optional: filter by service UUIDs
 ```
 
 #### 🔗 Device Connection
@@ -147,7 +147,7 @@ const deviceId = await ble.connect(deviceId);
 await ble.disconnect(deviceId);
 
 // Check connection status
-const isConnected = await ble.isConnected(deviceId);
+const isConnected = ble.isConnected(deviceId);
 ```
 
 #### 🔧 Service Discovery
@@ -162,13 +162,13 @@ const services = await ble.getServices(deviceId);
 // Always returns full 128-bit UUIDs
 
 // Get characteristics for a service
-const characteristics = await ble.getCharacteristics(deviceId, serviceUUID);
+const characteristics = ble.getCharacteristics(deviceId, serviceUUID);
 // Returns: ['00002a37-0000-1000-8000-00805f9b34fb', '00002a38-0000-1000-8000-00805f9b34fb', ...] 
 // Always returns full 128-bit UUIDs
 
 // Note: You can use either short or long form UUIDs as input:
-const characteristics1 = await ble.getCharacteristics(deviceId, '180d'); // Short form
-const characteristics2 = await ble.getCharacteristics(deviceId, '0000180d-0000-1000-8000-00805f9b34fb'); // Long form
+const characteristics1 = ble.getCharacteristics(deviceId, '180d'); // Short form
+const characteristics2 = ble.getCharacteristics(deviceId, '0000180d-0000-1000-8000-00805f9b34fb'); // Long form
 // Both work identically - conversion handled automatically
 ```
 
@@ -211,7 +211,7 @@ await ble.writeCharacteristic(
 
 ```typescript
 // Subscribe to characteristic notifications
-const subscription = await ble.subscribeToCharacteristic(
+const subscription = ble.subscribeToCharacteristic(
   deviceId,
   serviceUUID,
   characteristicUUID,
@@ -222,7 +222,7 @@ const subscription = await ble.subscribeToCharacteristic(
 );
 
 // Unsubscribe from notifications
-await subscription.remove();
+subscription.remove();
 
 // Or unsubscribe directly
 await ble.unsubscribeFromCharacteristic(deviceId, serviceUUID, characteristicUUID);
@@ -240,7 +240,7 @@ const HEART_RATE_MEASUREMENT = '2a37';
 const deviceId = await ble.connect(heartRateDeviceId);
 await ble.discoverServices(deviceId);
 
-const subscription = await ble.subscribeToCharacteristic(
+const subscription = ble.subscribeToCharacteristic(
   deviceId,
   HEART_RATE_SERVICE,
   HEART_RATE_MEASUREMENT,
@@ -249,6 +249,9 @@ const subscription = await ble.subscribeToCharacteristic(
     console.log('Heart rate:', heartRate, 'BPM');
   }
 );
+
+// Unsubscribe when done
+subscription.remove();
 ```
 
 #### Battery Level Reading
