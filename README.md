@@ -148,6 +148,10 @@ await ble.disconnect(deviceId);
 
 // Check connection status
 const isConnected = ble.isConnected(deviceId);
+
+// MTU negotiation (Android only, as iOS manages MTU automatically)
+// iOS returns current MTU size
+const mtu = await ble.requestMTU(deviceId, 256); // Request MTU size
 ```
 
 #### 🔧 Service Discovery
