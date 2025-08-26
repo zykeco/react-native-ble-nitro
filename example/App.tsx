@@ -168,6 +168,14 @@ export default function App() {
     logMessage('Body Sensor Location', key);
   }
 
+  const requestMtu = () => {
+    if (!connectedDeviceId) {
+      throw new Error('No device connected');
+    }
+    const mtu = ble.instance.requestMTU(connectedDeviceId, 517);
+    logMessage('MTU', mtu);
+  };
+
   const logMessage = async (...message: (string | number)[]) => {
     const date = new Date().toLocaleTimeString('de-DE');
     setLogs((prev) => [...prev, `${date} - ${message.join(' ')}`]);
@@ -400,6 +408,9 @@ export default function App() {
                       )}
                     </View>
                   ))}
+                  <TouchableOpacity style={styles.button} onPress={requestMtu}>
+                    <Text>Request MTU</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.button} onPress={disconnectDevice}>
                     <Text>Disconnect</Text>
                   </TouchableOpacity>

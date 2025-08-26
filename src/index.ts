@@ -274,6 +274,18 @@ export class BleNitro {
   }
 
   /**
+   * Request a new MTU size
+   * @param deviceId ID of the device
+   * @param mtu New MTU size, min is 23, max is 517
+   * @returns On Android: new MTU size; on iOS: current MTU size as it is handled by iOS itself; on error: -1
+   */
+  public requestMTU(deviceId: string, mtu: number): number {
+    mtu = parseInt(mtu.toString(), 10);
+    const deviceMtu = BleNitroNative.requestMTU(deviceId, mtu);
+    return deviceMtu;
+  }
+
+  /**
    * Discover services for a connected device
    * @param deviceId ID of the device
    * @returns Promise resolving when services are discovered
@@ -512,8 +524,7 @@ export class BleNitro {
   }
 
   /**
-   * Request to enable Bluetooth
-   * Only works on Android
+   * Request to enable Bluetooth (Android only)
    * @returns Promise resolving when Bluetooth is enabled
    */
   public requestBluetoothEnable(): Promise<boolean> {

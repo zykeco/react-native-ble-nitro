@@ -210,6 +210,14 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         }
     }
     
+    public func requestMTU(deviceId: String, mtu: Double) throws -> Double {
+        guard let peripheral = connectedPeripherals[deviceId] else {
+            return Double(-1)
+        }
+        
+        return Double(peripheral.maximumWriteValueLength(for: .withoutResponse))
+    }
+    
     // MARK: - Service Discovery
     public func discoverServices(deviceId: String, callback: @escaping (Bool, String) -> Void) throws {
         guard let peripheral = connectedPeripherals[deviceId] else {
