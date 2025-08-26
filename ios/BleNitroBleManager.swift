@@ -210,6 +210,14 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         }
     }
     
+    public func requestMTU(deviceId: String, mtu: Double) throws -> Double {
+        guard let peripheral = connectedPeripherals[deviceId] else {
+            return Double(-1)
+        }
+        
+        return Double(peripheral.maximumWriteValueLength(for: .withoutResponse))
+    }
+    
     // MARK: - Service Discovery
     public func discoverServices(deviceId: String, callback: @escaping (Bool, String) -> Void) throws {
         guard let peripheral = connectedPeripherals[deviceId] else {
@@ -253,16 +261,30 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         deviceId: String,
         serviceId: String,
         characteristicId: String,
-        callback: @escaping (Bool, [Double], String) -> Void
+        callback: @escaping (Bool, ArrayBuffer, String) -> Void
     ) throws {
         guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
-            callback(false, [], "Characteristic not found")
+            do {
+                let emptyData = Data(capacity: 0)
+                let emptyBuffer = try ArrayBuffer.copy(data: emptyData)
+                callback(false, emptyBuffer, "Characteristic not found")
+            } catch {
+                let emptyBuffer = try! ArrayBuffer.copy(data: Data())
+                callback(false, emptyBuffer, "Characteristic not found")
+            }
             return
         }
         
         // Ensure peripheral delegate exists
         guard let delegate = peripheralDelegates[deviceId] else {
-            callback(false, [], "Device not properly connected or delegate not found")
+            do {
+                let emptyData = Data(capacity: 0)
+                let emptyBuffer = try ArrayBuffer.copy(data: emptyData)
+                callback(false, emptyBuffer, "Device not properly connected or delegate not found")
+            } catch {
+                let emptyBuffer = try! ArrayBuffer.copy(data: Data())
+                callback(false, emptyBuffer, "Device not properly connected or delegate not found")
+            }
             return
         }
         
@@ -277,7 +299,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         deviceId: String,
         serviceId: String,
         characteristicId: String,
-        data: [Double],
+        data: ArrayBuffer,
         withResponse: Bool,
         callback: @escaping (Bool, String) -> Void
     ) throws {
@@ -286,7 +308,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
             return
         }
         
-        let writeData = Data(data.map { UInt8($0) })
+        let writeData = data.toData(copyIfNeeded: true)
         let writeType: CBCharacteristicWriteType = withResponse ? .withResponse : .withoutResponse
         
         if withResponse {
@@ -309,7 +331,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         deviceId: String,
         serviceId: String,
         characteristicId: String,
-        updateCallback: @escaping (String, [Double]) -> Void,
+        updateCallback: @escaping (String, ArrayBuffer) -> Void,
         resultCallback: @escaping (Bool, String) -> Void
     ) throws {
         guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
@@ -519,17 +541,30 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         }
         
         let companyId = manufacturerDataRaw.prefix(2).withUnsafeBytes { $0.load(as: UInt16.self) }
-        let data = Array(manufacturerDataRaw.dropFirst(2)).map { Double($0) }
+        let dataBytes = Data(manufacturerDataRaw.dropFirst(2))
         
-        let entry = ManufacturerDataEntry(
-            id: String(companyId),
-            data: data
-        )
-        
-        return ManufacturerData(companyIdentifiers: [entry])
+        do {
+            let capacityData = Data(capacity: dataBytes.count)
+            let finalData = capacityData + dataBytes
+            let arrayBuffer = try ArrayBuffer.copy(data: finalData)
+            
+            let entry = ManufacturerDataEntry(
+                id: String(companyId),
+                data: arrayBuffer
+            )
+            
+            return ManufacturerData(companyIdentifiers: [entry])
+        } catch {
+            let emptyBuffer = try! ArrayBuffer.copy(data: Data())
+            let entry = ManufacturerDataEntry(
+                id: String(companyId),
+                data: emptyBuffer
+            )
+            return ManufacturerData(companyIdentifiers: [entry])
+        }
     }
 
-    public func openSettings() throws -> NitroModules.Promise<Void> {
+    public func openSettings() throws -> Promise<Void> {
         return Promise.async {
             if let url = URL(string: UIApplication.openSettingsURLString) {
                 // Ask the system to open that URL.

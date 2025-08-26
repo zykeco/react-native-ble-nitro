@@ -5,6 +5,8 @@ import {
   BLEState as NativeBLEState,
 } from './specs/NativeBleNitro';
 
+export type ByteArray = number[];
+
 export interface ScanFilter {
   serviceUUIDs?: string[];
   rssiThreshold?: number;
@@ -13,7 +15,7 @@ export interface ScanFilter {
 
 export interface ManufacturerDataEntry {
   id: string;
-  data: number[];
+  data: ByteArray;
 }
 
 export interface ManufacturerData {
@@ -43,7 +45,7 @@ export type DisconnectEventCallback = (
 export type OperationCallback = (success: boolean, error: string) => void;
 export type CharacteristicUpdateCallback = (
   characteristicId: string,
-  data: number[]
+  data: ByteArray
 ) => void;
 
 export type Subscription = {
@@ -69,6 +71,14 @@ function mapNativeBLEStateToBLEState(nativeState: NativeBLEState): BLEState {
     5: BLEState.PoweredOn,
   };
   return map[nativeState];
+}
+
+function arrayBufferToByteArray(buffer: ArrayBuffer): ByteArray {
+  return Array.from(new Uint8Array(buffer));
+}
+
+function byteArrayToArrayBuffer(data: ByteArray): ArrayBuffer {
+  return new Uint8Array(data).buffer;
 }
 
 let _instance: BleNitro;
@@ -131,8 +141,18 @@ export class BleNitro {
 
     // Create callback wrapper
     const scanCallback = (device: NativeBLEDevice) => {
-      device.serviceUUIDs = BleNitro.normalizeGattUUIDs(device.serviceUUIDs);
-      callback(device);
+      // Convert manufacturer data to Uint8Arrays
+      const convertedDevice: BLEDevice = {
+        ...device,
+        serviceUUIDs: BleNitro.normalizeGattUUIDs(device.serviceUUIDs),
+        manufacturerData: {
+          companyIdentifiers: device.manufacturerData.companyIdentifiers.map(entry => ({
+            id: entry.id,
+            data: arrayBufferToByteArray(entry.data)
+          }))
+        }
+      };
+      callback(convertedDevice);
     };
 
     // Start scan
@@ -168,10 +188,16 @@ export class BleNitro {
    */
   public getConnectedDevices(services?: string[]): BLEDevice[] {
     const devices = BleNitroNative.getConnectedDevices(services || []);
-    // Normalize service UUIDs for connected devices
+    // Normalize service UUIDs - manufacturer data already comes as ArrayBuffers
     return devices.map(device => ({
       ...device,
-      serviceUUIDs: BleNitro.normalizeGattUUIDs(device.serviceUUIDs)
+      serviceUUIDs: BleNitro.normalizeGattUUIDs(device.serviceUUIDs),
+      manufacturerData: {
+        companyIdentifiers: device.manufacturerData.companyIdentifiers.map(entry => ({
+          id: entry.id,
+          data: arrayBufferToByteArray(entry.data)
+        }))
+      }
     }));
   }
 
@@ -245,6 +271,18 @@ export class BleNitro {
    */
   public isConnected(deviceId: string): boolean {
     return BleNitroNative.isConnected(deviceId);
+  }
+
+  /**
+   * Request a new MTU size
+   * @param deviceId ID of the device
+   * @param mtu New MTU size, min is 23, max is 517
+   * @returns On Android: new MTU size; on iOS: current MTU size as it is handled by iOS itself; on error: -1
+   */
+  public requestMTU(deviceId: string, mtu: number): number {
+    mtu = parseInt(mtu.toString(), 10);
+    const deviceMtu = BleNitroNative.requestMTU(deviceId, mtu);
+    return deviceMtu;
   }
 
   /**
@@ -322,13 +360,13 @@ export class BleNitro {
    * @param deviceId ID of the device
    * @param serviceId ID of the service
    * @param characteristicId ID of the characteristic
-   * @returns Promise resolving to the characteristic data as byte array
+   * @returns Promise resolving to the characteristic data as ByteArray
    */
   public readCharacteristic(
     deviceId: string,
     serviceId: string,
     characteristicId: string
-  ): Promise<number[]> {
+  ): Promise<ByteArray> {
     return new Promise((resolve, reject) => {
       // Check if connected first
       if (!this._connectedDevices[deviceId]) {
@@ -340,9 +378,9 @@ export class BleNitro {
         deviceId,
         BleNitro.normalizeGattUUID(serviceId),
         BleNitro.normalizeGattUUID(characteristicId),
-        (success: boolean, data: number[], error: string) => {
+        (success: boolean, data: ArrayBuffer, error: string) => {
           if (success) {
-            resolve(data);
+            resolve(arrayBufferToByteArray(data));
           } else {
             reject(new Error(error));
           }
@@ -356,7 +394,7 @@ export class BleNitro {
    * @param deviceId ID of the device
    * @param serviceId ID of the service
    * @param characteristicId ID of the characteristic
-   * @param data Data to write as an array of bytes
+   * @param data Data to write as ByteArray(number[])
    * @param withResponse Whether to wait for response
    * @returns Promise resolving when write is complete
    */
@@ -364,7 +402,7 @@ export class BleNitro {
     deviceId: string,
     serviceId: string,
     characteristicId: string,
-    data: number[],
+    data: ByteArray,
     withResponse: boolean = true
   ): Promise<boolean> {
     return new Promise((resolve, reject) => {
@@ -374,11 +412,13 @@ export class BleNitro {
         return;
       }
 
+      const dataAsArrayBuffer = byteArrayToArrayBuffer(data);
+
       BleNitroNative.writeCharacteristic(
         deviceId,
         BleNitro.normalizeGattUUID(serviceId),
         BleNitro.normalizeGattUUID(characteristicId),
-        data,
+        dataAsArrayBuffer,
         withResponse,
         (success: boolean, error: string) => {
           if (success) {
@@ -416,8 +456,8 @@ export class BleNitro {
       deviceId,
       BleNitro.normalizeGattUUID(serviceId),
       BleNitro.normalizeGattUUID(characteristicId),
-      (charId: string, data: number[]) => {
-        callback(charId, data);
+      (charId: string, data: ArrayBuffer) => {
+        callback(charId, arrayBufferToByteArray(data));
       },
       (success, error) => {
         _success = success;
@@ -484,8 +524,7 @@ export class BleNitro {
   }
 
   /**
-   * Request to enable Bluetooth
-   * Only works on Android
+   * Request to enable Bluetooth (Android only)
    * @returns Promise resolving when Bluetooth is enabled
    */
   public requestBluetoothEnable(): Promise<boolean> {
