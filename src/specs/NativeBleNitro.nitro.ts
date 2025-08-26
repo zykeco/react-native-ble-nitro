@@ -1,5 +1,8 @@
 import { HybridObject } from 'react-native-nitro-modules';
 
+// Type alias for BLE data - ArrayBuffers for efficient binary data handling
+export type BLEValue = ArrayBuffer;
+
 // Nitro constraint: Use numeric enums instead of string unions
 export enum BLEState {
   Unknown = 0,
@@ -12,7 +15,7 @@ export enum BLEState {
 
 export interface ManufacturerDataEntry {
   id: string;
-  data: number[];
+  data: BLEValue;
 }
 
 export interface ManufacturerData {
@@ -39,11 +42,11 @@ export type DevicesCallback = (devices: BLEDevice[]) => void;
 export type ConnectionCallback = (success: boolean, deviceId: string, error: string) => void;
 export type DisconnectionEventCallback = (deviceId: string, interrupted: boolean, error: string) => void;
 export type OperationCallback = (success: boolean, error: string) => void;
-export type CharacteristicCallback = (characteristicId: string, data: number[]) => void;
+export type CharacteristicCallback = (characteristicId: string, data: BLEValue) => void;
 export type StateCallback = (state: BLEState) => void;
 export type BooleanCallback = (result: boolean) => void;
 export type StringArrayCallback = (result: string[]) => void;
-export type ReadCharacteristicCallback = (success: boolean, data: number[], error: string) => void;
+export type ReadCharacteristicCallback = (success: boolean, data: BLEValue, error: string) => void;
 
 export type OperationResult = {
   success: boolean;
@@ -75,7 +78,7 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
 
   // Characteristic operations
   readCharacteristic(deviceId: string, serviceId: string, characteristicId: string, callback: ReadCharacteristicCallback): void;
-  writeCharacteristic(deviceId: string, serviceId: string, characteristicId: string, data: number[], withResponse: boolean, callback: OperationCallback): void;
+  writeCharacteristic(deviceId: string, serviceId: string, characteristicId: string, data: BLEValue, withResponse: boolean, callback: OperationCallback): void;
   subscribeToCharacteristic(deviceId: string, serviceId: string, characteristicId: string, updateCallback: CharacteristicCallback, resultCallback: OperationCallback): void;
   unsubscribeFromCharacteristic(deviceId: string, serviceId: string, characteristicId: string, callback: OperationCallback): void;
 

@@ -20,13 +20,13 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     var characteristicDiscoveryCallbacks: [String: (Bool, String) -> Void] = [:]
     
     // Operation callbacks - using CBUUID as key for reliable UUID matching
-    var readCallbacks: [CBUUID: (Bool, [Double], String) -> Void] = [:]
+    var readCallbacks: [CBUUID: (Bool, ArrayBuffer, String) -> Void] = [:]
     var writeCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
     var subscriptionCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
     var unsubscriptionCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
     
     // Notification callbacks
-    var notificationCallbacks: [CBUUID: (String, [Double]) -> Void] = [:]
+    var notificationCallbacks: [CBUUID: (String, ArrayBuffer) -> Void] = [:]
     
     // MARK: - Initialization
     init(deviceId: String, manager: BleNitroBleManager) {
@@ -76,12 +76,33 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         // Handle read callback using CBUUID - no normalization needed
         if let readCallback = readCallbacks[characteristicUUID] {
             if let error = error {
-                readCallback(false, [], error.localizedDescription)
+                do {
+                    let emptyData = Data(capacity: 0)
+                    let emptyBuffer = try ArrayBuffer.copy(data: emptyData)
+                    readCallback(false, emptyBuffer, error.localizedDescription)
+                } catch {
+                    let emptyBuffer = try! ArrayBuffer.copy(data: Data())
+                    readCallback(false, emptyBuffer, error.localizedDescription)
+                }
             } else if let data = characteristic.value {
-                let doubleArray = data.map { Double($0) }
-                readCallback(true, doubleArray, "")
+                do {
+                    let capacityData = Data(capacity: data.count)
+                    let finalData = capacityData + data
+                    let arrayBuffer = try ArrayBuffer.copy(data: finalData)
+                    readCallback(true, arrayBuffer, "")
+                } catch {
+                    let emptyBuffer = try! ArrayBuffer.copy(data: Data())
+                    readCallback(false, emptyBuffer, "Failed to create ArrayBuffer")
+                }
             } else {
-                readCallback(false, [], "No data received")
+                do {
+                    let emptyData = Data(capacity: 0)
+                    let emptyBuffer = try ArrayBuffer.copy(data: emptyData)
+                    readCallback(false, emptyBuffer, "No data received")
+                } catch {
+                    let emptyBuffer = try! ArrayBuffer.copy(data: Data())
+                    readCallback(false, emptyBuffer, "No data received")
+                }
             }
             readCallbacks.removeValue(forKey: characteristicUUID)
         }
@@ -89,8 +110,15 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         // Handle notification callback using CBUUID
         if let notificationCallback = notificationCallbacks[characteristicUUID],
            let data = characteristic.value {
-            let doubleArray = data.map { Double($0) }
-            notificationCallback(characteristicUUID.uuidString, doubleArray)
+            do {
+                let capacityData = Data(capacity: data.count)
+                let finalData = capacityData + data
+                let arrayBuffer = try ArrayBuffer.copy(data: finalData)
+                notificationCallback(characteristicUUID.uuidString, arrayBuffer)
+            } catch {
+                let emptyBuffer = try! ArrayBuffer.copy(data: Data())
+                notificationCallback(characteristicUUID.uuidString, emptyBuffer)
+            }
         }
     }
     
