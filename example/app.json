@@ -33,7 +33,8 @@
           "modes": [
             "central"
           ],
-          "bluetoothAlwaysPermission": "Allow $(PRODUCT_NAME) to connect to bluetooth devices"
+          "bluetoothAlwaysPermission": "Allow $(PRODUCT_NAME) to connect to bluetooth devices",
+          "neverForLocation": true
         }
       ]
     ]

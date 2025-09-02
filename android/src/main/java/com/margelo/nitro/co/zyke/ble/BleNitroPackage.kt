@@ -8,14 +8,26 @@ import com.facebook.react.TurboReactPackage
 
 class BleNitroPackage : TurboReactPackage() {
     
+    private var contextSet = false
+    
     override fun getModule(name: String, reactContext: ReactApplicationContext): NativeModule? {
-        // Initialize the context for BleNitroBleManager
-        BleNitroBleManager.setContext(reactContext)
+        // Set context if not already set
+        if (!contextSet) {
+            BleNitroBleManager.setContext(reactContext)
+            contextSet = true
+        }
         return null
     }
 
     override fun getReactModuleInfoProvider(): ReactModuleInfoProvider {
         return ReactModuleInfoProvider { HashMap() }
+    }
+
+    // Override this method to ensure context is set during package initialization
+    override fun createNativeModules(reactContext: ReactApplicationContext): MutableList<NativeModule> {
+        // Set context during package creation
+        BleNitroBleManager.setContext(reactContext)
+        return super.createNativeModules(reactContext).toMutableList()
     }
 
     companion object {

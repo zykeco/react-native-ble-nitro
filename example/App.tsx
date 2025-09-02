@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { AppState, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { AppState, PermissionsAndroid, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { createBle } from './src/bluetooth';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { BLEDevice, Subscription } from 'react-native-ble-nitro';
@@ -35,8 +35,13 @@ export default function App() {
   const ble = bleModule.current;
 
   useLayoutEffect(() => {
-    ble.mount().then(() => {
-      console.log('BLE Module mounted');
+    requestPermissionsAndroid().then(async () => {
+      await requestBluetoothEnable();
+      ble.mount().then(() => {
+        console.log('BLE Module mounted');
+      }).catch((e) => {
+        console.error(e);
+      });
     });
     const unsub = AppState.addEventListener('change', async (state) => {
       if (state === 'active' && isEnabled === false) {
@@ -54,12 +59,46 @@ export default function App() {
   }, []);
 
   const requestBluetoothEnable = async () => {
-    await ble.instance.requestBluetoothEnable().catch((e) => {
+    const success = await ble.instance.requestBluetoothEnable().catch((e) => {
       console.error(e);
       if (e instanceof Error && e.message === 'Not supported') {
         logMessage('requestBluetoothEnable only works on Android');
       }
+      return false;
     });
+    logMessage('requestBluetoothEnable', String(success));
+    return success;
+  };
+
+  const requestPermissionsAndroid = async () => {
+    if (Platform.OS !== 'android') {
+      return true
+    }
+    if (Platform.OS === 'android' && PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION) {
+      const apiLevel = parseInt(Platform.Version.toString(), 10);
+      logMessage(`API level: ${apiLevel}`);
+
+      if (apiLevel < 31) {
+        const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION)
+        return result === PermissionsAndroid.RESULTS.GRANTED
+      }
+      if (PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN && PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT) {
+        const result = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+        ])
+
+        return (
+          result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED &&
+          result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
+          result['android.permission.ACCESS_FINE_LOCATION'] === PermissionsAndroid.RESULTS.GRANTED
+        )
+      }
+
+      logMessage('Request permissions failed');
+      throw new Error('Request permissions failed');
+    }
   };
 
   const startScan = async () => {

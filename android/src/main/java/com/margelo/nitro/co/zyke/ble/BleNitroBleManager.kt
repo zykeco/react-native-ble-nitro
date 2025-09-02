@@ -1,10 +1,16 @@
 package com.margelo.nitro.co.zyke.ble
 
+import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.os.Build
 import android.provider.Settings
+import androidx.core.content.ContextCompat
 import com.margelo.nitro.core.*
 
 /**
@@ -15,6 +21,12 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var stateCallback: ((state: BLEState) -> Unit)? = null
+    private var bluetoothStateReceiver: BroadcastReceiver? = null
+    
+    init {
+        // Try to get context from React Native application context
+        tryToGetContextFromReactNative()
+    }
     
     companion object {
         private var appContext: Context? = null
@@ -22,15 +34,101 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         fun setContext(context: Context) {
             appContext = context.applicationContext
         }
+        
+        fun getContext(): Context? = appContext
+    }
+    
+    private fun tryToGetContextFromReactNative() {
+        if (appContext == null) {
+            try {
+                // Try to get Application context using reflection
+                val activityThread = Class.forName("android.app.ActivityThread")
+                val currentApplicationMethod = activityThread.getMethod("currentApplication")
+                val application = currentApplicationMethod.invoke(null) as? android.app.Application
+                
+                if (application != null) {
+                    setContext(application)
+                }
+            } catch (e: Exception) {
+                // Context will be set by package initialization if reflection fails
+            }
+        }
     }
     
     private fun initializeBluetoothIfNeeded() {
         if (bluetoothAdapter == null) {
             try {
-                val bluetoothManager = appContext?.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+                val context = appContext ?: return
+                val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
                 bluetoothAdapter = bluetoothManager?.adapter
             } catch (e: Exception) {
                 // Handle initialization error silently
+            }
+        }
+    }
+
+    private fun hasBluetoothPermissions(): Boolean {
+        val context = appContext ?: return false
+        
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Android 12+ (API 31+) - check new Bluetooth permissions
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+        } else {
+            // Android < 12 - check legacy permissions
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_ADMIN) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun getMissingPermissions(): List<String> {
+        val context = appContext ?: return emptyList()
+        val missing = mutableListOf<String>()
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Android 12+ permissions
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                missing.add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                missing.add(Manifest.permission.BLUETOOTH_SCAN)
+            }
+        } else {
+            // Legacy permissions
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED) {
+                missing.add(Manifest.permission.BLUETOOTH)
+            }
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
+                missing.add(Manifest.permission.BLUETOOTH_ADMIN)
+            }
+        }
+        
+        // Location permissions for BLE scanning
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            missing.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        
+        return missing
+    }
+    
+    private fun bluetoothStateToBlEState(bluetoothState: Int): BLEState {
+        return when (bluetoothState) {
+            BluetoothAdapter.STATE_OFF -> BLEState.POWEREDOFF
+            BluetoothAdapter.STATE_ON -> BLEState.POWEREDON
+            BluetoothAdapter.STATE_TURNING_ON -> BLEState.RESETTING
+            BluetoothAdapter.STATE_TURNING_OFF -> BLEState.RESETTING
+            else -> BLEState.UNKNOWN
+        }
+    }
+    
+    private fun createBluetoothStateReceiver(): BroadcastReceiver {
+        return object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                    val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                    val bleState = bluetoothStateToBlEState(state)
+                    stateCallback?.invoke(bleState)
+                }
             }
         }
     }
@@ -76,8 +174,9 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         return false
     }
 
-    override fun requestMTU(deviceId: String, mtu: Int): Int {
+    override fun requestMTU(deviceId: String, mtu: Double): Double {
         // TODO: Implement MTU request
+        return 0.toDouble()
     }
 
     // Service discovery
@@ -101,17 +200,17 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         deviceId: String,
         serviceId: String,
         characteristicId: String,
-        callback: (success: Boolean, data: String, error: String) -> Unit
+        callback: (success: Boolean, data: ArrayBuffer, error: String) -> Unit
     ) {
         // TODO: Implement characteristic read
-        callback(false, "", "Not implemented")
+        callback(false, ArrayBuffer.allocate(0), "Not implemented")
     }
 
     override fun writeCharacteristic(
         deviceId: String,
         serviceId: String,
         characteristicId: String,
-        data: String,
+        data: ArrayBuffer,
         withResponse: Boolean,
         callback: (success: Boolean, error: String) -> Unit
     ) {
@@ -123,7 +222,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         deviceId: String,
         serviceId: String,
         characteristicId: String,
-        updateCallback: (characteristicId: String, data: String) -> Unit,
+        updateCallback: (characteristicId: String, data: ArrayBuffer) -> Unit,
         resultCallback: (success: Boolean, error: String) -> Unit
     ) {
         // TODO: Implement characteristic subscription
@@ -155,14 +254,17 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 return
             }
             
-            // On Android, we can't directly enable Bluetooth without user permission
-            // We need to request the user to enable it
-            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            appContext?.let { ctx ->
-                enableBtIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(enableBtIntent)
-                callback(true, "Bluetooth enable request sent")
-            } ?: callback(false, "Context not available")
+            // Request user to enable Bluetooth
+            try {
+                val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+                appContext?.let { ctx ->
+                    enableBtIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    ctx.startActivity(enableBtIntent)
+                    callback(true, "Bluetooth enable request sent")
+                } ?: callback(false, "Context not available")
+            } catch (securityException: SecurityException) {
+                callback(false, "Permission denied: Cannot request Bluetooth enable. Please check app permissions.")
+            }
             
         } catch (e: Exception) {
             callback(false, "Error requesting Bluetooth enable: ${e.message}")
@@ -170,23 +272,41 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     }
 
     override fun state(): BLEState {
+        // Check permissions first
+        if (!hasBluetoothPermissions()) {
+            return BLEState.UNAUTHORIZED
+        }
+        
         initializeBluetoothIfNeeded()
         val adapter = bluetoothAdapter ?: return BLEState.UNSUPPORTED
         
-        return when (adapter.state) {
-            BluetoothAdapter.STATE_OFF -> BLEState.POWEREDOFF
-            BluetoothAdapter.STATE_ON -> BLEState.POWEREDON
-            BluetoothAdapter.STATE_TURNING_ON -> BLEState.RESETTING
-            BluetoothAdapter.STATE_TURNING_OFF -> BLEState.RESETTING
-            else -> BLEState.UNKNOWN
+        return try {
+            bluetoothStateToBlEState(adapter.state)
+        } catch (securityException: SecurityException) {
+            BLEState.UNAUTHORIZED
         }
     }
 
     override fun subscribeToStateChange(stateCallback: (state: BLEState) -> Unit): OperationResult {
         try {
+            val context = appContext ?: return OperationResult(success = false, error = "Context not available")
+            
+            // Unsubscribe from any existing subscription
+            unsubscribeFromStateChange()
+            
+            // Store the callback
             this.stateCallback = stateCallback
-            // TODO: Register broadcast receiver for Bluetooth state changes
-            // For now, just store the callback
+            
+            // Create and register broadcast receiver
+            bluetoothStateReceiver = createBluetoothStateReceiver()
+            val intentFilter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(bluetoothStateReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                context.registerReceiver(bluetoothStateReceiver, intentFilter)
+            }
+            
             return OperationResult(success = true, error = null)
         } catch (e: Exception) {
             return OperationResult(success = false, error = "Error subscribing to state changes: ${e.message}")
@@ -195,8 +315,22 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
 
     override fun unsubscribeFromStateChange(): OperationResult {
         try {
+            // Clear the callback
             this.stateCallback = null
-            // TODO: Unregister broadcast receiver for Bluetooth state changes
+            
+            // Unregister broadcast receiver if it exists
+            bluetoothStateReceiver?.let { receiver ->
+                val context = appContext
+                if (context != null) {
+                    try {
+                        context.unregisterReceiver(receiver)
+                    } catch (e: IllegalArgumentException) {
+                        // Receiver was not registered, ignore
+                    }
+                }
+                bluetoothStateReceiver = null
+            }
+            
             return OperationResult(success = true, error = null)
         } catch (e: Exception) {
             return OperationResult(success = false, error = "Error unsubscribing from state changes: ${e.message}")

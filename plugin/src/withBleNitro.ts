@@ -82,7 +82,6 @@ export const withBleNitroAndroid: ConfigPlugin<BleNitroPluginProps> = (config, p
 
     // Handle location permission settings for Android 12+
     if (neverForLocation) {
-      // Add neverForLocation attribute to location permissions for Android 12+
       const permissions = androidManifest.manifest['uses-permission'] || [];
       
       permissions.forEach((permission: any) => {
@@ -90,6 +89,7 @@ export const withBleNitroAndroid: ConfigPlugin<BleNitroPluginProps> = (config, p
           permission.$?.['android:name'] === 'android.permission.ACCESS_FINE_LOCATION' ||
           permission.$?.['android:name'] === 'android.permission.ACCESS_COARSE_LOCATION'
         ) {
+          permission.$['android:maxSdkVersion'] = '30';
           permission.$['android:usesPermissionFlags'] = 'neverForLocation';
         }
       });
