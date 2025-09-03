@@ -7,7 +7,6 @@ import {
   AndroidScanMode as NativeAndroidScanMode,
 } from './specs/NativeBleNitro';
 
-export type ByteArray = number[];
 
 export interface ScanFilter {
   serviceUUIDs?: string[];
@@ -18,7 +17,7 @@ export interface ScanFilter {
 
 export interface ManufacturerDataEntry {
   id: string;
-  data: ByteArray;
+  data: ArrayBuffer;
 }
 
 export interface ManufacturerData {
@@ -48,7 +47,7 @@ export type DisconnectEventCallback = (
 export type OperationCallback = (success: boolean, error: string) => void;
 export type CharacteristicUpdateCallback = (
   characteristicId: string,
-  data: ByteArray
+  data: ArrayBuffer
 ) => void;
 
 export type Subscription = {
@@ -93,13 +92,6 @@ function mapAndroidScanModeToNativeAndroidScanMode(scanMode: AndroidScanMode): N
   return map[scanMode];
 }
 
-function arrayBufferToByteArray(buffer: ArrayBuffer): ByteArray {
-  return Array.from(new Uint8Array(buffer));
-}
-
-function byteArrayToArrayBuffer(data: ByteArray): ArrayBuffer {
-  return new Uint8Array(data).buffer;
-}
 
 let _instance: BleNitro;
 
@@ -176,7 +168,7 @@ export class BleNitro {
         manufacturerData: {
           companyIdentifiers: device.manufacturerData.companyIdentifiers.map(entry => ({
             id: entry.id,
-            data: arrayBufferToByteArray(entry.data)
+            data: entry.data
           }))
         }
       };
@@ -224,7 +216,7 @@ export class BleNitro {
       manufacturerData: {
         companyIdentifiers: device.manufacturerData.companyIdentifiers.map(entry => ({
           id: entry.id,
-          data: arrayBufferToByteArray(entry.data)
+          data: entry.data
         }))
       }
     }));
@@ -389,13 +381,13 @@ export class BleNitro {
    * @param deviceId ID of the device
    * @param serviceId ID of the service
    * @param characteristicId ID of the characteristic
-   * @returns Promise resolving to the characteristic data as ByteArray
+   * @returns Promise resolving to the characteristic data as ArrayBuffer
    */
   public readCharacteristic(
     deviceId: string,
     serviceId: string,
     characteristicId: string
-  ): Promise<ByteArray> {
+  ): Promise<ArrayBuffer> {
     return new Promise((resolve, reject) => {
       // Check if connected first
       if (!this._connectedDevices[deviceId]) {
@@ -409,7 +401,7 @@ export class BleNitro {
         BleNitro.normalizeGattUUID(characteristicId),
         (success: boolean, data: ArrayBuffer, error: string) => {
           if (success) {
-            resolve(arrayBufferToByteArray(data));
+            resolve(data);
           } else {
             reject(new Error(error));
           }
@@ -423,7 +415,7 @@ export class BleNitro {
    * @param deviceId ID of the device
    * @param serviceId ID of the service
    * @param characteristicId ID of the characteristic
-   * @param data Data to write as ByteArray(number[])
+   * @param data Data to write as ArrayBuffer
    * @param withResponse Whether to wait for response
    * @returns Promise resolving when write is complete
    */
@@ -431,7 +423,7 @@ export class BleNitro {
     deviceId: string,
     serviceId: string,
     characteristicId: string,
-    data: ByteArray,
+    data: ArrayBuffer,
     withResponse: boolean = true
   ): Promise<boolean> {
     return new Promise((resolve, reject) => {
@@ -441,13 +433,11 @@ export class BleNitro {
         return;
       }
 
-      const dataAsArrayBuffer = byteArrayToArrayBuffer(data);
-
       BleNitroNative.writeCharacteristic(
         deviceId,
         BleNitro.normalizeGattUUID(serviceId),
         BleNitro.normalizeGattUUID(characteristicId),
-        dataAsArrayBuffer,
+        data,
         withResponse,
         (success: boolean, error: string) => {
           if (success) {
@@ -486,7 +476,7 @@ export class BleNitro {
       BleNitro.normalizeGattUUID(serviceId),
       BleNitro.normalizeGattUUID(characteristicId),
       (charId: string, data: ArrayBuffer) => {
-        callback(charId, arrayBufferToByteArray(data));
+        callback(charId, data);
       },
       (success, error) => {
         _success = success;

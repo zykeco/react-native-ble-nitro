@@ -8,6 +8,7 @@ jest.mock('../specs/NativeBleNitro', () => ({
     connect: jest.fn(),
     disconnect: jest.fn(),
     isConnected: jest.fn(),
+    requestMTU: jest.fn(),
     discoverServices: jest.fn(),
     getServices: jest.fn(),
     getCharacteristics: jest.fn(),
@@ -15,12 +16,27 @@ jest.mock('../specs/NativeBleNitro', () => ({
     writeCharacteristic: jest.fn(),
     subscribeToCharacteristic: jest.fn(),
     unsubscribeFromCharacteristic: jest.fn(),
-    isBluetoothEnabled: jest.fn(),
+    getConnectedDevices: jest.fn(),
     requestBluetoothEnable: jest.fn(),
     state: jest.fn(),
     subscribeToStateChange: jest.fn(),
+    unsubscribeFromStateChange: jest.fn(),
+    openSettings: jest.fn(),
   },
-  BLEState: { PoweredOn: 5, PoweredOff: 4 },
+  BLEState: { 
+    Unknown: 0,
+    Resetting: 1,
+    Unsupported: 2,
+    Unauthorized: 3,
+    PoweredOff: 4,
+    PoweredOn: 5
+  },
+  AndroidScanMode: {
+    LowLatency: 0,
+    Balanced: 1,
+    LowPower: 2,
+    Opportunistic: 3
+  },
 }));
 
 import { ble as BleNitro } from '../index';
@@ -46,15 +62,23 @@ describe('BleNitro', () => {
         serviceUUIDs: ['test'],
         rssiThreshold: -100,
         allowDuplicates: false,
+        androidScanMode: 1, // AndroidScanMode.Balanced (default)
       },
       expect.any(Function)
     );
   });
 
-  test('stopScan calls native and resolves', () => {
-    mockNative.stopScan.mockImplementation(() => {
-      // stopScan is void, no callback needed
+  test('stopScan calls native and resolves', async () => {
+    // First start a scan to set _isScanning to true
+    mockNative.startScan.mockImplementation((filter, callback) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+      // Just start scanning
     });
+    
+    const scanCallback = jest.fn();
+    await BleNitro.startScan({ serviceUUIDs: ['test'] }, scanCallback);
+
+    // Now stop the scan
+    mockNative.stopScan.mockImplementation(() => true);
 
     BleNitro.stopScan();
     
@@ -91,8 +115,9 @@ describe('BleNitro', () => {
   });
 
   test('writeCharacteristic requires connected device', async () => {
+    const data = new Uint8Array([1, 2, 3]);
     await expect(
-      BleNitro.writeCharacteristic('device', 'service', 'char', [1, 2, 3])
+      BleNitro.writeCharacteristic('device', 'service', 'char', data.buffer)
     ).rejects.toThrow('Device not connected');
   });
 
@@ -104,8 +129,9 @@ describe('BleNitro', () => {
     await BleNitro.connect('device');
 
     // Then read
-    mockNative.readCharacteristic.mockImplementation((_device: string, _service: string, _char: string, callback: (success: boolean, data: number[], error: string) => void) => {
-      callback(true, [85], ''); // Battery level 85%
+    mockNative.readCharacteristic.mockImplementation((_device: string, _service: string, _char: string, callback: (success: boolean, data: ArrayBuffer, error: string) => void) => {
+      const testData = new Uint8Array([85]);
+      callback(true, testData.buffer, ''); // Battery level 85%
     });
 
     const result = await BleNitro.readCharacteristic('device', 'service', 'char');
@@ -117,7 +143,11 @@ describe('BleNitro', () => {
       '0000char-0000-1000-8000-00805f9b34fb',  // 'char' padded to 8 chars
       expect.any(Function)
     );
-    expect(result).toEqual([85]);
+    
+    // Result should be ArrayBuffer
+    expect(result).toBeInstanceOf(ArrayBuffer);
+    const resultArray = new Uint8Array(result);
+    expect(resultArray[0]).toBe(85);
   });
 
   test('disconnect calls native', async () => {
@@ -146,17 +176,22 @@ describe('BleNitro', () => {
     await BleNitro.connect('device');
 
     // Mock subscription
-    mockNative.subscribeToCharacteristic.mockImplementation((_device: string, _service: string, _char: string, updateCallback: (charId: string, data: number[]) => void, resultCallback: (success: boolean, error: string) => void) => {
+    mockNative.subscribeToCharacteristic.mockImplementation((_device: string, _service: string, _char: string, updateCallback: (charId: string, data: ArrayBuffer) => void, resultCallback: (success: boolean, error: string) => void) => {
       resultCallback(true, '');
       // Simulate notification
-      updateCallback('char-id', [1, 2, 3]);
+      const testData = new Uint8Array([1, 2, 3]);
+      updateCallback('char-id', testData.buffer);
     });
 
     const notificationCallback = jest.fn();
-    BleNitro.subscribeToCharacteristic('device', 'service', 'char', notificationCallback);
+    const subscription = BleNitro.subscribeToCharacteristic('device', 'service', 'char', notificationCallback);
     
     expect(mockNative.subscribeToCharacteristic).toHaveBeenCalled();
-    expect(notificationCallback).toHaveBeenCalledWith('char-id', [1, 2, 3]);
+    expect(notificationCallback).toHaveBeenCalledWith('char-id', expect.any(ArrayBuffer));
+    
+    // Verify subscription object
+    expect(subscription).toHaveProperty('remove');
+    expect(typeof subscription.remove).toBe('function');
   });
 
   test('connect with disconnect event callback', async () => {
