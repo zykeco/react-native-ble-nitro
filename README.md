@@ -394,16 +394,6 @@ Built on [Nitro Modules](https://nitro.margelo.com/) for:
 - **Android**: ✅ Complete Kotlin implementation using Android BLE APIs  
 - **Shared C++**: Common logic and type definitions via Nitro Modules
 
-### Compatibility Layer
-
-While maintaining 100% API compatibility, some internal changes were needed for Nitro:
-
-- **Enum Values**: Numeric instead of string (transparent to users)
-- **Service Data**: Structured format internally (automatic conversion)
-- **Type Safety**: Enhanced compile-time checks
-
-See [API_DIFFERENCES.md](./API_DIFFERENCES.md) for technical details.
-
 ## ⚙️ Configuration
 
 ### Expo Plugin Options
