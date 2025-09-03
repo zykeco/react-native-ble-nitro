@@ -7,6 +7,7 @@ import {
   AndroidScanMode as NativeAndroidScanMode,
 } from './specs/NativeBleNitro';
 
+export type ByteArray = number[];
 
 export interface ScanFilter {
   serviceUUIDs?: string[];
@@ -17,7 +18,7 @@ export interface ScanFilter {
 
 export interface ManufacturerDataEntry {
   id: string;
-  data: ArrayBuffer;
+  data: ByteArray;
 }
 
 export interface ManufacturerData {
@@ -34,6 +35,7 @@ export interface BLEDevice {
 }
 
 export type ScanCallback = (device: BLEDevice) => void;
+export type RestoreStateCallback = (connectedPeripherals: BLEDevice[]) => void;
 export type ConnectionCallback = (
   success: boolean,
   deviceId: string,
@@ -47,7 +49,7 @@ export type DisconnectEventCallback = (
 export type OperationCallback = (success: boolean, error: string) => void;
 export type CharacteristicUpdateCallback = (
   characteristicId: string,
-  data: ArrayBuffer
+  data: ByteArray
 ) => void;
 
 export type Subscription = {
@@ -69,6 +71,11 @@ export enum AndroidScanMode {
   LowPower = 'LowPower',
   Opportunistic = 'Opportunistic',
 }
+
+export type BleNitroOptions = {
+  restoreStateIdentifier?: string;
+  onRestoreState?: RestoreStateCallback;
+};
 
 function mapNativeBLEStateToBLEState(nativeState: NativeBLEState): BLEState {
   const map = {
@@ -92,6 +99,26 @@ function mapAndroidScanModeToNativeAndroidScanMode(scanMode: AndroidScanMode): N
   return map[scanMode];
 }
 
+function convertNativeBleDeviceToBleDevice(nativeBleDevice: NativeBLEDevice): BLEDevice {
+  return {
+    ...nativeBleDevice,
+    serviceUUIDs: BleNitro.normalizeGattUUIDs(nativeBleDevice.serviceUUIDs),
+    manufacturerData: {
+      companyIdentifiers: nativeBleDevice.manufacturerData.companyIdentifiers.map(entry => ({
+        id: entry.id,
+        data: arrayBufferToByteArray(entry.data)
+      }))
+    }
+  }
+}
+
+function arrayBufferToByteArray(buffer: ArrayBuffer): ByteArray {
+  return Array.from(new Uint8Array(buffer));
+}
+
+function byteArrayToArrayBuffer(data: ByteArray): ArrayBuffer {
+  return new Uint8Array(data).buffer;
+}
 
 let _instance: BleNitro;
 
@@ -162,16 +189,7 @@ export class BleNitro {
       }
       device = device!; // eslint-disable-line @typescript-eslint/no-non-null-assertion
       // Convert manufacturer data to Uint8Arrays
-      const convertedDevice: BLEDevice = {
-        ...device,
-        serviceUUIDs: BleNitro.normalizeGattUUIDs(device.serviceUUIDs),
-        manufacturerData: {
-          companyIdentifiers: device.manufacturerData.companyIdentifiers.map(entry => ({
-            id: entry.id,
-            data: entry.data
-          }))
-        }
-      };
+      const convertedDevice: BLEDevice = convertNativeBleDeviceToBleDevice(device);
       callback(convertedDevice);
     };
 
@@ -210,16 +228,7 @@ export class BleNitro {
   public getConnectedDevices(services?: string[]): BLEDevice[] {
     const devices = BleNitroNative.getConnectedDevices(services || []);
     // Normalize service UUIDs - manufacturer data already comes as ArrayBuffers
-    return devices.map(device => ({
-      ...device,
-      serviceUUIDs: BleNitro.normalizeGattUUIDs(device.serviceUUIDs),
-      manufacturerData: {
-        companyIdentifiers: device.manufacturerData.companyIdentifiers.map(entry => ({
-          id: entry.id,
-          data: entry.data
-        }))
-      }
-    }));
+    return devices.map(device => convertNativeBleDeviceToBleDevice(device));
   }
 
   /**
@@ -387,7 +396,7 @@ export class BleNitro {
     deviceId: string,
     serviceId: string,
     characteristicId: string
-  ): Promise<ArrayBuffer> {
+  ): Promise<ByteArray> {
     return new Promise((resolve, reject) => {
       // Check if connected first
       if (!this._connectedDevices[deviceId]) {
@@ -401,7 +410,7 @@ export class BleNitro {
         BleNitro.normalizeGattUUID(characteristicId),
         (success: boolean, data: ArrayBuffer, error: string) => {
           if (success) {
-            resolve(data);
+            resolve(arrayBufferToByteArray(data));
           } else {
             reject(new Error(error));
           }
@@ -415,7 +424,7 @@ export class BleNitro {
    * @param deviceId ID of the device
    * @param serviceId ID of the service
    * @param characteristicId ID of the characteristic
-   * @param data Data to write as ArrayBuffer
+   * @param data Data to write as ByteArray (number[])
    * @param withResponse Whether to wait for response
    * @returns Promise resolving when write is complete
    */
@@ -423,7 +432,7 @@ export class BleNitro {
     deviceId: string,
     serviceId: string,
     characteristicId: string,
-    data: ArrayBuffer,
+    data: ByteArray,
     withResponse: boolean = true
   ): Promise<boolean> {
     return new Promise((resolve, reject) => {
@@ -437,7 +446,7 @@ export class BleNitro {
         deviceId,
         BleNitro.normalizeGattUUID(serviceId),
         BleNitro.normalizeGattUUID(characteristicId),
-        data,
+        byteArrayToArrayBuffer(data),
         withResponse,
         (success: boolean, error: string) => {
           if (success) {
@@ -476,7 +485,7 @@ export class BleNitro {
       BleNitro.normalizeGattUUID(serviceId),
       BleNitro.normalizeGattUUID(characteristicId),
       (charId: string, data: ArrayBuffer) => {
-        callback(charId, data);
+        callback(charId, arrayBufferToByteArray(data));
       },
       (success, error) => {
         _success = success;

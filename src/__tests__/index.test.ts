@@ -115,9 +115,9 @@ describe('BleNitro', () => {
   });
 
   test('writeCharacteristic requires connected device', async () => {
-    const data = new Uint8Array([1, 2, 3]);
+    const data = [1, 2, 3];
     await expect(
-      BleNitro.writeCharacteristic('device', 'service', 'char', data.buffer)
+      BleNitro.writeCharacteristic('device', 'service', 'char',data)
     ).rejects.toThrow('Device not connected');
   });
 
@@ -144,10 +144,9 @@ describe('BleNitro', () => {
       expect.any(Function)
     );
     
-    // Result should be ArrayBuffer
-    expect(result).toBeInstanceOf(ArrayBuffer);
-    const resultArray = new Uint8Array(result);
-    expect(resultArray[0]).toBe(85);
+    // Result should be number array (ByteArray)
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toEqual([85]);
   });
 
   test('disconnect calls native', async () => {
@@ -187,7 +186,7 @@ describe('BleNitro', () => {
     const subscription = BleNitro.subscribeToCharacteristic('device', 'service', 'char', notificationCallback);
     
     expect(mockNative.subscribeToCharacteristic).toHaveBeenCalled();
-    expect(notificationCallback).toHaveBeenCalledWith('char-id', expect.any(ArrayBuffer));
+    expect(notificationCallback).toHaveBeenCalledWith('char-id', [1, 2, 3]);
     
     // Verify subscription object
     expect(subscription).toHaveProperty('remove');
