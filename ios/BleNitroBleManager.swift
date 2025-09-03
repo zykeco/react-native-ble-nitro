@@ -55,14 +55,18 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     }
     
     // MARK: - Scanning Operations
-    public func startScan(filter: ScanFilter, callback: @escaping (BLEDevice) -> Void) throws {
+    public func startScan(filter: ScanFilter, callback: @escaping (BLEDevice?, String?) -> Void) throws {
         guard centralManager.state == .poweredOn else {
             throw NSError(domain: "BleNitroError", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "Bluetooth is not powered on"
             ])
         }
-        
-        self.scanCallback = callback
+
+        // remove error option from callback
+        func scanCallbackWrapper(device: BLEDevice?) {
+            callback(device, nil)
+        }
+        self.scanCallback = scanCallbackWrapper
         self.currentScanFilter = filter
         self.isCurrentlyScanning = true
         

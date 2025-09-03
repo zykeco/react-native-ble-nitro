@@ -11,7 +11,7 @@ Originally developed for [Zyke Band](https://zykeband.com?utm_source=github&utm_
 
 - 🚀 **High Performance**: Built on Nitro Modules with JSI for zero-overhead native communication
 - 📱 **iOS Support**: Complete iOS implementation with Swift and Core Bluetooth
-- 🤖 **Android Support**: Currently in development - iOS fully functional
+- 🤖 **Android Support**: Complete Android implementation with Kotlin and Android BLE APIs
 - 🎯 **Type-Safe**: Full TypeScript support with comprehensive type definitions
 - 🔧 **Expo Ready**: Built-in Expo config plugin for easy setup
 - 🏗️ **New Architecture**: Full support for React Native's new architecture
@@ -66,12 +66,10 @@ npx pod-install # iOS only
 
 ## 📖 Usage
 
-> **📱 Platform Support**: Currently iOS only. Android implementation is in development.
-
 ### Basic Setup
 
 ```typescript
-import { BleNitro, BLEState, type BLEDevice } from 'react-native-ble-nitro';
+import { BleNitro, BLEState, AndroidScanMode, type BLEDevice } from 'react-native-ble-nitro';
 
 // Get the singleton instance
 const ble = BleNitro.instance();
@@ -111,9 +109,13 @@ await ble.openSettings();
 ble.startScan({
   serviceUUIDs: ['180d'], // Optional: filter by service UUIDs
   rssiThreshold: -80,     // Optional: minimum signal strength
-  allowDuplicates: false  // Optional: allow duplicate discoveries
+  allowDuplicates: false, // Optional: allow duplicate discoveries
+  androidScanMode: AndroidScanMode.Balanced // Optional: Android scan mode
 }, (device) => {
-  console.log('Found device:', device.name, device.id);
+  console.log('Discovered device:', device);
+}, (error) => {
+  // only called on Android
+  console.error('Scan error:', error);
 });
 
 // Stop scanning
@@ -152,6 +154,11 @@ const isConnected = ble.isConnected(deviceId);
 // MTU negotiation (Android only, as iOS manages MTU automatically)
 // iOS returns current MTU size
 const mtu = await ble.requestMTU(deviceId, 256); // Request MTU size
+
+// MTU negotiation (Android only)
+// iOS manages MTU automatically, this method returns current MTU size
+const newMTU = ble.requestMTU(deviceId, 247);
+console.log('MTU set to:', newMTU);
 ```
 
 #### 🔧 Service Discovery
@@ -181,11 +188,12 @@ const characteristics2 = ble.getCharacteristics(deviceId, '0000180d-0000-1000-80
 ```typescript
 // Read a characteristic value
 const data = await ble.readCharacteristic(deviceId, serviceUUID, characteristicUUID);
-// Returns: number[] - array of bytes
+// Returns: ArrayBuffer - binary data
 
 // Example: Reading battery level
 const batteryData = await ble.readCharacteristic(deviceId, '180f', '2a19');
-const batteryLevel = batteryData[0]; // First byte is battery percentage
+const batteryArray = new Uint8Array(batteryData);
+const batteryLevel = batteryArray[0]; // First byte is battery percentage
 console.log('Battery level:', batteryLevel + '%');
 ```
 
@@ -193,11 +201,12 @@ console.log('Battery level:', batteryLevel + '%');
 
 ```typescript
 // Write to a characteristic with response
+const data = new Uint8Array([0x01, 0x02, 0x03]);
 await ble.writeCharacteristic(
   deviceId, 
   serviceUUID, 
   characteristicUUID, 
-  [0x01, 0x02, 0x03], // Data as byte array
+  data.buffer, // Data as ArrayBuffer
   true // withResponse = true (default)
 );
 
@@ -206,7 +215,7 @@ await ble.writeCharacteristic(
   deviceId, 
   serviceUUID, 
   characteristicUUID, 
-  [0x01, 0x02, 0x03],
+  data.buffer,
   false // withResponse = false
 );
 ```
@@ -249,7 +258,8 @@ const subscription = ble.subscribeToCharacteristic(
   HEART_RATE_SERVICE,
   HEART_RATE_MEASUREMENT,
   (_, data) => {
-    const heartRate = data[1]; // Second byte contains BPM
+    const dataArray = new Uint8Array(data);
+    const heartRate = dataArray[1]; // Second byte contains BPM
     console.log('Heart rate:', heartRate, 'BPM');
   }
 );
@@ -269,7 +279,8 @@ const batteryData = await ble.readCharacteristic(
   BATTERY_SERVICE,
   BATTERY_LEVEL_CHARACTERISTIC
 );
-const batteryPercentage = batteryData[0];
+const batteryArray = new Uint8Array(batteryData);
+const batteryPercentage = batteryArray[0];
 console.log('Battery:', batteryPercentage + '%');
 ```
 
@@ -280,12 +291,12 @@ const CUSTOM_SERVICE = 'your-custom-service-uuid';
 const COMMAND_CHARACTERISTIC = 'your-command-characteristic-uuid';
 
 // Send a custom command
-const enableLedCommand = [0x01, 0x1f, 0x01]; // Your protocol
+const enableLedCommand = new Uint8Array([0x01, 0x1f, 0x01]); // Your protocol
 await ble.writeCharacteristic(
   deviceId,
   CUSTOM_SERVICE,
   COMMAND_CHARACTERISTIC,
-  enableLedCommand
+  enableLedCommand.buffer
 );
 ```
 
@@ -335,6 +346,7 @@ interface ScanFilter {
   serviceUUIDs?: string[];
   rssiThreshold?: number;
   allowDuplicates?: boolean;
+  androidScanMode?: AndroidScanMode;
 }
 
 interface Subscription {
@@ -350,9 +362,19 @@ enum BLEState {
   PoweredOn = 'PoweredOn'
 }
 
+enum AndroidScanMode {
+  LowLatency = 'LowLatency',        // Highest power, fastest discovery
+  Balanced = 'Balanced',            // Balanced power/discovery (default)
+  LowPower = 'LowPower',            // Lowest power, slower discovery  
+  Opportunistic = 'Opportunistic',  // Only when other apps are scanning
+}
+
 // Callback types
+type StateChangeCallback = (state: BLEState) => void;
+type ScanEventCallback = (device: BLEDevice) => void;
+type ScanErrorCallback = (error: string) => void; // Android only
 type DisconnectEventCallback = (deviceId: string, interrupted: boolean, error: string) => void;
-type CharacteristicUpdateCallback = (characteristicId: string, data: number[]) => void;
+type CharacteristicUpdateCallback = (characteristicId: string, data: ArrayBuffer) => void;
 ```
 
 ## 🏗️ Architecture
@@ -369,7 +391,7 @@ Built on [Nitro Modules](https://nitro.margelo.com/) for:
 ### Platform Implementation
 
 - **iOS**: ✅ Complete Swift implementation using Core Bluetooth
-- **Android**: 🚧 Kotlin implementation in development using Android BLE APIs  
+- **Android**: ✅ Complete Kotlin implementation using Android BLE APIs  
 - **Shared C++**: Common logic and type definitions via Nitro Modules
 
 ### Compatibility Layer
@@ -392,6 +414,7 @@ interface BleNitroPluginProps {
   neverForLocation?: boolean;        // Assert no location derivation [Android 12+]
   modes?: ('peripheral' | 'central')[]; // iOS background modes
   bluetoothAlwaysPermission?: string | false; // iOS permission message
+  androidAdvertisingEnabled?: boolean; // Android Peripheral mode (advertising)
 }
 ```
 
@@ -409,7 +432,7 @@ Adds these to `Info.plist`:
 
 ### Android Permissions
 
-Automatically adds required permissions:
+Automatically adds required permissions and also handling neverForLocation and advertise mode.
 
 ```xml
 <!-- Basic Bluetooth -->
@@ -417,7 +440,6 @@ Automatically adds required permissions:
 <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
 
 <!-- Location (required for BLE scanning) -->
-<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
 <!-- Android 12+ -->
@@ -427,6 +449,47 @@ Automatically adds required permissions:
 
 <!-- BLE Hardware Feature -->
 <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+```
+
+## Android Flow with Permission Handling
+
+```ts
+import { PermissionsAndroid, Platform } from 'react-native';
+
+const requestPermissionsAndroid = async () => {
+  if (Platform.OS !== 'android') {
+    return true
+  }
+  if (Platform.OS === 'android' && PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION) {
+    const apiLevel = parseInt(Platform.Version.toString(), 10);
+    if (apiLevel < 31) {
+      const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+      return (
+        result === PermissionsAndroid.RESULTS.GRANTED
+      );
+    }
+    if (PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN && PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT) {
+      const result = await PermissionsAndroid.requestMultiple([
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+      ])
+
+      return (
+        result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED &&
+        result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
+        result['android.permission.ACCESS_FINE_LOCATION'] === PermissionsAndroid.RESULTS.GRANTED
+      )
+    }
+
+    logMessage('Request permissions failed');
+    throw new Error('Request permissions failed');
+  }
+};
+
+const hasPermissions = await requestPermissionsAndroid();
+
+// Then start scanning or other operations
 ```
 
 ## 🔧 Development

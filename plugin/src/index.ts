@@ -16,6 +16,8 @@ import withBleNitro, { withBleNitroAndroid, withBleNitroIOS, type BleNitroPlugin
  *         {
  *           "isBackgroundEnabled": true,
  *           "modes": ["peripheral", "central"],
+ *           "neverForLocation": true,
+ *           "androidAdvertisingEnabled": true,
  *           "bluetoothAlwaysPermission": "Allow $(PRODUCT_NAME) to connect to bluetooth devices"
  *         }
  *       ]

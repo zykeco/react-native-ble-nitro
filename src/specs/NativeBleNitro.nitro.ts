@@ -31,13 +31,21 @@ export interface BLEDevice {
   isConnectable: boolean;
 }
 
+export enum AndroidScanMode {
+  LowLatency = 0,
+  Balanced = 1,
+  LowPower = 2,
+  Opportunistic = 3,
+}
+
 export interface ScanFilter {
   serviceUUIDs: string[];
   rssiThreshold: number;
   allowDuplicates: boolean;
+  androidScanMode: AndroidScanMode;
 }
 
-export type ScanCallback = (device: BLEDevice) => void;
+export type ScanCallback = (device: BLEDevice | null, error: string | null) => void;
 export type DevicesCallback = (devices: BLEDevice[]) => void;
 export type ConnectionCallback = (success: boolean, deviceId: string, error: string) => void;
 export type DisconnectionEventCallback = (deviceId: string, interrupted: boolean, error: string) => void;

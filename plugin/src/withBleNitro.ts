@@ -19,7 +19,6 @@ export interface BleNitroPluginProps {
    * physical location from Bluetooth scan results. The location permission 
    * will still be required on older Android devices.
    * @default false
-   * @warning This parameter is experimental and BLE might not work. Test before releasing.
    */
   neverForLocation?: boolean;
 
@@ -34,23 +33,33 @@ export interface BleNitroPluginProps {
    * @default "Allow $(PRODUCT_NAME) to connect to bluetooth devices"
    */
   bluetoothAlwaysPermission?: string | false;
+
+  /**
+   * Android advertising permission message. Set to false to skip adding the permission.
+   * @default "Allow $(PRODUCT_NAME) to advertise bluetooth devices"
+   */
+  androidAdvertisingEnabled?: boolean;
 }
 
 const BLUETOOTH_PERMISSIONS = [
   'android.permission.BLUETOOTH',
   'android.permission.BLUETOOTH_ADMIN',
-  'android.permission.ACCESS_COARSE_LOCATION',
+  // 'android.permission.ACCESS_COARSE_LOCATION',
   'android.permission.ACCESS_FINE_LOCATION',
 ];
 
 const BLUETOOTH_PERMISSIONS_API_31 = [
   'android.permission.BLUETOOTH_SCAN',
-  'android.permission.BLUETOOTH_ADVERTISE',
+  // 'android.permission.BLUETOOTH_ADVERTISE',
   'android.permission.BLUETOOTH_CONNECT',
 ];
 
+const BLUETOOTH_ADVERTISE_API_31 = [
+  'android.permission.BLUETOOTH_ADVERTISE',
+];
+
 export const withBleNitroAndroid: ConfigPlugin<BleNitroPluginProps> = (config, props = {}) => {
-  const { isBackgroundEnabled = false, neverForLocation = false } = props;
+  const { isBackgroundEnabled = false, neverForLocation = false, androidAdvertisingEnabled = false } = props;
 
   return withAndroidManifest(config, (config) => {
     const androidManifest = config.modResults;
@@ -59,6 +68,7 @@ export const withBleNitroAndroid: ConfigPlugin<BleNitroPluginProps> = (config, p
     AndroidConfig.Permissions.ensurePermissions(config.modResults, [
       ...BLUETOOTH_PERMISSIONS,
       ...BLUETOOTH_PERMISSIONS_API_31,
+      ...(androidAdvertisingEnabled ? BLUETOOTH_ADVERTISE_API_31 : []),
     ]);
 
     // Add uses-feature for BLE
@@ -81,19 +91,29 @@ export const withBleNitroAndroid: ConfigPlugin<BleNitroPluginProps> = (config, p
     }
 
     // Handle location permission settings for Android 12+
+    const permissions = androidManifest.manifest['uses-permission'] || [];
     if (neverForLocation) {
-      // Add neverForLocation attribute to location permissions for Android 12+
-      const permissions = androidManifest.manifest['uses-permission'] || [];
       
       permissions.forEach((permission: any) => {
         if (
-          permission.$?.['android:name'] === 'android.permission.ACCESS_FINE_LOCATION' ||
-          permission.$?.['android:name'] === 'android.permission.ACCESS_COARSE_LOCATION'
+          permission.$?.['android:name'] === 'android.permission.ACCESS_FINE_LOCATION'
         ) {
+          permission.$['android:maxSdkVersion'] = '30';
+        }
+
+        if (permission.$?.['android:name'] === 'android.permission.BLUETOOTH_SCAN') {
           permission.$['android:usesPermissionFlags'] = 'neverForLocation';
         }
       });
     }
+
+    permissions.forEach((permission: any) => {
+      if (permission.$?.['android:name'] === 'android.permission.BLUETOOTH' ||
+        permission.$?.['android:name'] === 'android.permission.BLUETOOTH_ADMIN'
+      ) {
+        permission.$['android:maxSdkVersion'] = '30';
+      }
+    });
 
     return config;
   });
