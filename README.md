@@ -513,6 +513,14 @@ npm test
 npm run lint
 ```
 
+### Node not found with Android Studio on Mac
+
+Start Android Studio from terminal to inherit correct PATH:
+
+```sh
+open -a Android\ Studio.app
+```
+
 ### Project Structure
 
 ```
