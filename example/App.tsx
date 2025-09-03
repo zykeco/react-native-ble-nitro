@@ -1,8 +1,9 @@
 import { StatusBar } from 'expo-status-bar';
-import { AppState, PermissionsAndroid, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { AppState, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { createBle } from './src/bluetooth';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { BLEDevice, Subscription } from 'react-native-ble-nitro';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const HEART_RATE_SERVICE_UUID = '0000180d-0000-1000-8000-00805f9b34fb'.toLowerCase();
 const HEART_RATE_MEASUREMENT_UUID = '00002A37-0000-1000-8000-00805f9b34fb'.toLowerCase();
@@ -59,6 +60,9 @@ export default function App() {
   }, []);
 
   const requestBluetoothEnable = async () => {
+    if (Platform.OS !== 'android') {
+      return true;
+    }
     const success = await ble.instance.requestBluetoothEnable().catch((e) => {
       console.error(e);
       if (e instanceof Error && e.message === 'Not supported') {
@@ -77,10 +81,11 @@ export default function App() {
     if (Platform.OS === 'android' && PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION) {
       const apiLevel = parseInt(Platform.Version.toString(), 10);
       logMessage(`API level: ${apiLevel}`);
-
       if (apiLevel < 31) {
-        const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION)
-        return result === PermissionsAndroid.RESULTS.GRANTED
+        const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+        return (
+          result === PermissionsAndroid.RESULTS.GRANTED
+        );
       }
       if (PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN && PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT) {
         const result = await PermissionsAndroid.requestMultiple([
@@ -115,12 +120,17 @@ export default function App() {
         prev[index] = device;
         return prev;
       });
+    }, (error) => {
+      console.error(error);
+      logMessage(`Scan error: ${error}`);
     });
+    logMessage('Scan started');
     setIsScanning(true);
   };
 
   const stopScan = () => {
     ble.instance.stopScan();
+    logMessage('Scan stopped');
     setIsScanning(false);
   };
 
@@ -146,17 +156,18 @@ export default function App() {
         } else {
           logMessage('Disconnected intentionally');
         }
+        await unlistenToBleNotifications();
+        await unlistenToHrNotifications();
         setConnectedDeviceId(null);
         setConnectedDeviceServiceUUIDs([]);
         setConnectedDeviceCharacteristics({});
-        await unlistenToBleNotifications();
-        await unlistenToHrNotifications();
       });
       setConnectedDeviceId(connectedId);
       logMessage(`2 Connected to ${connectedId}`);
       await ble.instance.discoverServices(connectedId);
       logMessage(`3 Discovered services for ${connectedId}`);
       const services = await ble.instance.getServices(connectedId);
+      logMessage(`4 Got ${services.length} services for ${connectedId}`);
       setConnectedDeviceServiceUUIDs(services);
       resetScannedDevices();
       services.map(async (s) => {
@@ -176,8 +187,6 @@ export default function App() {
     if (!connectedDeviceId) {
       return;
     }
-    await unlistenToBleNotifications();
-    await unlistenToHrNotifications();
     await ble.instance.disconnect(connectedDeviceId);
   }
 
@@ -190,6 +199,7 @@ export default function App() {
       BATTERY_SERVICE_UUID,
       BATTERY_CHARACTERISTIC_LEVEL_UUID,
     );
+    console.log(batteryLevel);
     logMessage('Battery Level', batteryLevel[0]);
   };
 
@@ -333,148 +343,153 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
-      <ScrollView style={{ padding: 16 }}>
-        <Text>Ble Enabled: {isEnabled.toString()}</Text>
-        {!isEnabled && (
-          <>
-            <TouchableOpacity style={styles.button} onPress={requestBluetoothEnable}>
-              <Text>Enable Bluetooth</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.button} onPress={() => ble.instance.openSettings().catch((e) => { console.error(e) })}>
-              <Text>Open Bluetooth Settings</Text>
-            </TouchableOpacity>
-          </>
-        )}
-        {isEnabled && (
-          <>
-            {!connectedDeviceId && (
+    <>
+    <StatusBar style="auto" />
+      <ScrollView
+        style={[styles.container, { padding: 16 }]}
+      >
+        <SafeAreaView>
+            <Text>Ble Enabled: {isEnabled.toString()}</Text>
+            {!isEnabled && (
               <>
-              <Text>Scan Service UUIDs:</Text>
-              <TextInput style={{ borderWidth: 1, padding: 3 }} value={scanServiceUUIDs} onChangeText={setScanServiceUUIDs}></TextInput>
-              {isScanning ? (
-                <TouchableOpacity style={styles.button} onPress={stopScan}>
-                  <Text>Stop Scan</Text>
+                <TouchableOpacity style={styles.button} onPress={requestBluetoothEnable}>
+                  <Text>Enable Bluetooth</Text>
                 </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={styles.button} onPress={startScan}>
-                  <Text>Start Scan</Text>
+                <TouchableOpacity style={styles.button} onPress={() => ble.instance.openSettings().catch((e) => { console.error(e) })}>
+                  <Text>Open Bluetooth Settings</Text>
                 </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.button} onPress={getConnectedDevices}>
-                <Text>Get connected devices</Text>
-              </TouchableOpacity>
-              {scanResults.length > 0 && (
-                <View style={{ borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: 16 }}>
-                  <Text>Scanned Devices:</Text>
-                  <TouchableOpacity style={styles.button} onPress={resetScannedDevices}>
-                    <Text>Reset Scanned Devices</Text>
-                  </TouchableOpacity>
-                  {scanResults.map((device) => (
-                    <TouchableOpacity key={device.id} style={{ padding: 8, backgroundColor: '#f4f4f4ff', borderRadius: 4 }} onPress={() => connectDevice(device.id)}>
-                      <Text>ID: {device.id}</Text>
-                      <Text>Name: {device.name}</Text>
-                      <Text>RSSI: {device.rssi}</Text>
-                      <Text>Manufacturer Data: {JSON.stringify(device.manufacturerData)}</Text>
-                      <Text>Service UUIDs: {JSON.stringify(device.serviceUUIDs)}</Text>
-                      <Text>Is Connectable: {device.isConnectable.toString()}</Text>
-                      <Text>Tap to connect</Text>
+              </>
+            )}
+            {isEnabled && (
+              <>
+                {!connectedDeviceId && (
+                  <>
+                  <Text>Scan Service UUIDs:</Text>
+                  <TextInput style={{ borderWidth: 1, padding: 3 }} value={scanServiceUUIDs} onChangeText={setScanServiceUUIDs}></TextInput>
+                  {isScanning ? (
+                    <TouchableOpacity style={styles.button} onPress={stopScan}>
+                      <Text>Stop Scan</Text>
                     </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-              </>
-            )}
-            {connectedDeviceId && (
-              <>
-                <Text style={{ marginTop: 16 }}>Connected Device:</Text>
-                <View style={{ padding: 8, marginTop: 8, backgroundColor: '#f4f4f4ff', borderRadius: 4, }}>
-                  <Text>ID: {connectedDeviceId}</Text>
-                  <Text style={{ borderTopWidth: 1 }}>Services:</Text>
-                  {connectedDeviceServiceUUIDs.map((s, i) => (
-                    <View key={s} style={{ borderBottomWidth: i === connectedDeviceServiceUUIDs.length - 1 ? 0 : 1 }}>
-                      <Text>Service: {s}</Text>
-                      <Text>Characteristics:</Text>
-                      {connectedDeviceCharacteristics[s]?.map((c) => (
-                        <Text key={c}>{c}</Text>
-                      ))}
-                      {s === BATTERY_SERVICE_UUID && connectedDeviceCharacteristics[s]?.includes(BATTERY_CHARACTERISTIC_LEVEL_UUID) && (
-                        <TouchableOpacity style={styles.button} onPress={readBatteryLevel}>
-                          <Text>Read Battery Level</Text>
+                  ) : (
+                    <TouchableOpacity style={styles.button} onPress={startScan}>
+                      <Text>Start Scan</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity style={styles.button} onPress={getConnectedDevices}>
+                    <Text>Get connected devices</Text>
+                  </TouchableOpacity>
+                  {scanResults.length > 0 && (
+                    <View style={{ borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: 16 }}>
+                      <Text>Scanned Devices:</Text>
+                      <TouchableOpacity style={styles.button} onPress={resetScannedDevices}>
+                        <Text>Reset Scanned Devices</Text>
+                      </TouchableOpacity>
+                      {scanResults.map((device) => (
+                        <TouchableOpacity key={device.id} style={{ padding: 8, backgroundColor: '#f4f4f4ff', borderRadius: 4 }} onPress={() => connectDevice(device.id)}>
+                          <Text>ID: {device.id}</Text>
+                          <Text>Name: {device.name}</Text>
+                          <Text>RSSI: {device.rssi}</Text>
+                          <Text>Manufacturer Data: {JSON.stringify(device.manufacturerData)}</Text>
+                          <Text>Service UUIDs: {JSON.stringify(device.serviceUUIDs)}</Text>
+                          <Text>Is Connectable: {device.isConnectable.toString()}</Text>
+                          <Text>Tap to connect</Text>
                         </TouchableOpacity>
-                      )}
-                      {s === CUSTOM_SERVICE_UUID && connectedDeviceCharacteristics[s]?.includes(TX_CHAR_UUID) && (
-                        <>
-                          <TouchableOpacity style={styles.button} onPress={() => sendCommand('enable-led')}>
-                            <Text>Enable LED</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity style={styles.button} onPress={() => sendCommand('disable-led')}>
-                            <Text>Disable LED</Text>
-                          </TouchableOpacity>
-                        </>
-                      )}
-                      {s === CUSTOM_SERVICE_UUID && connectedDeviceCharacteristics[s]?.includes(RX_CHAR_UUID) && (
-                        <>
-                          {!bleNotificationSubscription && (
-                            <TouchableOpacity style={styles.button} onPress={listenToBleNotifications}>
-                              <Text>Listen to BLE Notifications</Text>
-                            </TouchableOpacity>
-                          )}
-                          {bleNotificationSubscription && (
-                            <TouchableOpacity style={styles.button} onPress={unlistenToBleNotifications}>
-                              <Text>Stop Listening to BLE Notifications</Text>
-                            </TouchableOpacity>
-                          )}
-                        </>
-                      )}
-                      {s === HEART_RATE_SERVICE_UUID && connectedDeviceCharacteristics[s]?.includes(HEART_RATE_MEASUREMENT_UUID) && (
-                        <>
-                          {!hrNotificationSubscription && (
-                            <TouchableOpacity style={styles.button} onPress={listenToHrNotifications}>
-                              <Text>Listen to HR Notifications</Text>
-                            </TouchableOpacity>
-                          )}
-                          {hrNotificationSubscription && (
-                            <TouchableOpacity style={styles.button} onPress={unlistenToHrNotifications}>
-                              <Text>Stop Listening to HR Notifications</Text>
-                            </TouchableOpacity>
-                          )}
-                          <TouchableOpacity style={styles.button} onPress={readBodySensorLocation}>
-                            <Text>Read Body Sensor Location</Text>
-                          </TouchableOpacity>
-                        </>
-                      )}
+                      ))}
                     </View>
-                  ))}
-                  <TouchableOpacity style={styles.button} onPress={requestMtu}>
-                    <Text>Request MTU</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.button} onPress={disconnectDevice}>
-                    <Text>Disconnect</Text>
-                  </TouchableOpacity>
-                </View>
+                  )}
+                  </>
+                )}
+                {connectedDeviceId && (
+                  <>
+                    <Text style={{ marginTop: 16 }}>Connected Device:</Text>
+                    <View style={{ padding: 8, marginTop: 8, backgroundColor: '#f4f4f4ff', borderRadius: 4, }}>
+                      <Text>ID: {connectedDeviceId}</Text>
+                      <Text style={{ borderTopWidth: 1 }}>Services:</Text>
+                      {connectedDeviceServiceUUIDs.map((s, i) => (
+                        <View key={s} style={{ borderBottomWidth: i === connectedDeviceServiceUUIDs.length - 1 ? 0 : 1 }}>
+                          <Text>Service: {s}</Text>
+                          <Text>Characteristics:</Text>
+                          {connectedDeviceCharacteristics[s]?.map((c) => (
+                            <Text key={c}>{c}</Text>
+                          ))}
+                          {s === BATTERY_SERVICE_UUID && connectedDeviceCharacteristics[s]?.includes(BATTERY_CHARACTERISTIC_LEVEL_UUID) && (
+                            <TouchableOpacity style={styles.button} onPress={readBatteryLevel}>
+                              <Text>Read Battery Level</Text>
+                            </TouchableOpacity>
+                          )}
+                          {s === CUSTOM_SERVICE_UUID && connectedDeviceCharacteristics[s]?.includes(TX_CHAR_UUID) && (
+                            <>
+                              <TouchableOpacity style={styles.button} onPress={() => sendCommand('enable-led')}>
+                                <Text>Enable LED</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity style={styles.button} onPress={() => sendCommand('disable-led')}>
+                                <Text>Disable LED</Text>
+                              </TouchableOpacity>
+                            </>
+                          )}
+                          {s === CUSTOM_SERVICE_UUID && connectedDeviceCharacteristics[s]?.includes(RX_CHAR_UUID) && (
+                            <>
+                              {!bleNotificationSubscription && (
+                                <TouchableOpacity style={styles.button} onPress={listenToBleNotifications}>
+                                  <Text>Listen to BLE Notifications</Text>
+                                </TouchableOpacity>
+                              )}
+                              {bleNotificationSubscription && (
+                                <TouchableOpacity style={styles.button} onPress={unlistenToBleNotifications}>
+                                  <Text>Stop Listening to BLE Notifications</Text>
+                                </TouchableOpacity>
+                              )}
+                            </>
+                          )}
+                          {s === HEART_RATE_SERVICE_UUID && connectedDeviceCharacteristics[s]?.includes(HEART_RATE_MEASUREMENT_UUID) && (
+                            <>
+                              {!hrNotificationSubscription && (
+                                <TouchableOpacity style={styles.button} onPress={listenToHrNotifications}>
+                                  <Text>Listen to HR Notifications</Text>
+                                </TouchableOpacity>
+                              )}
+                              {hrNotificationSubscription && (
+                                <TouchableOpacity style={styles.button} onPress={unlistenToHrNotifications}>
+                                  <Text>Stop Listening to HR Notifications</Text>
+                                </TouchableOpacity>
+                              )}
+                              <TouchableOpacity style={styles.button} onPress={readBodySensorLocation}>
+                                <Text>Read Body Sensor Location</Text>
+                              </TouchableOpacity>
+                            </>
+                          )}
+                        </View>
+                      ))}
+                      <TouchableOpacity style={styles.button} onPress={requestMtu}>
+                        <Text>Request MTU</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.button} onPress={disconnectDevice}>
+                        <Text>Disconnect</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
               </>
             )}
-          </>
-        )}
-        {(logs.length > 0) && (
-          <View>
-            <Text style={{ marginTop: 16 }}>Logs:</Text>
-            <ScrollView style={{ marginTop: 8, backgroundColor: '#f4f4f4ff', borderRadius: 4, padding: 8, maxHeight: 200 }}>
-              {logs.sort((a, b) => {
-                return b.toLocaleLowerCase().localeCompare(a.toLocaleLowerCase());
-              }).map((log, i) => (
-                <Text key={i} style={{ fontSize: 11, fontFamily: 'monospace', color: '#444', borderBottomWidth: i === logs.length - 1 ? 0 : 1, padding: 6 }}>{log}</Text>
-              ))}
-            </ScrollView>
-            <TouchableOpacity style={styles.button} onPress={clearLogs}>
-              <Text>Clear Logs</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+            {(logs.length > 0) && (
+              <View>
+                <Text style={{ marginTop: 16 }}>Logs:</Text>
+                <ScrollView style={{ marginTop: 8, backgroundColor: '#f4f4f4ff', borderRadius: 4, padding: 8, maxHeight: 200 }}>
+                  {logs.sort((a, b) => {
+                    return b.toLocaleLowerCase().localeCompare(a.toLocaleLowerCase());
+                  }).map((log, i) => (
+                    <Text key={i} style={{ fontSize: 11, fontFamily: 'monospace', color: '#444', borderBottomWidth: i === logs.length - 1 ? 0 : 1, padding: 6 }}>{log}</Text>
+                  ))}
+                </ScrollView>
+                <TouchableOpacity style={styles.button} onPress={clearLogs}>
+                  <Text>Clear Logs</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            <View style={{ height: 32 }} />
+        </SafeAreaView>
       </ScrollView>
-    </SafeAreaView>
+    </>
   );
 }
 
@@ -482,7 +497,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    paddingHorizontal: 16,
+    // paddingHorizontal: 0,
   },
   button: {
     padding: 8,

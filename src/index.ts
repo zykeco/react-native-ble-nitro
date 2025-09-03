@@ -3,6 +3,8 @@ import {
   ScanFilter as NativeScanFilter,
   BLEDevice as NativeBLEDevice,
   BLEState as NativeBLEState,
+  ScanCallback as NativeScanCallback,
+  AndroidScanMode as NativeAndroidScanMode,
 } from './specs/NativeBleNitro';
 
 export type ByteArray = number[];
@@ -11,6 +13,7 @@ export interface ScanFilter {
   serviceUUIDs?: string[];
   rssiThreshold?: number;
   allowDuplicates?: boolean;
+  androidScanMode?: AndroidScanMode;
 }
 
 export interface ManufacturerDataEntry {
@@ -61,6 +64,13 @@ export enum BLEState {
   PoweredOn = 'PoweredOn',
 };
 
+export enum AndroidScanMode {
+  LowLatency = 'LowLatency',
+  Balanced = 'Balanced',
+  LowPower = 'LowPower',
+  Opportunistic = 'Opportunistic',
+}
+
 function mapNativeBLEStateToBLEState(nativeState: NativeBLEState): BLEState {
   const map = {
     0: BLEState.Unknown,
@@ -71,6 +81,16 @@ function mapNativeBLEStateToBLEState(nativeState: NativeBLEState): BLEState {
     5: BLEState.PoweredOn,
   };
   return map[nativeState];
+}
+
+function mapAndroidScanModeToNativeAndroidScanMode(scanMode: AndroidScanMode): NativeAndroidScanMode {
+  const map = {
+    LowLatency: NativeAndroidScanMode.LowLatency,
+    Balanced: NativeAndroidScanMode.Balanced,
+    LowPower: NativeAndroidScanMode.LowPower,
+    Opportunistic: NativeAndroidScanMode.Opportunistic,
+  }
+  return map[scanMode];
 }
 
 function arrayBufferToByteArray(buffer: ArrayBuffer): ByteArray {
@@ -126,7 +146,8 @@ export class BleNitro {
    */
   public startScan(
     filter: ScanFilter = {},
-    callback: ScanCallback
+    callback: ScanCallback,
+    onError?: (error: string) => void,
   ): void {
     if (this._isScanning) {
       return;
@@ -137,10 +158,17 @@ export class BleNitro {
       serviceUUIDs: filter.serviceUUIDs || [],
       rssiThreshold: filter.rssiThreshold ?? -100,
       allowDuplicates: filter.allowDuplicates ?? false,
+      androidScanMode: mapAndroidScanModeToNativeAndroidScanMode(filter.androidScanMode ?? AndroidScanMode.Balanced),
     };
 
     // Create callback wrapper
-    const scanCallback = (device: NativeBLEDevice) => {
+    const scanCallback: NativeScanCallback = (device: NativeBLEDevice | null, error: string | null) => {
+      if (error && !device) {
+        this._isScanning = false;
+        onError?.(error);
+        return;
+      }
+      device = device!; // eslint-disable-line @typescript-eslint/no-non-null-assertion
       // Convert manufacturer data to Uint8Arrays
       const convertedDevice: BLEDevice = {
         ...device,
@@ -170,6 +198,7 @@ export class BleNitro {
     }
 
     BleNitroNative.stopScan();
+    this._isScanning = false;
   }
 
   /**
