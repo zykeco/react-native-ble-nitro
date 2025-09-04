@@ -21,7 +21,7 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     
     // Operation callbacks - using CBUUID as key for reliable UUID matching
     var readCallbacks: [CBUUID: (Bool, ArrayBuffer, String) -> Void] = [:]
-    var writeCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
+    var writeCallbacks: [CBUUID: (Bool, ArrayBuffer, String) -> Void] = [:]
     var subscriptionCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
     var unsubscriptionCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
     
@@ -133,9 +133,13 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         // Handle write callback using CBUUID
         if let writeCallback = writeCallbacks[characteristicUUID] {
             if let error = error {
-                writeCallback(false, error.localizedDescription)
+                let emptyBuffer = try! ArrayBuffer.copy(data: Data())
+                writeCallback(false, emptyBuffer, error.localizedDescription)
             } else {
-                writeCallback(true, "")
+                // For write operations, get the response data from characteristic value if available
+                let responseData = characteristic.value ?? Data()
+                let responseBuffer = try! ArrayBuffer.copy(data: responseData)
+                writeCallback(true, responseBuffer, "")
             }
             writeCallbacks.removeValue(forKey: characteristicUUID)
         }

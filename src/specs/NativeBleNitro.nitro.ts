@@ -55,6 +55,7 @@ export type StateCallback = (state: BLEState) => void;
 export type BooleanCallback = (result: boolean) => void;
 export type StringArrayCallback = (result: string[]) => void;
 export type ReadCharacteristicCallback = (success: boolean, data: BLEValue, error: string) => void;
+export type WriteCharacteristicCallback = (success: boolean, responseData: BLEValue, error: string) => void;
 export type RestoreCallback = (restoredPeripherals: BLEDevice[]) => void;
 
 export type OperationResult = {
@@ -91,7 +92,7 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
 
   // Characteristic operations
   readCharacteristic(deviceId: string, serviceId: string, characteristicId: string, callback: ReadCharacteristicCallback): void;
-  writeCharacteristic(deviceId: string, serviceId: string, characteristicId: string, data: BLEValue, withResponse: boolean, callback: OperationCallback): void;
+  writeCharacteristic(deviceId: string, serviceId: string, characteristicId: string, data: BLEValue, withResponse: boolean, callback: WriteCharacteristicCallback): void;
   subscribeToCharacteristic(deviceId: string, serviceId: string, characteristicId: string, updateCallback: CharacteristicCallback, resultCallback: OperationCallback): void;
   unsubscribeFromCharacteristic(deviceId: string, serviceId: string, characteristicId: string, callback: OperationCallback): void;
 

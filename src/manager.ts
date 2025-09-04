@@ -441,7 +441,7 @@ export class BleNitroManager {
    * @param characteristicId ID of the characteristic
    * @param data Data to write as ByteArray (number[])
    * @param withResponse Whether to wait for response
-   * @returns Promise resolving when write is complete
+   * @returns Promise resolving with response data (empty ByteArray when withResponse=false)
    */
   public writeCharacteristic(
     deviceId: string,
@@ -449,7 +449,7 @@ export class BleNitroManager {
     characteristicId: string,
     data: ByteArray,
     withResponse: boolean = true
-  ): Promise<boolean> {
+  ): Promise<ByteArray> {
     return new Promise((resolve, reject) => {
       // Check if connected first
       if (!this._connectedDevices[deviceId]) {
@@ -463,9 +463,11 @@ export class BleNitroManager {
         BleNitroManager.normalizeGattUUID(characteristicId),
         byteArrayToArrayBuffer(data),
         withResponse,
-        (success: boolean, error: string) => {
+        (success: boolean, responseData: ArrayBuffer, error: string) => {
           if (success) {
-            resolve(true);
+            // Convert ArrayBuffer response to ByteArray
+            const responseByteArray = arrayBufferToByteArray(responseData);
+            resolve(responseByteArray);
           } else {
             reject(new Error(error));
           }

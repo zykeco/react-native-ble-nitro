@@ -330,10 +330,11 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleN
         characteristicId: String,
         data: ArrayBuffer,
         withResponse: Bool,
-        callback: @escaping (Bool, String) -> Void
+        callback: @escaping (Bool, ArrayBuffer, String) -> Void
     ) throws {
         guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
-            callback(false, "Characteristic not found")
+            let emptyBuffer = try! ArrayBuffer.copy(data: Data())
+            callback(false, emptyBuffer, "Characteristic not found")
             return
         }
         
@@ -343,7 +344,8 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleN
         if withResponse {
             // Ensure peripheral delegate exists for response handling
             guard let delegate = peripheralDelegates[deviceId] else {
-                callback(false, "Device not properly connected or delegate not found")
+                let emptyBuffer = try! ArrayBuffer.copy(data: Data())
+                callback(false, emptyBuffer, "Device not properly connected or delegate not found")
                 return
             }
             delegate.writeCallbacks[characteristic.uuid] = callback
@@ -352,7 +354,8 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleN
         characteristic.service?.peripheral?.writeValue(writeData, for: characteristic, type: writeType)
         
         if !withResponse {
-            callback(true, "")
+            let emptyBuffer = try! ArrayBuffer.copy(data: Data())
+            callback(true, emptyBuffer, "")
         }
     }
     

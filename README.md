@@ -201,22 +201,24 @@ console.log('Battery level:', batteryLevel + '%');
 ```typescript
 // Write to a characteristic with response
 const data = [0x01, 0x02, 0x03];
-await ble.writeCharacteristic(
+const result = await ble.writeCharacteristic(
   deviceId, 
   serviceUUID, 
   characteristicUUID, 
   data, // Data as ArrayBuffer
   true // withResponse = true (default)
 );
+// result is array of integers (may be empty depending on characteristic)
 
 // Write without response (faster, no confirmation)
-await ble.writeCharacteristic(
+const emptyResult = await ble.writeCharacteristic(
   deviceId, 
   serviceUUID, 
   characteristicUUID, 
   data,
   false // withResponse = false
 );
+// emptyResult is always empty array
 ```
 
 #### 📡 Characteristic Notifications

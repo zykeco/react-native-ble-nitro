@@ -50,6 +50,9 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     private val connectedDevices = ConcurrentHashMap<String, BluetoothGatt>()
     private val deviceCallbacks = ConcurrentHashMap<String, DeviceCallbacks>()
     
+    // Write callback storage for proper response handling (key: deviceId:characteristicId)
+    private val writeCallbacks = ConcurrentHashMap<String, (Boolean, ArrayBuffer, String) -> Unit>()
+    
     // Helper class to store device callbacks
     private data class DeviceCallbacks(
         var connectCallback: ((success: Boolean, deviceId: String, error: String) -> Unit)? = null,
@@ -280,7 +283,23 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             
             override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
                 // Handle characteristic write result
-                // This will be handled by pending operations
+                val deviceId = gatt.device.address
+                val characteristicId = characteristic.uuid.toString()
+                val callbackKey = "$deviceId:$characteristicId"
+                
+                writeCallbacks.remove(callbackKey)?.let { callback ->
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        // Get response data from characteristic value (may be null/empty for acknowledgments)
+                        val responseData = characteristic.value ?: byteArrayOf()
+                        val directBuffer = java.nio.ByteBuffer.allocateDirect(responseData.size)
+                        directBuffer.put(responseData)
+                        directBuffer.flip()
+                        val arrayBuffer = ArrayBuffer.wrap(directBuffer)
+                        callback(true, arrayBuffer, "")
+                    } else {
+                        callback(false, ArrayBuffer.allocate(0), "Write failed with status: $status")
+                    }
+                }
             }
             
             override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
@@ -646,24 +665,24 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         characteristicId: String,
         data: ArrayBuffer,
         withResponse: Boolean,
-        callback: (success: Boolean, error: String) -> Unit
+        callback: (success: Boolean, responseData: ArrayBuffer, error: String) -> Unit
     ) {
         try {
             val gatt = connectedDevices[deviceId]
             if (gatt == null) {
-                callback(false, "Device not connected")
+                callback(false, ArrayBuffer.allocate(0), "Device not connected")
                 return
             }
             
             val service = gatt.getService(UUID.fromString(serviceId))
             if (service == null) {
-                callback(false, "Service not found")
+                callback(false, ArrayBuffer.allocate(0), "Service not found")
                 return
             }
             
             val characteristic = service.getCharacteristic(UUID.fromString(characteristicId))
             if (characteristic == null) {
-                callback(false, "Characteristic not found")
+                callback(false, ArrayBuffer.allocate(0), "Characteristic not found")
                 return
             }
             
@@ -679,11 +698,27 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
             }
             
+            if (withResponse) {
+                // Store callback for when response comes back
+                val callbackKey = "$deviceId:$characteristicId"
+                writeCallbacks[callbackKey] = callback
+            }
+            
             val success = gatt.writeCharacteristic(characteristic)
-            callback(success, if (success) "" else "Write operation failed")
+            
+            if (!withResponse) {
+                // For no response, call callback immediately
+                callback(success, ArrayBuffer.allocate(0), if (success) "" else "Write operation failed")
+            } else if (!success) {
+                // If write initiation failed, remove callback and notify
+                val callbackKey = "$deviceId:$characteristicId"
+                writeCallbacks.remove(callbackKey)
+                callback(false, ArrayBuffer.allocate(0), "Write operation failed to initiate")
+            }
+            // If withResponse and success, wait for onCharacteristicWrite
             
         } catch (e: Exception) {
-            callback(false, "Write error: ${e.message}")
+            callback(false, ArrayBuffer.allocate(0), "Write error: ${e.message}")
         }
     }
 

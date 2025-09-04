@@ -121,8 +121,64 @@ describe('BleNitro', () => {
   test('writeCharacteristic requires connected device', async () => {
     const data = [1, 2, 3];
     await expect(
-      BleManager.writeCharacteristic('device', 'service', 'char',data)
+      BleManager.writeCharacteristic('device', 'service', 'char', data)
     ).rejects.toThrow('Device not connected');
+  });
+
+  test('writeCharacteristic without response returns empty array', async () => {
+    // First connect
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
+      callback(true, id, '');
+    });
+    await BleManager.connect('device-write');
+
+    // Mock writeCharacteristic with new signature (success, responseData, error)
+    mockNative.writeCharacteristic.mockImplementation((_deviceId: string, _serviceId: string, _charId: string, _data: ArrayBuffer, withResponse: boolean, callback: (success: boolean, responseData: ArrayBuffer, error: string) => void) => {
+      // For withResponse=false, return empty ArrayBuffer
+      const emptyBuffer = new ArrayBuffer(0);
+      callback(true, emptyBuffer, '');
+    });
+
+    const data = [1, 2, 3];
+    const result = await BleManager.writeCharacteristic('device-write', 'service', 'char', data, false);
+    
+    expect(mockNative.writeCharacteristic).toHaveBeenCalledWith(
+      'device-write',
+      '0service-0000-1000-8000-00805f9b34fb',
+      '0000char-0000-1000-8000-00805f9b34fb',
+      expect.any(ArrayBuffer),
+      false,
+      expect.any(Function)
+    );
+    expect(result).toEqual([]); // Empty ByteArray for no response
+  });
+
+  test('writeCharacteristic with response returns response data', async () => {
+    // First connect
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
+      callback(true, id, '');
+    });
+    await BleManager.connect('device-write-resp');
+
+    // Mock writeCharacteristic to return response data
+    mockNative.writeCharacteristic.mockImplementation((_deviceId: string, _serviceId: string, _charId: string, _data: ArrayBuffer, withResponse: boolean, callback: (success: boolean, responseData: ArrayBuffer, error: string) => void) => {
+      // For withResponse=true, return some response data
+      const responseData = new Uint8Array([0xAA, 0xBB, 0xCC]).buffer;
+      callback(true, responseData, '');
+    });
+
+    const data = [1, 2, 3];
+    const result = await BleManager.writeCharacteristic('device-write-resp', 'service', 'char', data, true);
+    
+    expect(mockNative.writeCharacteristic).toHaveBeenCalledWith(
+      'device-write-resp',
+      '0service-0000-1000-8000-00805f9b34fb',
+      '0000char-0000-1000-8000-00805f9b34fb',
+      expect.any(ArrayBuffer),
+      true,
+      expect.any(Function)
+    );
+    expect(result).toEqual([0xAA, 0xBB, 0xCC]); // Response data as ByteArray
   });
 
   test('readCharacteristic works after connection', async () => {

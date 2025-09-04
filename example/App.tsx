@@ -243,15 +243,15 @@ export default function App() {
         console.log('Will enable led with command:', 0x0e, enableLedCommand);
         enableLedCommand = ble.buildCommand(0x0e, ...enableLedCommand);
         console.log('Will enable led with command:', 0x0e, enableLedCommand);
-        await ble.instance.writeCharacteristic(connectedDeviceId, CUSTOM_SERVICE_UUID, TX_CHAR_UUID, enableLedCommand);
-        logMessage('Led enabled');
+        const result = await ble.instance.writeCharacteristic(connectedDeviceId, CUSTOM_SERVICE_UUID, TX_CHAR_UUID, enableLedCommand);
+        logMessage('Led enabled', JSON.stringify(result));
         break;
       case 'disable-led':
         let disableLedCommand = [0x00, 0x1f, 0x00];
         disableLedCommand = ble.buildCommand(0x0e, ...disableLedCommand);
         console.log('Will disable led with command:', 0x0e, disableLedCommand);
-        await ble.instance.writeCharacteristic(connectedDeviceId, CUSTOM_SERVICE_UUID, TX_CHAR_UUID, disableLedCommand);
-        logMessage('Led disabled');
+        const disResult = await ble.instance.writeCharacteristic(connectedDeviceId, CUSTOM_SERVICE_UUID, TX_CHAR_UUID, disableLedCommand);
+        logMessage('Led disabled', JSON.stringify(disResult));
         break;
       default:
         break;
