@@ -192,8 +192,7 @@ const data = await ble.readCharacteristic(deviceId, serviceUUID, characteristicU
 
 // Example: Reading battery level
 const batteryData = await ble.readCharacteristic(deviceId, '180f', '2a19');
-const batteryArray = new Uint8Array(batteryData);
-const batteryLevel = batteryArray[0]; // First byte is battery percentage
+const batteryLevel = batteryData[0]; // First byte is battery percentage
 console.log('Battery level:', batteryLevel + '%');
 ```
 
@@ -201,12 +200,12 @@ console.log('Battery level:', batteryLevel + '%');
 
 ```typescript
 // Write to a characteristic with response
-const data = new Uint8Array([0x01, 0x02, 0x03]);
+const data = [0x01, 0x02, 0x03];
 await ble.writeCharacteristic(
   deviceId, 
   serviceUUID, 
   characteristicUUID, 
-  data.buffer, // Data as ArrayBuffer
+  data, // Data as ArrayBuffer
   true // withResponse = true (default)
 );
 
@@ -215,7 +214,7 @@ await ble.writeCharacteristic(
   deviceId, 
   serviceUUID, 
   characteristicUUID, 
-  data.buffer,
+  data,
   false // withResponse = false
 );
 ```
@@ -258,8 +257,7 @@ const subscription = ble.subscribeToCharacteristic(
   HEART_RATE_SERVICE,
   HEART_RATE_MEASUREMENT,
   (_, data) => {
-    const dataArray = new Uint8Array(data);
-    const heartRate = dataArray[1]; // Second byte contains BPM
+    const heartRate = data[1]; // Second byte contains BPM
     console.log('Heart rate:', heartRate, 'BPM');
   }
 );
@@ -279,8 +277,7 @@ const batteryData = await ble.readCharacteristic(
   BATTERY_SERVICE,
   BATTERY_LEVEL_CHARACTERISTIC
 );
-const batteryArray = new Uint8Array(batteryData);
-const batteryPercentage = batteryArray[0];
+const batteryPercentage = batteryData[0];
 console.log('Battery:', batteryPercentage + '%');
 ```
 
@@ -291,12 +288,12 @@ const CUSTOM_SERVICE = 'your-custom-service-uuid';
 const COMMAND_CHARACTERISTIC = 'your-command-characteristic-uuid';
 
 // Send a custom command
-const enableLedCommand = new Uint8Array([0x01, 0x1f, 0x01]); // Your protocol
+const enableLedCommand = [0x01, 0x1f, 0x01]; // Your protocol
 await ble.writeCharacteristic(
   deviceId,
   CUSTOM_SERVICE,
   COMMAND_CHARACTERISTIC,
-  enableLedCommand.buffer
+  enableLedCommand
 );
 ```
 
