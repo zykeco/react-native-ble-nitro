@@ -15,6 +15,14 @@
       "types": "./lib/index.d.ts",
       "default": "./src/index.ts"
     },
+    "./manager": {
+      "react-native": "./src/manager.ts",
+      "typescript": "./src/manager.ts",
+      "import": "./lib/manager.js",
+      "require": "./lib/commonjs/manager.js",
+      "types": "./lib/manager.d.ts",
+      "default": "./src/manager.ts"
+    },
     "./plugin": {
       "import": "./plugin/build/index.js",
       "require": "./plugin/build/index.js",

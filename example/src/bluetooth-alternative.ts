@@ -1,9 +1,10 @@
-import { BleNitro, BLEState } from 'react-native-ble-nitro';
+import { BleNitroManager, BLEState } from 'react-native-ble-nitro/manager';
 
-const ble = BleNitro.instance();
-ble.onRestoreState((peripherals) => {
-  console.log('Restore State', peripherals);
-})
+const ble = new BleNitroManager({
+  onRestoreState: (peripherals) => {
+    console.log('Restore State', peripherals);
+  }
+});
 
 export function createBle(opts: {
   onEnabledChange?: (enabled: boolean) => void;

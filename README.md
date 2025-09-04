@@ -330,6 +330,30 @@ const fullUUIDs = BleNitro.normalizeGattUUIDs(['180d', '180f']);
 // Returns: ['0000180d-0000-1000-8000-00805f9b34fb', '0000180f-0000-1000-8000-00805f9b34fb']
 ```
 
+### iOS Restore State
+
+There are two ways to handle state restoration on iOS:
+
+```typescript
+// Enable state restoration in BleNitro singleton
+const ble = BleNitro.instance();
+ble.onRestoreState((peripherals) => {
+  console.log('Restored peripherals:', peripherals);
+});
+```
+
+```typescript
+// Or use BleNitroManager with options
+// This way you have to assure that only one instance of BleNitroManager is created and that you always use this instance.
+import { BleNitroManager, BLEDevice } from 'react-native-ble-nitro/manager';
+
+const customBleInstance = new BleNitroManager({
+  onRestoreState: (peripherals: BLEDevice[]) => {
+    console.log('Restored peripherals:', peripherals);
+  }
+});
+```
+
 ### TypeScript Types
 
 ```typescript

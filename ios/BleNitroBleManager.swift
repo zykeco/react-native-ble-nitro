@@ -5,7 +5,13 @@ import NitroModules
  * iOS implementation of the BLE Nitro Manager
  * Implements the HybridNativeBleNitroSpec protocol for Core Bluetooth operations
  */
-public class BleNitroBleManager: HybridNativeBleNitroSpec {
+public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleNitroSpec_protocol {
+    
+    // MARK: - Constants
+    private static let restoreStateIdentifier = "react-native-ble-nitro"
+    
+    // MARK: - Static Properties
+    private static var globalRestoreStateCallback: (([BLEDevice]) -> Void)?
     
     // MARK: - Private Properties
     private var centralManager: CBCentralManager!
@@ -18,6 +24,9 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     private var isCurrentlyScanning = false
     private var currentScanFilter: ScanFilter?
     private var centralManagerDelegate: BleCentralManagerDelegate!
+    
+    // MARK: - Restore State Properties
+    private var restoreStateCallback: (([BLEDevice]) -> Void)?
 
     // MARK: - Initialization
     public override init() {
@@ -27,8 +36,15 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     
     private func setupCentralManager() {
         centralManagerDelegate = BleCentralManagerDelegate(manager: self)
-        centralManager = CBCentralManager(delegate: centralManagerDelegate, queue: DispatchQueue.main)
+        
+        // Create options dictionary for central manager with fixed restore identifier
+        let options: [String: Any] = [
+            CBCentralManagerOptionRestoreIdentifierKey: BleNitroBleManager.restoreStateIdentifier
+        ]
+        
+        centralManager = CBCentralManager(delegate: centralManagerDelegate, queue: DispatchQueue.main, options: options)
     }
+    
     
     // MARK: - State Management
     public func state() throws -> BLEState {
@@ -52,6 +68,15 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     public func unsubscribeFromStateChange() throws -> OperationResult {
         self.stateChangeCallback = nil
         return OperationResult(success: true, error: nil)
+    }
+    
+    // MARK: - Restore State Management
+    public func setRestoreStateCallback(callback: @escaping ([BLEDevice]) -> Void) throws {
+        print("🔄 setRestoreStateCallback called")
+        // Set both static and instance variables
+        BleNitroBleManager.globalRestoreStateCallback = callback
+        self.restoreStateCallback = callback
+        print("🔄 Callback set successfully")
     }
     
     // MARK: - Scanning Operations
@@ -435,6 +460,59 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         stateChangeCallback?(state)
     }
     
+    internal func handleStateRestoration(_ dict: [String: Any]) {
+        // Restore connected peripherals
+        if let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] {
+            var restoredDevices: [BLEDevice] = []
+            
+            for peripheral in peripherals {
+                let deviceId = peripheral.identifier.uuidString
+                
+                // Add to our tracking dictionaries
+                discoveredPeripherals[deviceId] = peripheral
+                if peripheral.state == .connected {
+                    connectedPeripherals[deviceId] = peripheral
+                }
+                
+                // Create BLE device for the callback
+                let device = BLEDevice(
+                    id: deviceId,
+                    name: peripheral.name ?? "Restored Device",
+                    rssi: 0, // RSSI not available for restored peripherals
+                    manufacturerData: ManufacturerData(companyIdentifiers: []),
+                    serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
+                    isConnectable: true
+                )
+                restoredDevices.append(device)
+                
+                // Set up delegate for restored peripheral
+                let delegate = BlePeripheralDelegate(deviceId: deviceId, manager: self)
+                peripheralDelegates[deviceId] = delegate
+                peripheral.delegate = delegate
+            }
+            
+            // Call the restore state callback if set (prioritize static over instance)
+            let callback = BleNitroBleManager.globalRestoreStateCallback ?? restoreStateCallback
+            callback?(restoredDevices)
+        }
+        
+        // Restore scanning state if it was active
+        if let scanServiceUUIDs = dict[CBCentralManagerRestoredStateScanServicesKey] as? [CBUUID] {
+            // The system was scanning when the app was terminated
+            // We can choose to resume scanning or let the app decide
+            isCurrentlyScanning = true
+            
+            // Note: We don't automatically resume scanning here to give the app control
+            // The app can check isScanning() and decide whether to resume or stop
+        }
+        
+        // Restore scan options if available
+        if let scanOptions = dict[CBCentralManagerRestoredStateScanOptionsKey] as? [String: Any] {
+            // Store scan options for potential resume
+            // This information can be used if the app decides to resume scanning
+        }
+    }
+    
     internal func handleDeviceDiscovered(
         _ peripheral: CBPeripheral,
         advertisementData: [String: Any],
@@ -612,5 +690,9 @@ class BleCentralManagerDelegate: NSObject, CBCentralManagerDelegate {
     
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         manager?.handleDeviceDisconnected(peripheral, error: error)
+    }
+    
+    func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        manager?.handleStateRestoration(dict)
     }
 }

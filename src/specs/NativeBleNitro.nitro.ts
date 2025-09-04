@@ -55,6 +55,7 @@ export type StateCallback = (state: BLEState) => void;
 export type BooleanCallback = (result: boolean) => void;
 export type StringArrayCallback = (result: string[]) => void;
 export type ReadCharacteristicCallback = (success: boolean, data: BLEValue, error: string) => void;
+export type RestoreCallback = (restoredPeripherals: BLEDevice[]) => void;
 
 export type OperationResult = {
   success: boolean;
@@ -66,6 +67,9 @@ export type OperationResult = {
  * Defines the interface between TypeScript and native implementations
  */
 export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
+  // ios only
+  setRestoreStateCallback(callback: RestoreCallback): void;
+
   // Scanning operations
   startScan(filter: ScanFilter, callback: ScanCallback): void;
   stopScan(): boolean;

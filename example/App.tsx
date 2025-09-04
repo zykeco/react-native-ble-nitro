@@ -2,7 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { AppState, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { createBle } from './src/bluetooth';
 import { useLayoutEffect, useRef, useState } from 'react';
-import { BLEDevice, Subscription } from 'react-native-ble-nitro';
+import type { BLEDevice, Subscription } from 'react-native-ble-nitro';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const HEART_RATE_SERVICE_UUID = '0000180d-0000-1000-8000-00805f9b34fb'.toLowerCase();
@@ -38,11 +38,7 @@ export default function App() {
   useLayoutEffect(() => {
     requestPermissionsAndroid().then(async () => {
       await requestBluetoothEnable();
-      ble.mount().then(() => {
-        console.log('BLE Module mounted');
-      }).catch((e) => {
-        console.error(e);
-      });
+      ble.mount();
     });
     const unsub = AppState.addEventListener('change', async (state) => {
       if (state === 'active' && isEnabled === false) {

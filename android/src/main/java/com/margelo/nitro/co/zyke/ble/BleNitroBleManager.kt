@@ -37,6 +37,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var stateCallback: ((state: BLEState) -> Unit)? = null
     private var bluetoothStateReceiver: BroadcastReceiver? = null
+    private var restoreStateCallback: ((devices: List<BLEDevice>) -> Unit)? = null
     
     // BLE Scanning
     private var bleScanner: BluetoothLeScanner? = null
@@ -302,6 +303,11 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 // Handle descriptor write (for enabling/disabling notifications)
             }
         }
+    }
+
+    override fun setRestoreStateCallback(callback: (restoredPeripherals: Array<BLEDevice>) -> Unit) {
+        restoreStateCallback = { devices -> callback(devices.toTypedArray()) }
+        return
     }
 
     // Scanning operations
