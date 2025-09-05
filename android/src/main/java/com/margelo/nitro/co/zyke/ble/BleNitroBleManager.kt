@@ -53,6 +53,9 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     // Write callback storage for proper response handling (key: deviceId:characteristicId)
     private val writeCallbacks = ConcurrentHashMap<String, (Boolean, ArrayBuffer, String) -> Unit>()
     
+    // RSSI callback storage (key: deviceId)
+    private val rssiCallbacks = ConcurrentHashMap<String, (Boolean, Double, String) -> Unit>()
+    
     // Helper class to store device callbacks
     private data class DeviceCallbacks(
         var connectCallback: ((success: Boolean, deviceId: String, error: String) -> Unit)? = null,
@@ -298,6 +301,18 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         callback(true, arrayBuffer, "")
                     } else {
                         callback(false, ArrayBuffer.allocate(0), "Write failed with status: $status")
+                    }
+                }
+            }
+            
+            override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
+                val deviceId = gatt.device.address
+                
+                rssiCallbacks.remove(deviceId)?.let { callback ->
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        callback(true, rssi.toDouble(), "")
+                    } else {
+                        callback(false, 0.0, "RSSI read failed with status: $status")
                     }
                 }
             }
@@ -558,6 +573,30 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             }
         } catch (e: Exception) {
             0.0
+        }
+    }
+
+    override fun readRSSI(deviceId: String, callback: (success: Boolean, rssi: Double, error: String) -> Unit) {
+        try {
+            val gatt = connectedDevices[deviceId]
+            if (gatt == null) {
+                callback(false, 0.0, "Device not connected")
+                return
+            }
+            
+            // Store callback for when RSSI is read
+            rssiCallbacks[deviceId] = callback
+            
+            // Initiate RSSI read
+            val success = gatt.readRemoteRssi()
+            if (!success) {
+                rssiCallbacks.remove(deviceId)
+                callback(false, 0.0, "Failed to initiate RSSI read")
+            }
+            
+        } catch (e: Exception) {
+            rssiCallbacks.remove(deviceId)
+            callback(false, 0.0, "RSSI read error: ${e.message}")
         }
     }
 

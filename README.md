@@ -159,6 +159,10 @@ const mtu = await ble.requestMTU(deviceId, 256); // Request MTU size
 // iOS manages MTU automatically, this method returns current MTU size
 const newMTU = ble.requestMTU(deviceId, 247);
 console.log('MTU set to:', newMTU);
+
+// Read RSSI value
+const rssi = await ble.readRSSI(deviceId);
+console.log('Current RSSI:', rssi);
 ```
 
 #### 🔧 Service Discovery

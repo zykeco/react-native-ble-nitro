@@ -247,6 +247,25 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleN
         return Double(peripheral.maximumWriteValueLength(for: .withoutResponse))
     }
     
+    public func readRSSI(deviceId: String, callback: @escaping (Bool, Double, String) -> Void) throws {
+        guard let peripheral = connectedPeripherals[deviceId] else {
+            callback(false, 0.0, "Device not connected")
+            return
+        }
+        
+        // Ensure peripheral delegate exists for RSSI response handling
+        guard let delegate = peripheralDelegates[deviceId] else {
+            callback(false, 0.0, "Device not properly connected or delegate not found")
+            return
+        }
+        
+        // Store callback for when RSSI is read
+        delegate.rssiCallback = callback
+        
+        // Initiate RSSI read
+        peripheral.readRSSI()
+    }
+    
     // MARK: - Service Discovery
     public func discoverServices(deviceId: String, callback: @escaping (Bool, String) -> Void) throws {
         guard let peripheral = connectedPeripherals[deviceId] else {

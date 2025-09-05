@@ -186,6 +186,14 @@ export default function App() {
     await ble.instance.disconnect(connectedDeviceId);
   }
 
+  const readRSSI = async () => {
+    if (!connectedDeviceId) {
+      throw new Error('No device connected');
+    }
+    const rssi = await ble.instance.readRSSI(connectedDeviceId);
+    logMessage('RSSI', rssi);
+  }
+
   const readBatteryLevel = async () => {
     if (!connectedDeviceId) {
       throw new Error('No device connected');
@@ -458,6 +466,9 @@ export default function App() {
                       ))}
                       <TouchableOpacity style={styles.button} onPress={requestMtu}>
                         <Text>Request MTU</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.button} onPress={readRSSI}>
+                        <Text>Read RSSI</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.button} onPress={disconnectDevice}>
                         <Text>Disconnect</Text>

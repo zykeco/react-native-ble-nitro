@@ -331,6 +331,32 @@ export class BleNitroManager {
   }
 
   /**
+   * Read RSSI for a connected device
+   * @param deviceId ID of the device
+   * @returns Promise resolving to RSSI value
+   */
+  public readRSSI(deviceId: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+      // Check if connected first
+      if (!this._connectedDevices[deviceId]) {
+        reject(new Error('Device not connected'));
+        return;
+      }
+
+      BleNitroNative.readRSSI(
+        deviceId,
+        (success: boolean, rssi: number, error: string) => {
+          if (success) {
+            resolve(rssi);
+          } else {
+            reject(new Error(error));
+          }
+        }
+      );
+    });
+  }
+
+  /**
    * Discover services for a connected device
    * @param deviceId ID of the device
    * @returns Promise resolving when services are discovered

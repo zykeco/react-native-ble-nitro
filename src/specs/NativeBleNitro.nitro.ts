@@ -56,6 +56,7 @@ export type BooleanCallback = (result: boolean) => void;
 export type StringArrayCallback = (result: string[]) => void;
 export type ReadCharacteristicCallback = (success: boolean, data: BLEValue, error: string) => void;
 export type WriteCharacteristicCallback = (success: boolean, responseData: BLEValue, error: string) => void;
+export type ReadRSSICallback = (success: boolean, rssi: number, error: string) => void;
 export type RestoreCallback = (restoredPeripherals: BLEDevice[]) => void;
 
 export type OperationResult = {
@@ -84,6 +85,7 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
   disconnect(deviceId: string, callback: OperationCallback): void;
   isConnected(deviceId: string): boolean;
   requestMTU(deviceId: string, mtu: number): number;
+  readRSSI(deviceId: string, callback: ReadRSSICallback): void;
 
   // Service discovery
   discoverServices(deviceId: string, callback: OperationCallback): void;

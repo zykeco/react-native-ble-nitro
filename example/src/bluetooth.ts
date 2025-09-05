@@ -1,7 +1,7 @@
 import { BleNitro, BLEState } from 'react-native-ble-nitro';
 
 const ble = BleNitro.instance();
-ble.onRestoreState((peripherals) => {
+ble.onRestoredState((peripherals) => {
   console.log('Restore State', peripherals);
 })
 

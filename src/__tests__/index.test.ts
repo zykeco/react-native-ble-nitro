@@ -10,6 +10,7 @@ jest.mock('../specs/NativeBleNitro', () => ({
     disconnect: jest.fn(),
     isConnected: jest.fn(),
     requestMTU: jest.fn(),
+    readRSSI: jest.fn(),
     discoverServices: jest.fn(),
     getServices: jest.fn(),
     getCharacteristics: jest.fn(),
@@ -275,5 +276,52 @@ describe('BleNitro', () => {
     // Wait for disconnect callback
     await new Promise(resolve => setTimeout(resolve, 30));
     expect(onDisconnect).toHaveBeenCalledWith(deviceId, true, 'Connection lost');
+  });
+
+  test('readRSSI requires connected device', async () => {
+    await expect(
+      BleManager.readRSSI('device-not-connected')
+    ).rejects.toThrow('Device not connected');
+  });
+
+  test('readRSSI works after connection', async () => {
+    // First connect
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
+      callback(true, id, '');
+    });
+    await BleManager.connect('device-rssi');
+
+    // Mock readRSSI with new signature (success, rssi, error)
+    mockNative.readRSSI.mockImplementation((_deviceId: string, callback: (success: boolean, rssi: number, error: string) => void) => {
+      callback(true, -65, ''); // Mock RSSI value of -65 dBm
+    });
+
+    const rssi = await BleManager.readRSSI('device-rssi');
+    
+    expect(mockNative.readRSSI).toHaveBeenCalledWith(
+      'device-rssi',
+      expect.any(Function)
+    );
+    expect(rssi).toBe(-65);
+  });
+
+  test('readRSSI handles failure', async () => {
+    // First connect
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
+      callback(true, id, '');
+    });
+    await BleManager.connect('device-rssi-fail');
+
+    // Mock readRSSI failure
+    mockNative.readRSSI.mockImplementation((_deviceId: string, callback: (success: boolean, rssi: number, error: string) => void) => {
+      callback(false, 0, 'RSSI read failed');
+    });
+
+    await expect(BleManager.readRSSI('device-rssi-fail')).rejects.toThrow('RSSI read failed');
+    
+    expect(mockNative.readRSSI).toHaveBeenCalledWith(
+      'device-rssi-fail',
+      expect.any(Function)
+    );
   });
 });

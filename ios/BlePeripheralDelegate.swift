@@ -19,6 +19,9 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     var serviceDiscoveryCallback: ((Bool, String) -> Void)?
     var characteristicDiscoveryCallbacks: [String: (Bool, String) -> Void] = [:]
     
+    // RSSI callback
+    var rssiCallback: ((Bool, Double, String) -> Void)?
+    
     // Operation callbacks - using CBUUID as key for reliable UUID matching
     var readCallbacks: [CBUUID: (Bool, ArrayBuffer, String) -> Void] = [:]
     var writeCallbacks: [CBUUID: (Bool, ArrayBuffer, String) -> Void] = [:]
@@ -150,6 +153,18 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         }
     }
     
+    // MARK: - CBPeripheralDelegate - RSSI
+    func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
+        if let rssiCallback = rssiCallback {
+            if let error = error {
+                rssiCallback(false, 0.0, error.localizedDescription)
+            } else {
+                rssiCallback(true, RSSI.doubleValue, "")
+            }
+            self.rssiCallback = nil // Clear callback after use
+        }
+    }
+    
     // MARK: - CBPeripheralDelegate - Notifications
     func peripheral(
         _ peripheral: CBPeripheral,
@@ -180,9 +195,6 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     }
     
     // MARK: - CBPeripheralDelegate - Connection Events
-    func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
-        // Optional: Handle RSSI updates if needed
-    }
     
     func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
         // Handle service modifications
@@ -202,6 +214,7 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         disconnectEventCallback = nil
         serviceDiscoveryCallback = nil
         characteristicDiscoveryCallbacks.removeAll()
+        rssiCallback = nil
         readCallbacks.removeAll()
         writeCallbacks.removeAll()
         writtenData.removeAll()
