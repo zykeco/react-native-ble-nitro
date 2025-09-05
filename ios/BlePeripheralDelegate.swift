@@ -25,6 +25,9 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     var subscriptionCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
     var unsubscriptionCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
     
+    // Store written data for comparison
+    var writtenData: [CBUUID: Data] = [:]
+    
     // Notification callbacks
     var notificationCallbacks: [CBUUID: (String, ArrayBuffer) -> Void] = [:]
     
@@ -136,12 +139,14 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
                 let emptyBuffer = try! ArrayBuffer.copy(data: Data())
                 writeCallback(false, emptyBuffer, error.localizedDescription)
             } else {
-                // For write operations, get the response data from characteristic value if available
+                // For write operations in iOS, didWriteValueFor indicates successful acknowledgment
+                // Check if characteristic value was updated (may contain response data or written data)
                 let responseData = characteristic.value ?? Data()
                 let responseBuffer = try! ArrayBuffer.copy(data: responseData)
                 writeCallback(true, responseBuffer, "")
             }
             writeCallbacks.removeValue(forKey: characteristicUUID)
+            writtenData.removeValue(forKey: characteristicUUID)
         }
     }
     
@@ -199,6 +204,7 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         characteristicDiscoveryCallbacks.removeAll()
         readCallbacks.removeAll()
         writeCallbacks.removeAll()
+        writtenData.removeAll()
         subscriptionCallbacks.removeAll()
         unsubscriptionCallbacks.removeAll()
         notificationCallbacks.removeAll()

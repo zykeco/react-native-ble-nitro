@@ -209,6 +209,7 @@ const result = await ble.writeCharacteristic(
   true // withResponse = true (default)
 );
 // result is array of integers (may be empty depending on characteristic)
+// Android returns the written data if withResponse=true and characteristic returns no data, on iOS it is an empty array
 
 // Write without response (faster, no confirmation)
 const emptyResult = await ble.writeCharacteristic(

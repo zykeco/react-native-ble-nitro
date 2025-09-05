@@ -349,6 +349,8 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleN
                 return
             }
             delegate.writeCallbacks[characteristic.uuid] = callback
+            // Store written data for comparison
+            delegate.writtenData[characteristic.uuid] = writeData
         }
         
         characteristic.service?.peripheral?.writeValue(writeData, for: characteristic, type: writeType)
@@ -435,6 +437,8 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleN
               let characteristic = service.characteristics?.first(where: { $0.uuid == characteristicUUID }) else {
             return nil
         }
+        
+        
         return characteristic
     }
     

@@ -73,7 +73,7 @@ export enum AndroidScanMode {
 }
 
 export type BleNitroManagerOptions = {
-  onRestoreState?: RestoreStateCallback;
+  onRestoredState?: RestoreStateCallback;
 };
 
 export function mapNativeBLEStateToBLEState(nativeState: NativeBLEState): BLEState {
@@ -123,29 +123,29 @@ export class BleNitroManager {
   private _isScanning: boolean = false;
   private _connectedDevices: { [deviceId: string]: boolean } = {};
 
-  private _restoreStateCallback: RestoreStateCallback | null = null;
+  private _restoredStateCallback: RestoreStateCallback | null = null;
   private _restoredState: BLEDevice[] | null = null;
 
   constructor(options?: BleNitroManagerOptions) {
-    this._restoreStateCallback = options?.onRestoreState || null;
+    this._restoredStateCallback = options?.onRestoredState || null;
     BleNitroNative.setRestoreStateCallback((peripherals: NativeBLEDevice[]) => this.onNativeRestoreStateCallback(peripherals));
   }
 
   private onNativeRestoreStateCallback(peripherals: NativeBLEDevice[]) {
     const bleDevices = peripherals.map((peripheral) => convertNativeBleDeviceToBleDevice(peripheral));
-    if (this._restoreStateCallback) {
-      this._restoreStateCallback(bleDevices);
+    if (this._restoredStateCallback) {
+      this._restoredStateCallback(bleDevices);
     } else {
       this._restoredState = bleDevices;
     }
   }
 
-  public onRestoreState(callback: RestoreStateCallback) {
+  public onRestoredState(callback: RestoreStateCallback) {
     if (this._restoredState) {
       callback(this._restoredState);
       this._restoredState = null;
     }
-    this._restoreStateCallback = callback;
+    this._restoredStateCallback = callback;
   }
 
   /**
