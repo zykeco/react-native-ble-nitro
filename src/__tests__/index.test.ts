@@ -97,8 +97,8 @@ describe('BleNitro', () => {
     });
 
     const result = await BleManager.connect(deviceId);
-    
-    expect(mockNative.connect).toHaveBeenCalledWith(deviceId, expect.any(Function), undefined);
+
+    expect(mockNative.connect).toHaveBeenCalledWith(deviceId, expect.any(Function), undefined, false);
     expect(result).toBe(deviceId);
   });
 
@@ -142,7 +142,7 @@ describe('BleNitro', () => {
 
     const data = [1, 2, 3];
     const result = await BleManager.writeCharacteristic('device-write', 'service', 'char', data, false);
-    
+
     expect(mockNative.writeCharacteristic).toHaveBeenCalledWith(
       'device-write',
       '0service-0000-1000-8000-00805f9b34fb',
@@ -170,7 +170,7 @@ describe('BleNitro', () => {
 
     const data = [1, 2, 3];
     const result = await BleManager.writeCharacteristic('device-write-resp', 'service', 'char', data, true);
-    
+
     expect(mockNative.writeCharacteristic).toHaveBeenCalledWith(
       'device-write-resp',
       '0service-0000-1000-8000-00805f9b34fb',
@@ -196,15 +196,15 @@ describe('BleNitro', () => {
     });
 
     const result = await BleManager.readCharacteristic('device', 'service', 'char');
-    
+
     // UUIDs should be normalized in the call
     expect(mockNative.readCharacteristic).toHaveBeenCalledWith(
-      'device', 
+      'device',
       '0service-0000-1000-8000-00805f9b34fb',  // 'service' padded to 8 chars
       '0000char-0000-1000-8000-00805f9b34fb',  // 'char' padded to 8 chars
       expect.any(Function)
     );
-    
+
     // Result should be number array (ByteArray)
     expect(Array.isArray(result)).toBe(true);
     expect(result).toEqual([85]);
@@ -223,7 +223,7 @@ describe('BleNitro', () => {
     });
 
     const result = await BleManager.disconnect('device');
-    
+
     expect(mockNative.disconnect).toHaveBeenCalledWith('device', expect.any(Function));
     expect(result).toBe(undefined);
   });
@@ -245,10 +245,10 @@ describe('BleNitro', () => {
 
     const notificationCallback = jest.fn();
     const subscription = BleManager.subscribeToCharacteristic('device', 'service', 'char', notificationCallback);
-    
+
     expect(mockNative.subscribeToCharacteristic).toHaveBeenCalled();
     expect(notificationCallback).toHaveBeenCalledWith('char-id', [1, 2, 3]);
-    
+
     // Verify subscription object
     expect(subscription).toHaveProperty('remove');
     expect(typeof subscription.remove).toBe('function');
@@ -257,10 +257,10 @@ describe('BleNitro', () => {
   test('connect with disconnect event callback', async () => {
     const deviceId = 'test-device-2'; // Use different device ID to avoid state conflicts
     const onDisconnect = jest.fn();
-    
+
     mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
       callback(true, id, '');
-      // Simulate a disconnect event later  
+      // Simulate a disconnect event later
       if (disconnectCallback) {
         setTimeout(() => {
           disconnectCallback(id, true, 'Connection lost'); // interrupted = true
@@ -269,10 +269,10 @@ describe('BleNitro', () => {
     });
 
     const result = await BleManager.connect(deviceId, onDisconnect);
-    
-    expect(mockNative.connect).toHaveBeenCalledWith(deviceId, expect.any(Function), expect.any(Function));
+
+    expect(mockNative.connect).toHaveBeenCalledWith(deviceId, expect.any(Function), expect.any(Function), false);
     expect(result).toBe(deviceId);
-    
+
     // Wait for disconnect callback
     await new Promise(resolve => setTimeout(resolve, 30));
     expect(onDisconnect).toHaveBeenCalledWith(deviceId, true, 'Connection lost');
@@ -297,7 +297,7 @@ describe('BleNitro', () => {
     });
 
     const rssi = await BleManager.readRSSI('device-rssi');
-    
+
     expect(mockNative.readRSSI).toHaveBeenCalledWith(
       'device-rssi',
       expect.any(Function)
@@ -318,7 +318,7 @@ describe('BleNitro', () => {
     });
 
     await expect(BleManager.readRSSI('device-rssi-fail')).rejects.toThrow('RSSI read failed');
-    
+
     expect(mockNative.readRSSI).toHaveBeenCalledWith(
       'device-rssi-fail',
       expect.any(Function)
