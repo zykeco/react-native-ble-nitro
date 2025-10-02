@@ -503,7 +503,8 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     override fun connect(
         deviceId: String,
         callback: (success: Boolean, deviceId: String, error: String) -> Unit,
-        disconnectCallback: ((deviceId: String, interrupted: Boolean, error: String) -> Unit)?
+        disconnectCallback: ((deviceId: String, interrupted: Boolean, error: String) -> Unit)?,
+        autoConnectAndroid: Boolean?
     ) {
         try {
             initializeBluetoothIfNeeded()
@@ -531,7 +532,8 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             // Connect to device
             val context = appContext
             if (context != null) {
-                val gatt = device.connectGatt(context, false, gattCallback)
+                val autoConnect = autoConnectAndroid ?: false
+                val gatt = device.connectGatt(context, autoConnect, gattCallback)
                 connectedDevices[deviceId] = gatt
             } else {
                 callback(false, deviceId, "Context not available")

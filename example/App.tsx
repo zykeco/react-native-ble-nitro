@@ -157,7 +157,7 @@ export default function App() {
         setConnectedDeviceId(null);
         setConnectedDeviceServiceUUIDs([]);
         setConnectedDeviceCharacteristics({});
-      });
+      }, true);
       setConnectedDeviceId(connectedId);
       logMessage(`2 Connected to ${connectedId}`);
       await ble.instance.discoverServices(connectedId);

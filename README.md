@@ -256,7 +256,16 @@ const HEART_RATE_SERVICE = '180d';
 const HEART_RATE_MEASUREMENT = '2a37';
 
 // Connect and subscribe to heart rate
-const deviceId = await ble.connect(heartRateDeviceId);
+const autoConnectOnAndroid = true; // Optional: auto-reconnect on Android
+const deviceId = await ble.connect(
+  heartRateDeviceId,
+  (deviceId, interrupted, error) => {
+    console.log('Device got Disconnected');
+    console.log('Was Interrupted?', interrupted);
+    console.log('Error:', error);
+  },
+  autoConnectOnAndroid,
+);
 await ble.discoverServices(deviceId);
 
 const subscription = ble.subscribeToCharacteristic(

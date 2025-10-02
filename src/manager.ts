@@ -254,7 +254,8 @@ export class BleNitroManager {
    */
   public connect(
     deviceId: string, 
-    onDisconnect?: DisconnectEventCallback
+    onDisconnect?: DisconnectEventCallback,
+    autoConnectAndroid?: boolean
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       // Check if already connected
@@ -277,7 +278,8 @@ export class BleNitroManager {
           // Remove from connected devices when disconnected
           delete this._connectedDevices[deviceId];
           onDisconnect(deviceId, interrupted, error);
-        } : undefined
+        } : undefined,
+        autoConnectAndroid ?? false,
       );
     });
   }
