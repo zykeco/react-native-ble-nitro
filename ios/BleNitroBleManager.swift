@@ -192,7 +192,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleN
     }
     
     // MARK: - Connection Management
-    public func connect(deviceId: String, callback: @escaping (Bool, String, String) -> Void, disconnectCallback: ((String, Bool, String) -> Void)?) throws {
+    public func connect(deviceId: String, callback: @escaping (Bool, String, String) -> Void, disconnectCallback: ((String, Bool, String) -> Void)?, autoConnectAndroid: Bool?) throws {
         // Find peripheral by identifier
         guard let peripheral = findPeripheral(by: deviceId) else {
             callback(false, "", "Peripheral not found")

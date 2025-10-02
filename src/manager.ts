@@ -253,8 +253,9 @@ export class BleNitroManager {
    * @returns Promise resolving deviceId when connected
    */
   public connect(
-    deviceId: string,
-    onDisconnect?: DisconnectEventCallback
+    deviceId: string, 
+    onDisconnect?: DisconnectEventCallback,
+    autoConnectAndroid?: boolean,
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       // Check if already connected
@@ -277,7 +278,8 @@ export class BleNitroManager {
           // Remove from connected devices when disconnected
           delete this._connectedDevices[deviceId];
           onDisconnect(deviceId, interrupted, error);
-        } : undefined
+        } : undefined,
+        autoConnectAndroid ?? false,
       );
     });
   }
@@ -288,7 +290,7 @@ export class BleNitroManager {
    * @param scanTimeout Optional timeout for the scan in milliseconds (default: 5000ms)
    * @returns Promise resolving deviceId when connected
    */
-  public findAndConnect(deviceId: string, options?: { scanTimeout?: number, onDisconnect?: DisconnectEventCallback }): Promise<string> {
+  public findAndConnect(deviceId: string, options?: { scanTimeout?: number, autoConnectAndroid?: boolean, onDisconnect?: DisconnectEventCallback }): Promise<string> {
     const isConnected = this.isConnected(deviceId);
     if (isConnected) {
       return Promise.resolve(deviceId);
@@ -305,7 +307,7 @@ export class BleNitroManager {
         if (device.id === deviceId) {
           this.stopScan();
           clearTimeout(timeoutScan);
-          this.connect(deviceId, options?.onDisconnect).then(async (connectedDeviceId) => {
+          this.connect(deviceId, options?.onDisconnect, options?.autoConnectAndroid).then(async (connectedDeviceId) => {
             resolve(connectedDeviceId);
           }).catch((error) => {
             reject(error);

@@ -81,7 +81,7 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
   getConnectedDevices(services: string[]): BLEDevice[];
 
   // Connection management
-  connect(deviceId: string, callback: ConnectionCallback, disconnectCallback?: DisconnectionEventCallback): void;
+  connect(deviceId: string, callback: ConnectionCallback, disconnectCallback?: DisconnectionEventCallback, autoConnectAndroid?: boolean): void;
   disconnect(deviceId: string, callback: OperationCallback): void;
   isConnected(deviceId: string): boolean;
   requestMTU(deviceId: string, mtu: number): number;
