@@ -176,7 +176,7 @@ export class BleNitroManager {
    * Start scanning for Bluetooth devices
    * @param filter Optional scan filter
    * @param callback Callback function called when a device is found
-   * @returns Promise resolving to success state
+   * @returns void
    */
   public startScan(
     filter: ScanFilter = {},
@@ -215,7 +215,7 @@ export class BleNitroManager {
 
   /**
    * Stop scanning for Bluetooth devices
-   * @returns Promise resolving to success state
+   * @returns void
    */
   public stopScan(): void {
     if (!this._isScanning) {
@@ -228,7 +228,7 @@ export class BleNitroManager {
 
   /**
    * Check if currently scanning for devices
-   * @returns Promise resolving to scanning state
+   * @returns Boolean indicating if currently scanning
    */
   public isScanning(): boolean {
     this._isScanning = BleNitroNative.isScanning();
@@ -250,10 +250,10 @@ export class BleNitroManager {
    * Connect to a Bluetooth device
    * @param deviceId ID of the device to connect to
    * @param onDisconnect Optional callback for disconnect events
-   * @returns Promise resolving when connected
+   * @returns Promise resolving deviceId when connected
    */
   public connect(
-    deviceId: string, 
+    deviceId: string,
     onDisconnect?: DisconnectEventCallback
   ): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -279,6 +279,39 @@ export class BleNitroManager {
           onDisconnect(deviceId, interrupted, error);
         } : undefined
       );
+    });
+  }
+
+  /**
+   * Scans for a device and connects to it
+   * @param deviceId ID of the device to connect to
+   * @param scanTimeout Optional timeout for the scan in milliseconds (default: 5000ms)
+   * @returns Promise resolving deviceId when connected
+   */
+  public findAndConnect(deviceId: string, options?: { scanTimeout?: number, onDisconnect?: DisconnectEventCallback }): Promise<string> {
+    const isConnected = this.isConnected(deviceId);
+    if (isConnected) {
+      return Promise.resolve(deviceId);
+    }
+    if (this._isScanning) {
+      this.stopScan();
+    }
+    return new Promise((resolve, reject) => {
+      const timeoutScan = setTimeout(() => {
+        this.stopScan();
+        reject(new Error('Scan timed out'));
+      }, options?.scanTimeout ?? 5000);
+      this.startScan(undefined, (device) => {
+        if (device.id === deviceId) {
+          this.stopScan();
+          clearTimeout(timeoutScan);
+          this.connect(deviceId, options?.onDisconnect).then(async (connectedDeviceId) => {
+            resolve(connectedDeviceId);
+          }).catch((error) => {
+            reject(error);
+          });
+        }
+      });
     });
   }
 
@@ -312,7 +345,7 @@ export class BleNitroManager {
   /**
    * Check if connected to a device
    * @param deviceId ID of the device to check
-   * @returns Promise resolving to connection state
+   * @returns Boolean indicating if device is connected
    */
   public isConnected(deviceId: string): boolean {
     return BleNitroNative.isConnected(deviceId);
@@ -409,7 +442,7 @@ export class BleNitroManager {
    * Get characteristics for a service
    * @param deviceId ID of the device
    * @param serviceId ID of the service
-   * @returns Promise resolving to array of characteristic UUIDs
+   * @returns array of characteristic UUIDs
    */
   public getCharacteristics(
     deviceId: string,
@@ -427,11 +460,29 @@ export class BleNitroManager {
   }
 
   /**
+   * Get services and characteristics for a connected device
+   * @param deviceId ID of the device
+   * @returns Promise resolving to array of service and characteristic UUIDs
+   * @see getServices
+   * @see getCharacteristics
+   */
+  public async getServicesWithCharacteristics(deviceId: string): Promise<{ uuid: string; characteristics: string[] }[]> {
+    await this.discoverServices(deviceId);
+    const services = await this.getServices(deviceId);
+    return services.map((service) => {
+      return {
+        uuid: service,
+        characteristics: this.getCharacteristics(deviceId, service),
+      };
+    });
+  }
+
+  /**
    * Read a characteristic value
    * @param deviceId ID of the device
    * @param serviceId ID of the service
    * @param characteristicId ID of the characteristic
-   * @returns Promise resolving to the characteristic data as ArrayBuffer
+   * @returns Promise resolving to the characteristic data as ByteArray
    */
   public readCharacteristic(
     deviceId: string,
@@ -508,7 +559,7 @@ export class BleNitroManager {
    * @param serviceId ID of the service
    * @param characteristicId ID of the characteristic
    * @param callback Callback function called when notification is received
-   * @returns Promise resolving when subscription is complete
+   * @returns Subscription
    */
   public subscribeToCharacteristic(
     deviceId: string,
@@ -588,7 +639,7 @@ export class BleNitroManager {
 
   /**
    * Check if Bluetooth is enabled
-   * @returns Promise resolving to Bluetooth state
+   * @returns returns Boolean according to Bluetooth state
    */
   public isBluetoothEnabled(): boolean {
     return this.state() === BLEState.PoweredOn;
@@ -614,7 +665,7 @@ export class BleNitroManager {
 
   /**
    * Get the current Bluetooth state
-   * @returns Promise resolving to Bluetooth state
+   * @returns Bluetooth state
    * @see BLEState
    */
   public state(): BLEState {
@@ -625,7 +676,7 @@ export class BleNitroManager {
    * Subscribe to Bluetooth state changes
    * @param callback Callback function called when state changes
    * @param emitInitial Whether to emit initial state callback
-   * @returns Promise resolving when subscription is complete
+   * @returns Subscription
    * @see BLEState
    */
   public subscribeToStateChange(callback: (state: BLEState) => void, emitInitial = false): Subscription {

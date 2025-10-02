@@ -139,6 +139,19 @@ export default function App() {
     setScanResults(devices);
   };
 
+  const onDisconnected =  async (deviceId: string, interrupted: boolean) => {
+    if (interrupted) {
+      logMessage('Disconnected because connection was interrupted');
+    } else {
+      logMessage('Disconnected intentionally');
+    }
+    await unlistenToBleNotifications();
+    await unlistenToHrNotifications();
+    setConnectedDeviceId(null);
+    setConnectedDeviceServiceUUIDs([]);
+    setConnectedDeviceCharacteristics({});
+  }
+
   const connectDevice = async (deviceId: string) => {
     try {
       clearLogs();
@@ -146,34 +159,49 @@ export default function App() {
       setConnectedDeviceServiceUUIDs([]);
       stopScan();
       logMessage(`1 Connecting to ${deviceId}`);
-      const connectedId = await ble.instance.connect(deviceId, async (_, interrupted) => {
-        if (interrupted) {
-          logMessage('Disconnected because connection was interrupted');
-        } else {
-          logMessage('Disconnected intentionally');
-        }
-        await unlistenToBleNotifications();
-        await unlistenToHrNotifications();
-        setConnectedDeviceId(null);
-        setConnectedDeviceServiceUUIDs([]);
-        setConnectedDeviceCharacteristics({});
-      });
+      const connectedId = await ble.instance.connect(deviceId, onDisconnected);
       setConnectedDeviceId(connectedId);
       logMessage(`2 Connected to ${connectedId}`);
       await ble.instance.discoverServices(connectedId);
       logMessage(`3 Discovered services for ${connectedId}`);
-      const services = await ble.instance.getServices(connectedId);
-      logMessage(`4 Got ${services.length} services for ${connectedId}`);
-      setConnectedDeviceServiceUUIDs(services);
+      const servicesWithCharacteristics = await ble.instance.getServicesWithCharacteristics(connectedId);
+      logMessage(`4 Got ${servicesWithCharacteristics.length} services for ${connectedId}`);
+      setConnectedDeviceServiceUUIDs(servicesWithCharacteristics.map((s) => s.uuid));
       resetScannedDevices();
-      services.map(async (s) => {
-        const characteristics = ble.instance.getCharacteristics(connectedId, s);
+      servicesWithCharacteristics.map(async (s) => {
         setConnectedDeviceCharacteristics((prev) => {
-          prev[s] = characteristics;
+          prev[s.uuid] = s.characteristics;
           return prev;
         });
       });
-      logMessage('Device is connected', String());
+      logMessage('Device is connected');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const findAndConnect = async () => {
+    try {
+      logMessage('Finding device');
+      const connectedId = await ble.instance.findAndConnect(Platform.select({
+        ios: '7F89D88A-1915-DBC3-B712-0AF59D16840C',
+        android: 'ca:91:21:0e:0d:5a'.toUpperCase(),
+        default: '7F89D88A-1915-DBC3-B712-0AF59D16840C',
+      }), {
+        onDisconnect: onDisconnected,
+      });
+      logMessage('Found and connected', connectedId);
+      setConnectedDeviceId(connectedId);
+      const servicesWithCharacteristics = await ble.instance.getServicesWithCharacteristics(connectedId);
+      setConnectedDeviceServiceUUIDs(servicesWithCharacteristics.map((s) => s.uuid));
+      resetScannedDevices();
+      servicesWithCharacteristics.map(async (s) => {
+        setConnectedDeviceCharacteristics((prev) => {
+          prev[s.uuid] = s.characteristics;
+          return prev;
+        });
+      });
+      logMessage('Device is connected');
     } catch (e) {
       console.error(e);
     }
@@ -229,7 +257,7 @@ export default function App() {
     logMessage('MTU', mtu);
   };
 
-  const logMessage = async (...message: (string | number)[]) => {
+  const logMessage = (...message: (string | number)[]) => {
     const date = new Date().toLocaleTimeString('de-DE');
     setLogs((prev) => [...prev, `${date} - ${message.join(' ')}`]);
   }
@@ -290,7 +318,7 @@ export default function App() {
     }
   }
 
-  const listenToHrNotifications = async () => {
+  const listenToHrNotifications = () => {
     if (!connectedDeviceId) {
       throw new Error('No device connected');
     }
@@ -298,7 +326,7 @@ export default function App() {
       unsubscribeHr?.();
       setHrNotificationSubscription(false);
     }
-    const sub = await ble.instance.subscribeToCharacteristic(connectedDeviceId, HEART_RATE_SERVICE_UUID, HEART_RATE_MEASUREMENT_UUID, (_, data) => {
+    const sub = ble.instance.subscribeToCharacteristic(connectedDeviceId, HEART_RATE_SERVICE_UUID, HEART_RATE_MEASUREMENT_UUID, (_, data) => {
       const [type, hr] = data;
       logMessage('Heart Rate', hr);
       if (type === 0) return;
@@ -344,7 +372,7 @@ export default function App() {
       unsubscribeHr?.();
       logMessage('Unsubscribed from heart rate');
     }
-  }
+  };
 
   return (
     <>
@@ -379,6 +407,9 @@ export default function App() {
                       <Text>Start Scan</Text>
                     </TouchableOpacity>
                   )}
+                  <TouchableOpacity style={styles.button} onPress={findAndConnect}>
+                    <Text>Find And Connect Device</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.button} onPress={getConnectedDevices}>
                     <Text>Get connected devices</Text>
                   </TouchableOpacity>
@@ -407,7 +438,7 @@ export default function App() {
                   <>
                     <Text style={{ marginTop: 16 }}>Connected Device:</Text>
                     <View style={{ padding: 8, marginTop: 8, backgroundColor: '#f4f4f4ff', borderRadius: 4, }}>
-                      <Text>ID: {connectedDeviceId}</Text>
+                      <Text selectable>ID: {connectedDeviceId}</Text>
                       <Text style={{ borderTopWidth: 1 }}>Services:</Text>
                       {connectedDeviceServiceUUIDs.map((s, i) => (
                         <View key={s} style={{ borderBottomWidth: i === connectedDeviceServiceUUIDs.length - 1 ? 0 : 1 }}>

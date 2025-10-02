@@ -145,6 +145,21 @@ const deviceId = await ble.connect(deviceId, (deviceId, interrupted, error) => {
 // Connect without disconnect callback
 const deviceId = await ble.connect(deviceId);
 
+// You can also use findAndConnect to scan and connect in one step
+// This could be useful for reconnecting after app restart or when device was disconnected unexpectedly
+const deviceId = await ble.findAndConnect(deviceId, {
+  scanTimeout: 4000, // default 5000ms
+  onDisconnect: (deviceId, interrupted, error) => {
+    if (interrupted) {
+      console.log('Connection interrupted:', error);
+      // Handle unexpected disconnection (out of range, etc.)
+    } else {
+      console.log('Disconnected intentionally');
+      // Handle normal disconnection
+    }
+  }
+});
+
 // Disconnect from a device
 await ble.disconnect(deviceId);
 
@@ -185,6 +200,10 @@ const characteristics = ble.getCharacteristics(deviceId, serviceUUID);
 const characteristics1 = ble.getCharacteristics(deviceId, '180d'); // Short form
 const characteristics2 = ble.getCharacteristics(deviceId, '0000180d-0000-1000-8000-00805f9b34fb'); // Long form
 // Both work identically - conversion handled automatically
+
+// Get services with their characteristics
+const servicesWithCharacteristics = await ble.getServicesWithCharacteristics(deviceId);
+// Returns: [{ uuid: '0000180d-0000-1000-8000-00805f9b34fb', characteristics: ['00002a37-0000-1000-8000-00805f9b34fb', ...] }, ...]
 ```
 
 #### 📖 Reading Characteristics
