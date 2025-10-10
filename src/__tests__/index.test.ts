@@ -1,31 +1,34 @@
 // Mock the native module import
+const mockNativeInstance = {
+  setRestoreStateCallback: jest.fn(),
+  startScan: jest.fn(),
+  stopScan: jest.fn(),
+  isScanning: jest.fn(),
+  connect: jest.fn(),
+  disconnect: jest.fn(),
+  isConnected: jest.fn(),
+  requestMTU: jest.fn(),
+  readRSSI: jest.fn(),
+  discoverServices: jest.fn(),
+  getServices: jest.fn(),
+  getCharacteristics: jest.fn(),
+  readCharacteristic: jest.fn(),
+  writeCharacteristic: jest.fn(),
+  subscribeToCharacteristic: jest.fn(),
+  unsubscribeFromCharacteristic: jest.fn(),
+  getConnectedDevices: jest.fn(),
+  requestBluetoothEnable: jest.fn(),
+  state: jest.fn(),
+  subscribeToStateChange: jest.fn(),
+  unsubscribeFromStateChange: jest.fn(),
+  openSettings: jest.fn(),
+  restoreStateIdentifier: null,
+};
+
 jest.mock('../specs/NativeBleNitro', () => ({
   __esModule: true,
-  default: {
-    setRestoreStateCallback: jest.fn(),
-    startScan: jest.fn(),
-    stopScan: jest.fn(),
-    isScanning: jest.fn(),
-    connect: jest.fn(),
-    disconnect: jest.fn(),
-    isConnected: jest.fn(),
-    requestMTU: jest.fn(),
-    readRSSI: jest.fn(),
-    discoverServices: jest.fn(),
-    getServices: jest.fn(),
-    getCharacteristics: jest.fn(),
-    readCharacteristic: jest.fn(),
-    writeCharacteristic: jest.fn(),
-    subscribeToCharacteristic: jest.fn(),
-    unsubscribeFromCharacteristic: jest.fn(),
-    getConnectedDevices: jest.fn(),
-    requestBluetoothEnable: jest.fn(),
-    state: jest.fn(),
-    subscribeToStateChange: jest.fn(),
-    unsubscribeFromStateChange: jest.fn(),
-    openSettings: jest.fn(),
-  },
-  BLEState: { 
+  default: mockNativeInstance,
+  BLEState: {
     Unknown: 0,
     Resetting: 1,
     Unsupported: 2,
@@ -41,10 +44,17 @@ jest.mock('../specs/NativeBleNitro', () => ({
   },
 }));
 
+jest.mock('../specs/NativeBleNitroFactory', () => ({
+  __esModule: true,
+  default: {
+    create: jest.fn(() => mockNativeInstance),
+  },
+}));
+
 import { BleNitro } from '../index';
 
 // Get reference to the mocked module
-const mockNative = require('../specs/NativeBleNitro').default; // eslint-disable-line @typescript-eslint/no-var-requires
+const mockNative = mockNativeInstance;
 
 // Get BLE instance
 const BleManager = BleNitro.instance();
