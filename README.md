@@ -78,7 +78,7 @@ const ble = BleNitro.instance();
 // It is recommended to create this instance in an extra file seperated from other BLE business logic for better fast-refresh support
 const ble = new BleNitroManager({
   restoreStateIdentifier: 'my-unique-identifier',
-  onRestoreState: (peripherals) => {
+  onRestoredState: (peripherals) => {
     console.log('Restored peripherals:', peripherals);
   },
 });
@@ -383,7 +383,7 @@ import { BleNitroManager, BLEDevice } from 'react-native-ble-nitro';
 
 const customBleInstance = new BleNitroManager({
   restoreStateIdentifier: 'my-unique-identifier', // unique identifier for state restoration
-  onRestoreState: (peripherals: BLEDevice[]) => {
+  onRestoredState: (peripherals: BLEDevice[]) => {
     console.log('Restored peripherals:', peripherals);
     // Handle restored peripherals
   }
@@ -396,7 +396,7 @@ const customBleInstance = new BleNitroManager({
 ```typescript
 // Enable state restoration in BleNitro singleton
 const ble = BleNitro.instance();
-ble.onRestoreState((peripherals) => {
+ble.onRestoredState((peripherals) => {
   console.log('Restored peripherals:', peripherals);
 });
 ```
