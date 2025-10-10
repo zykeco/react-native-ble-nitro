@@ -12,6 +12,7 @@
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		95C431AF9B784008CF04BFC7 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AE4F76F1BC00B0FDD6203549 /* PrivacyInfo.xcprivacy */; };
 		A1D278A5BE1882546406F74B /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B2D182A18CF8A2199574F4C /* ExpoModulesProvider.swift */; };
+		B852A7F68D99C6957BE2759B /* libPods-BleNitroExample.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FD2E7ACCF0FF95084C5AFF74 /* libPods-BleNitroExample.a */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
@@ -30,6 +31,7 @@
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = BleNitroExample/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* BleNitroExample-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "BleNitroExample-Bridging-Header.h"; path = "BleNitroExample/BleNitroExample-Bridging-Header.h"; sourceTree = "<group>"; };
 		F6C392B3434AA0A4AE9DDE90 /* Pods-BleNitroExample.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BleNitroExample.release.xcconfig"; path = "Target Support Files/Pods-BleNitroExample/Pods-BleNitroExample.release.xcconfig"; sourceTree = "<group>"; };
+		FD2E7ACCF0FF95084C5AFF74 /* libPods-BleNitroExample.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-BleNitroExample.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -38,6 +40,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				384FD007CA2584D8BD8A0728 /* libPods-BleNitroExample.a in Frameworks */,
+				B852A7F68D99C6957BE2759B /* libPods-BleNitroExample.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -67,6 +70,14 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		4F46803FED56F72DF3A529AD /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				FD2E7ACCF0FF95084C5AFF74 /* libPods-BleNitroExample.a */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		681536525781173AFA679EDE /* Pods */ = {
 			isa = PBXGroup;
 			children = (
@@ -79,6 +90,7 @@
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
 			isa = PBXGroup;
 			children = (
+				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 			);
 			name = Libraries;
 			sourceTree = "<group>";
@@ -89,9 +101,9 @@
 				13B07FAE1A68108700A75B9A /* BleNitroExample */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
-				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				681536525781173AFA679EDE /* Pods */,
 				A843AEAEE688D21475C59D55 /* ExpoModulesProviders */,
+				4F46803FED56F72DF3A529AD /* Frameworks */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";

@@ -1,9 +1,6 @@
-import { BleNitro, BLEState } from 'react-native-ble-nitro';
+import { BLEState } from 'react-native-ble-nitro';
+import { ble } from './bluetooth-instance';
 
-const ble = BleNitro.instance();
-ble.onRestoredState((peripherals) => {
-  console.log('Restore State', peripherals);
-})
 
 export function createBle(opts: {
   onEnabledChange?: (enabled: boolean) => void;

@@ -5,13 +5,10 @@ import NitroModules
  * iOS implementation of the BLE Nitro Manager
  * Implements the HybridNativeBleNitroSpec protocol for Core Bluetooth operations
  */
-public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleNitroSpec_protocol {
-    
-    // MARK: - Constants
-    private static let restoreStateIdentifier = "react-native-ble-nitro"
-    
+public class BleNitroBleManager: HybridNativeBleNitroSpec {
+
     // MARK: - Static Properties
-    private static var globalRestoreStateCallback: (([BLEDevice]) -> Void)?
+    internal static var globalRestoreStateCallback: (([BLEDevice]) -> Void)?
     
     // MARK: - Private Properties
     private var centralManager: CBCentralManager!
@@ -26,23 +23,30 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleN
     private var centralManagerDelegate: BleCentralManagerDelegate!
     
     // MARK: - Restore State Properties
-    private var restoreStateCallback: (([BLEDevice]) -> Void)?
+    internal var restoreStateCallback: (([BLEDevice]) -> Void)?
+
+    // MARK: - Public Properties (from spec)
+    public var restoreStateIdentifier: String? = nil
 
     // MARK: - Initialization
-    public override init() {
+    public init(restoreStateIdentifier: String? = nil, restoreStateCallback: (([BLEDevice]) -> Void)? = nil) {
+        self.restoreStateIdentifier = restoreStateIdentifier
+        self.restoreStateCallback = restoreStateCallback
         super.init()
         setupCentralManager()
     }
     
     private func setupCentralManager() {
         centralManagerDelegate = BleCentralManagerDelegate(manager: self)
-        
-        // Create options dictionary for central manager with fixed restore identifier
-        let options: [String: Any] = [
-            CBCentralManagerOptionRestoreIdentifierKey: BleNitroBleManager.restoreStateIdentifier
-        ]
-        
-        centralManager = CBCentralManager(delegate: centralManagerDelegate, queue: DispatchQueue.main, options: options)
+
+        // Create options dictionary for central manager with restore identifier if set
+        var options: [String: Any] = [:]
+        print("Restore Identifier: \(String(describing: restoreStateIdentifier))")
+        if let identifier = restoreStateIdentifier {
+            options[CBCentralManagerOptionRestoreIdentifierKey] = identifier
+        }
+
+        centralManager = CBCentralManager(delegate: centralManagerDelegate, queue: DispatchQueue.main, options: options.isEmpty ? nil : options)
     }
     
     
@@ -72,11 +76,9 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleN
     
     // MARK: - Restore State Management
     public func setRestoreStateCallback(callback: @escaping ([BLEDevice]) -> Void) throws {
-        print("🔄 setRestoreStateCallback called")
         // Set both static and instance variables
         BleNitroBleManager.globalRestoreStateCallback = callback
         self.restoreStateCallback = callback
-        print("🔄 Callback set successfully")
     }
     
     // MARK: - Scanning Operations
@@ -132,7 +134,8 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleN
                 rssi: 0, // RSSI not available for connected devices without explicit read
                 manufacturerData: ManufacturerData(companyIdentifiers: []), // Not available for connected devices
                 serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
-                isConnectable: true // Already connected, so it was connectable
+                isConnectable: true, // Already connected, so it was connectable
+                isConnected: true
             )
             connectedDevices.append(device)
         }
@@ -152,7 +155,8 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleN
                     rssi: 0,
                     manufacturerData: ManufacturerData(companyIdentifiers: []),
                     serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
-                    isConnectable: true
+                    isConnectable: true,
+                    isConnected: true
                 )
                 connectedDevices.append(device)
                 
@@ -177,7 +181,8 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleN
                         rssi: 0,
                         manufacturerData: ManufacturerData(companyIdentifiers: []),
                         serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
-                        isConnectable: true
+                        isConnectable: true,
+                        isConnected: true
                     )
                     connectedDevices.append(device)
                     
@@ -507,7 +512,8 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleN
                     rssi: 0, // RSSI not available for restored peripherals
                     manufacturerData: ManufacturerData(companyIdentifiers: []),
                     serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
-                    isConnectable: true
+                    isConnectable: true,
+                    isConnected: peripheral.state == .connected
                 )
                 restoredDevices.append(device)
                 
@@ -634,7 +640,8 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec_base, HybridNativeBleN
             rssi: rssi,
             manufacturerData: manufacturerData,
             serviceUUIDs: serviceUUIDs,
-            isConnectable: isConnectable
+            isConnectable: isConnectable,
+            isConnected: peripheral.state == .connected
         )
     }
     
@@ -719,6 +726,12 @@ class BleCentralManagerDelegate: NSObject, CBCentralManagerDelegate {
     }
     
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
-        manager?.handleStateRestoration(dict)
+        // Only handle state restoration if restoreStateIdentifier is set and a callback is registered
+        guard let manager = manager,
+              manager.restoreStateIdentifier != nil,
+              (BleNitroBleManager.globalRestoreStateCallback != nil || manager.restoreStateCallback != nil) else {
+            return
+        }
+        manager.handleStateRestoration(dict)
     }
 }

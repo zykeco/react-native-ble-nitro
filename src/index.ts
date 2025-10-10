@@ -1,5 +1,3 @@
-import { BleNitroManager } from "./manager";
-
 export {
   type ByteArray,
   type ScanFilter,
@@ -12,19 +10,10 @@ export {
   type OperationCallback,
   type CharacteristicUpdateCallback,
   type Subscription,
-  type BleNitroManager,
   type BleNitroManagerOptions,
   BLEState,
   AndroidScanMode,
+  BleNitroManager,
 } from "./manager";
 
-let _instance: BleNitroManager;
-
-export class BleNitro extends BleNitroManager {
-  public static instance() {
-    if (!_instance) {
-      _instance = new BleNitro();
-    }
-    return _instance;
-  }
-}
+export { BleNitro } from './singleton';

@@ -73,6 +73,15 @@ import { BleNitro, BLEState, AndroidScanMode, type BLEDevice } from 'react-nativ
 
 // Get the singleton instance
 const ble = BleNitro.instance();
+
+// Use custom manager instance (e.g. for iOS state restoration)
+// It is recommended to create this instance in an extra file seperated from other BLE business logic for better fast-refresh support
+const ble = new BleNitroManager({
+  restoreStateIdentifier: 'my-unique-identifier',
+  onRestoreState: (peripherals) => {
+    console.log('Restored peripherals:', peripherals);
+  },
+});
 ```
 
 ### Complete API Reference
@@ -364,7 +373,25 @@ const fullUUIDs = BleNitro.normalizeGattUUIDs(['180d', '180f']);
 
 ### iOS Restore State
 
-There are two ways to handle state restoration on iOS:
+There is built-in support for iOS state restoration. You need to provide a unique identifier and a callback to handle restored peripherals. If no unique identifier is provided, state restoration is disabled.
+
+> [!CAUTION]
+> From 1.7.0 on you have to create your own instance of `BleNitroManager` if you want to use state restoration. The singleton `BleNitro.instance()` will not have state restoration enabled by default anymore.
+
+```typescript
+import { BleNitroManager, BLEDevice } from 'react-native-ble-nitro';
+
+const customBleInstance = new BleNitroManager({
+  restoreStateIdentifier: 'my-unique-identifier', // unique identifier for state restoration
+  onRestoreState: (peripherals: BLEDevice[]) => {
+    console.log('Restored peripherals:', peripherals);
+    // Handle restored peripherals
+  }
+});
+```
+
+<details>
+<summary><strong>Singleton Restore State before 1.7.0 (<= 1.6.0)</strong></summary>
 
 ```typescript
 // Enable state restoration in BleNitro singleton
@@ -373,18 +400,7 @@ ble.onRestoreState((peripherals) => {
   console.log('Restored peripherals:', peripherals);
 });
 ```
-
-```typescript
-// Or use BleNitroManager with options
-// This way you have to assure that only one instance of BleNitroManager is created and that you always use this instance.
-import { BleNitroManager, BLEDevice } from 'react-native-ble-nitro/manager';
-
-const customBleInstance = new BleNitroManager({
-  onRestoreState: (peripherals: BLEDevice[]) => {
-    console.log('Restored peripherals:', peripherals);
-  }
-});
-```
+</details>
 
 ### TypeScript Types
 

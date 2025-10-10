@@ -12,6 +12,10 @@
     "NativeBleNitro": {
       "swift": "BleNitroBleManager",
       "kotlin": "BleNitroBleManager"
+    },
+    "NativeBleNitroFactory": {
+      "swift": "BleNitroBleManagerFactory",
+      "kotlin": "BleNitroBleManagerFactory"
     }
   },
   "ignorePaths": [

@@ -29,6 +29,7 @@ export interface BLEDevice {
   manufacturerData: ManufacturerData;
   serviceUUIDs: string[];
   isConnectable: boolean;
+  isConnected: boolean;
 }
 
 export enum AndroidScanMode {
@@ -70,6 +71,7 @@ export type OperationResult = {
  */
 export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'kotlin' }> {
   // ios only
+  restoreStateIdentifier?: string;
   setRestoreStateCallback(callback: RestoreCallback): void;
 
   // Scanning operations

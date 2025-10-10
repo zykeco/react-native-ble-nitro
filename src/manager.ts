@@ -1,4 +1,4 @@
-import BleNitroNative from './specs/NativeBleNitro';
+import BleNitroNativeFactory, { NativeBleNitro } from './specs/NativeBleNitroFactory';
 import {
   ScanFilter as NativeScanFilter,
   BLEDevice as NativeBLEDevice,
@@ -32,6 +32,7 @@ export interface BLEDevice {
   manufacturerData: ManufacturerData;
   serviceUUIDs: string[];
   isConnectable: boolean;
+  isConnected: boolean;
 }
 
 export type ScanCallback = (device: BLEDevice) => void;
@@ -73,6 +74,7 @@ export enum AndroidScanMode {
 }
 
 export type BleNitroManagerOptions = {
+  restoreIdentifier?: string;
   onRestoredState?: RestoreStateCallback;
 };
 
@@ -123,16 +125,24 @@ export class BleNitroManager {
   private _isScanning: boolean = false;
   private _connectedDevices: { [deviceId: string]: boolean } = {};
 
-  private _restoredStateCallback: RestoreStateCallback | null = null;
+  private _restoredStateCallback: RestoreStateCallback | null;
   private _restoredState: BLEDevice[] | null = null;
+  private _restoreStateIdentifier: string | null = null;
+
+  private Instance: NativeBleNitro;
 
   constructor(options?: BleNitroManagerOptions) {
-    this._restoredStateCallback = options?.onRestoredState || null;
-    BleNitroNative.setRestoreStateCallback((peripherals: NativeBLEDevice[]) => this.onNativeRestoreStateCallback(peripherals));
+    this._restoredStateCallback = options?.onRestoredState ?? null;
+    this._restoreStateIdentifier = options?.restoreIdentifier ?? null;
+    this.Instance = BleNitroNativeFactory.create(options?.restoreIdentifier, (peripherals: NativeBLEDevice[]) => this.onNativeRestoreStateCallback(peripherals));
   }
 
   private onNativeRestoreStateCallback(peripherals: NativeBLEDevice[]) {
+    if (!this._restoreStateIdentifier) return;
     const bleDevices = peripherals.map((peripheral) => convertNativeBleDeviceToBleDevice(peripheral));
+    bleDevices.forEach((device) => {
+      this._connectedDevices[device.id] = device.isConnected;
+    });
     if (this._restoredStateCallback) {
       this._restoredStateCallback(bleDevices);
     } else {
@@ -140,7 +150,13 @@ export class BleNitroManager {
     }
   }
 
+  /**
+   * 
+   * Registers callback and returns restored peripheral state in it. Not working from 1.7.x upwards for singleton implementation!
+   * @deprecated This method is deprecated and will be removed in 2.x, use onRestoredState option in BleNitroManageroptions instead!
+   */
   public onRestoredState(callback: RestoreStateCallback) {
+    if (!this._restoreStateIdentifier) return;
     if (this._restoredState) {
       callback(this._restoredState);
       this._restoredState = null;
@@ -209,7 +225,7 @@ export class BleNitroManager {
     };
 
     // Start scan
-    BleNitroNative.startScan(nativeFilter, scanCallback);
+    this.Instance.startScan(nativeFilter, scanCallback);
     this._isScanning = true;
   }
 
@@ -222,7 +238,7 @@ export class BleNitroManager {
       return;
     }
 
-    BleNitroNative.stopScan();
+    this.Instance.stopScan();
     this._isScanning = false;
   }
 
@@ -231,7 +247,7 @@ export class BleNitroManager {
    * @returns Boolean indicating if currently scanning
    */
   public isScanning(): boolean {
-    this._isScanning = BleNitroNative.isScanning();
+    this._isScanning = this.Instance.isScanning();
     return this._isScanning;
   }
 
@@ -241,7 +257,7 @@ export class BleNitroManager {
    * @returns Array of connected devices
    */
   public getConnectedDevices(services?: string[]): BLEDevice[] {
-    const devices = BleNitroNative.getConnectedDevices(services || []);
+    const devices = this.Instance.getConnectedDevices(services || []);
     // Normalize service UUIDs - manufacturer data already comes as ArrayBuffers
     return devices.map(device => convertNativeBleDeviceToBleDevice(device));
   }
@@ -264,7 +280,7 @@ export class BleNitroManager {
         return;
       }
 
-      BleNitroNative.connect(
+      this.Instance.connect(
         deviceId,
         (success: boolean, connectedDeviceId: string, error: string) => {
           if (success) {
@@ -330,7 +346,7 @@ export class BleNitroManager {
         return;
       }
 
-      BleNitroNative.disconnect(
+      this.Instance.disconnect(
         deviceId,
         (success: boolean, error: string) => {
           if (success) {
@@ -350,7 +366,7 @@ export class BleNitroManager {
    * @returns Boolean indicating if device is connected
    */
   public isConnected(deviceId: string): boolean {
-    return BleNitroNative.isConnected(deviceId);
+    return this.Instance.isConnected(deviceId);
   }
 
   /**
@@ -361,7 +377,7 @@ export class BleNitroManager {
    */
   public requestMTU(deviceId: string, mtu: number): number {
     mtu = parseInt(mtu.toString(), 10);
-    const deviceMtu = BleNitroNative.requestMTU(deviceId, mtu);
+    const deviceMtu = this.Instance.requestMTU(deviceId, mtu);
     return deviceMtu;
   }
 
@@ -378,7 +394,7 @@ export class BleNitroManager {
         return;
       }
 
-      BleNitroNative.readRSSI(
+      this.Instance.readRSSI(
         deviceId,
         (success: boolean, rssi: number, error: string) => {
           if (success) {
@@ -404,7 +420,7 @@ export class BleNitroManager {
         return;
       }
 
-      BleNitroNative.discoverServices(
+      this.Instance.discoverServices(
         deviceId,
         (success: boolean, error: string) => {
           if (success) {
@@ -435,7 +451,7 @@ export class BleNitroManager {
         reject(new Error('Failed to discover services'));
         return;
       }
-      const services = BleNitroNative.getServices(deviceId);
+      const services = this.Instance.getServices(deviceId);
       resolve(BleNitroManager.normalizeGattUUIDs(services));
     });
   }
@@ -454,7 +470,7 @@ export class BleNitroManager {
       throw new Error('Device not connected');
     }
 
-    const characteristics = BleNitroNative.getCharacteristics(
+    const characteristics = this.Instance.getCharacteristics(
       deviceId,
       BleNitroManager.normalizeGattUUID(serviceId),
     );
@@ -498,7 +514,7 @@ export class BleNitroManager {
         return;
       }
 
-      BleNitroNative.readCharacteristic(
+      this.Instance.readCharacteristic(
         deviceId,
         BleNitroManager.normalizeGattUUID(serviceId),
         BleNitroManager.normalizeGattUUID(characteristicId),
@@ -536,7 +552,7 @@ export class BleNitroManager {
         return;
       }
 
-      BleNitroNative.writeCharacteristic(
+      this.Instance.writeCharacteristic(
         deviceId,
         BleNitroManager.normalizeGattUUID(serviceId),
         BleNitroManager.normalizeGattUUID(characteristicId),
@@ -576,7 +592,7 @@ export class BleNitroManager {
 
     let _success = false;
 
-    BleNitroNative.subscribeToCharacteristic(
+    this.Instance.subscribeToCharacteristic(
       deviceId,
       BleNitroManager.normalizeGattUUID(serviceId),
       BleNitroManager.normalizeGattUUID(characteristicId),
@@ -624,7 +640,7 @@ export class BleNitroManager {
         return;
       }
 
-      BleNitroNative.unsubscribeFromCharacteristic(
+      this.Instance.unsubscribeFromCharacteristic(
         deviceId,
         BleNitroManager.normalizeGattUUID(serviceId),
         BleNitroManager.normalizeGattUUID(characteristicId),
@@ -653,7 +669,7 @@ export class BleNitroManager {
    */
   public requestBluetoothEnable(): Promise<boolean> {
     return new Promise((resolve, reject) => {
-      BleNitroNative.requestBluetoothEnable(
+      this.Instance.requestBluetoothEnable(
         (success: boolean, error: string) => {
           if (success) {
             resolve(true);
@@ -671,7 +687,7 @@ export class BleNitroManager {
    * @see BLEState
    */
   public state(): BLEState {
-    return mapNativeBLEStateToBLEState(BleNitroNative.state());
+    return mapNativeBLEStateToBLEState(this.Instance.state());
   }
 
   /**
@@ -687,13 +703,13 @@ export class BleNitroManager {
         callback(state);
       }
 
-      BleNitroNative.subscribeToStateChange((nativeState: NativeBLEState) => {
+      this.Instance.subscribeToStateChange((nativeState: NativeBLEState) => {
         callback(mapNativeBLEStateToBLEState(nativeState));
       });
 
       return {
         remove: () => {
-          BleNitroNative.unsubscribeFromStateChange();
+          this.Instance.unsubscribeFromStateChange();
         },
       };
   }
@@ -703,6 +719,6 @@ export class BleNitroManager {
    * @returns Promise resolving when settings are opened
    */
   public openSettings(): Promise<void> {
-    return BleNitroNative.openSettings();
+    return this.Instance.openSettings();
   }
 }

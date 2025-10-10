@@ -23,6 +23,14 @@
       "types": "./lib/manager.d.ts",
       "default": "./src/manager.ts"
     },
+    "./singleton": {
+      "react-native": "./src/singleton.ts",
+      "typescript": "./src/singleton.ts",
+      "import": "./lib/singleton.js",
+      "require": "./lib/commonjs/singleton.js",
+      "types": "./lib/singleton.d.ts",
+      "default": "./src/singleton.ts"
+    },
     "./plugin": {
       "import": "./plugin/build/index.js",
       "require": "./plugin/build/index.js",

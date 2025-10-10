@@ -33,7 +33,10 @@ import java.util.concurrent.ConcurrentHashMap
  * This class provides the actual BLE functionality for Android devices
  */
 class BleNitroBleManager : HybridNativeBleNitroSpec() {
-    
+
+    // iOS-specific property (not used on Android)
+    override var restoreStateIdentifier: String? = null
+
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var stateCallback: ((state: BLEState) -> Unit)? = null
     private var bluetoothStateReceiver: BroadcastReceiver? = null
@@ -207,7 +210,8 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             rssi = scanResult.rssi.toDouble(),
             manufacturerData = manufacturerData,
             serviceUUIDs = serviceUUIDs,
-            isConnectable = true // Assume scannable devices are connectable
+            isConnectable = true, // Assume scannable devices are connectable
+            isConnected = false // Scanned devices are not yet connected
         )
     }
     
@@ -491,7 +495,8 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                     rssi = 0.0, // RSSI not available for already connected devices
                     manufacturerData = ManufacturerData(companyIdentifiers = emptyArray()),
                     serviceUUIDs = emptyArray(), // Service UUIDs not available without service discovery
-                    isConnectable = true
+                    isConnectable = true,
+                    isConnected = true
                 )
             }.toTypedArray()
         } catch (e: Exception) {
