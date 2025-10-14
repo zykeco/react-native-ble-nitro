@@ -1,5 +1,5 @@
 PODS:
-  - BleNitro (1.6.0):
+  - BleNitro (1.7.0):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -96,7 +96,7 @@ PODS:
   - hermes-engine (0.79.5):
     - hermes-engine/Pre-built (= 0.79.5)
   - hermes-engine/Pre-built (0.79.5)
-  - NitroModules (0.28.1):
+  - NitroModules (0.30.0):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -2097,7 +2097,7 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  BleNitro: b29ca00b33fc40fbf06273b181a5ddf26f99d40b
+  BleNitro: f5f3acf404c8fcca20c0f724ebcf178402f26d0d
   boost: 7e761d76ca2ce687f7cc98e698152abd03a18f90
   DoubleConversion: cb417026b2400c8f53ae97020b2be961b59470cb
   EXConstants: 9d62a46a36eae6d28cb978efcbc68aef354d1704
@@ -2112,7 +2112,7 @@ SPEC CHECKSUMS:
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd
   glog: 5683914934d5b6e4240e497e0f4a3b42d1854183
   hermes-engine: f03b0e06d3882d71e67e45b073bb827da1a21aae
-  NitroModules: cdf903e7c472d33350962578e65c2bc8cce3f71a
+  NitroModules: 0fece97261fbd996fd4847cb5233686e185404b2
   RCT-Folly: 36fe2295e44b10d831836cc0d1daec5f8abcf809
   RCTDeprecation: 5f638f65935e273753b1f31a365db6a8d6dc53b5
   RCTRequired: 8b46a520ea9071e2bc47d474aa9ca31b4a935bd8
