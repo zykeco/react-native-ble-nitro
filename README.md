@@ -259,6 +259,9 @@ const emptyResult = await ble.writeCharacteristic(
 > [!CAUTION]
 > From version 1.8.0 on the returned subscription object has the type `AsyncSubscription` instead of `Subscription` to indicate that the `remove` method is now async and returns a Promise for better multi-platform compatibility.
 
+> [!IMPORTANT]  
+> It is only possible to have one active notification subscription per specific characteristic. If you call `subscribeToCharacteristic` again for the same characteristic, the previous subscription won't receive any more updates and should be removed previously.
+
 ```typescript
 // Subscribe to characteristic notifications
 const subscription = ble.subscribeToCharacteristic(
