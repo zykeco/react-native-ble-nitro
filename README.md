@@ -69,7 +69,7 @@ npx pod-install # iOS only
 ### Basic Setup
 
 ```typescript
-import { BleNitro, BLEState, AndroidScanMode, type BLEDevice } from 'react-native-ble-nitro';
+import { BleNitro, BleNitroManager, BLEState, AndroidScanMode, type BLEDevice } from 'react-native-ble-nitro';
 
 // Get the singleton instance
 const ble = BleNitro.instance();
