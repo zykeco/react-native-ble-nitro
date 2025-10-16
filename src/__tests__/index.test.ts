@@ -245,12 +245,13 @@ describe('BleNitro', () => {
     });
     await BleManager.connect('device');
 
-    // Mock subscription
-    mockNative.subscribeToCharacteristic.mockImplementation((_device: string, _service: string, _char: string, updateCallback: (charId: string, data: ArrayBuffer) => void, resultCallback: (success: boolean, error: string) => void) => {
-      resultCallback(true, '');
+    // Mock subscription - now returns OperationResult
+    mockNative.subscribeToCharacteristic.mockImplementation((_device: string, _service: string, _char: string, updateCallback: (charId: string, data: ArrayBuffer) => void) => {
       // Simulate notification
       const testData = new Uint8Array([1, 2, 3]);
       updateCallback('char-id', testData.buffer);
+      // Return OperationResult
+      return { success: true, error: null };
     });
 
     const notificationCallback = jest.fn();
