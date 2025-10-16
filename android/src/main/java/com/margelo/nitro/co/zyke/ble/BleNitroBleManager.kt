@@ -772,52 +772,47 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         deviceId: String,
         serviceId: String,
         characteristicId: String,
-        updateCallback: (characteristicId: String, data: ArrayBuffer) -> Unit,
-        resultCallback: (success: Boolean, error: String) -> Unit
-    ) {
+        updateCallback: (characteristicId: String, data: ArrayBuffer) -> Unit
+    ): OperationResult {
         try {
             val gatt = connectedDevices[deviceId]
             if (gatt == null) {
-                resultCallback(false, "Device not connected")
-                return
+                return OperationResult(success = false, error = "Device not connected")
             }
-            
+
             val service = gatt.getService(UUID.fromString(serviceId))
             if (service == null) {
-                resultCallback(false, "Service not found")
-                return
+                return OperationResult(success = false, error = "Service not found")
             }
-            
+
             val characteristic = service.getCharacteristic(UUID.fromString(characteristicId))
             if (characteristic == null) {
-                resultCallback(false, "Characteristic not found")
-                return
+                return OperationResult(success = false, error = "Characteristic not found")
             }
-            
+
             // Enable notifications
             val success = gatt.setCharacteristicNotification(characteristic, true)
             if (!success) {
-                resultCallback(false, "Failed to enable notifications")
-                return
+                return OperationResult(success = false, error = "Failed to enable notifications")
             }
-            
+
             // Store the callback
             val callbacks = deviceCallbacks[deviceId]
             if (callbacks != null) {
                 callbacks.characteristicSubscriptions[characteristicId] = updateCallback
             }
-            
+
             // Write to the descriptor to enable notifications on the device
             val descriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
             if (descriptor != null) {
                 descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                 gatt.writeDescriptor(descriptor)
             }
-            
-            resultCallback(true, "")
-            
+
+            return OperationResult(success = true, error = null)
+
         } catch (e: Exception) {
-            resultCallback(false, "Subscription error: ${e.message}")
+            return OperationResult(success = false, error = "Subscription error: ${e.message}")
         }
     }
 

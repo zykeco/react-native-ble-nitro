@@ -1,5 +1,5 @@
 PODS:
-  - BleNitro (1.7.0):
+  - BleNitro (1.7.1):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -2097,7 +2097,7 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  BleNitro: f5f3acf404c8fcca20c0f724ebcf178402f26d0d
+  BleNitro: b55b68f2555ec5e95c23521d2cdf11b30ea283d4
   boost: 7e761d76ca2ce687f7cc98e698152abd03a18f90
   DoubleConversion: cb417026b2400c8f53ae97020b2be961b59470cb
   EXConstants: 9d62a46a36eae6d28cb978efcbc68aef354d1704

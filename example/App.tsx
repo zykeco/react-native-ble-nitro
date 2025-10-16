@@ -2,7 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { AppState, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { createBle } from './src/bluetooth';
 import { useLayoutEffect, useRef, useState } from 'react';
-import type { BLEDevice, Subscription } from 'react-native-ble-nitro';
+import type { BLEDevice, AsyncSubscription } from 'react-native-ble-nitro';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const HEART_RATE_SERVICE_UUID = '0000180d-0000-1000-8000-00805f9b34fb'.toLowerCase();
@@ -16,8 +16,8 @@ const CUSTOM_SERVICE_UUID = 'AAE28F00-71B5-42A1-8C3C-F9CF6AC969D0'.toLowerCase()
 const RX_CHAR_UUID = 'AAE28F01-71B5-42A1-8C3C-F9CF6AC969D0'.toLowerCase();
 const TX_CHAR_UUID = 'AAE28F02-71B5-42A1-8C3C-F9CF6AC969D0'.toLowerCase();
 
-let unsubscribeRx: Subscription['remove'] | null = null;
-let unsubscribeHr: Subscription['remove'] | null = null;
+let unsubscribeRx: AsyncSubscription['remove'] | null = null;
+let unsubscribeHr: AsyncSubscription['remove'] | null = null;
 
 export default function App() {
   const [isEnabled, setIsEnabled] = useState(false);
@@ -299,10 +299,10 @@ export default function App() {
       throw new Error('No device connected');
     }
     if (bleNotificationSubscription) {
-      unsubscribeRx?.();
+      await unsubscribeRx?.();
       setBleNotificationSubscription(false);
     }
-    const sub = await ble.instance.subscribeToCharacteristic(connectedDeviceId, CUSTOM_SERVICE_UUID, RX_CHAR_UUID, (_, data) => {
+    const sub = ble.instance.subscribeToCharacteristic(connectedDeviceId, CUSTOM_SERVICE_UUID, RX_CHAR_UUID, (_, data) => {
       logMessage('Received data', JSON.stringify(data));
     });
     logMessage('Subscribed to notifications');
@@ -313,17 +313,18 @@ export default function App() {
   const unlistenToBleNotifications = async () => {
     if (bleNotificationSubscription) {
       setBleNotificationSubscription(false);
-      unsubscribeRx?.();
+      await unsubscribeRx?.();
       logMessage('Unsubscribed from notifications');
     }
   }
 
-  const listenToHrNotifications = () => {
+  const listenToHrNotifications = async () => {
     if (!connectedDeviceId) {
       throw new Error('No device connected');
     }
     if (hrNotificationSubscription) {
-      unsubscribeHr?.();
+      logMessage('Already listening to heart rate');
+      await unsubscribeHr?.();
       setHrNotificationSubscription(false);
     }
     const sub = ble.instance.subscribeToCharacteristic(connectedDeviceId, HEART_RATE_SERVICE_UUID, HEART_RATE_MEASUREMENT_UUID, (_, data) => {
@@ -368,8 +369,8 @@ export default function App() {
 
   const unlistenToHrNotifications = async () => {
     if (hrNotificationSubscription) {
+      await unsubscribeHr?.();
       setHrNotificationSubscription(false);
-      unsubscribeHr?.();
       logMessage('Unsubscribed from heart rate');
     }
   };
@@ -379,6 +380,7 @@ export default function App() {
     <StatusBar style="auto" />
       <ScrollView
         style={[styles.container, { padding: 16 }]}
+        nestedScrollEnabled
       >
         <SafeAreaView>
             <Text>Ble Enabled: {isEnabled.toString()}</Text>
@@ -484,9 +486,14 @@ export default function App() {
                                 </TouchableOpacity>
                               )}
                               {hrNotificationSubscription && (
-                                <TouchableOpacity style={styles.button} onPress={unlistenToHrNotifications}>
-                                  <Text>Stop Listening to HR Notifications</Text>
-                                </TouchableOpacity>
+                                <>
+                                  <TouchableOpacity style={styles.button} onPress={listenToHrNotifications}>
+                                    <Text>Try override listen to HR Notifications</Text>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity style={styles.button} onPress={unlistenToHrNotifications}>
+                                    <Text>Stop Listening to HR Notifications</Text>
+                                  </TouchableOpacity>
+                                </>
                               )}
                               <TouchableOpacity style={styles.button} onPress={readBodySensorLocation}>
                                 <Text>Read Body Sensor Location</Text>
@@ -512,7 +519,7 @@ export default function App() {
             {(logs.length > 0) && (
               <View>
                 <Text style={{ marginTop: 16 }}>Logs:</Text>
-                <ScrollView style={{ marginTop: 8, backgroundColor: '#f4f4f4ff', borderRadius: 4, padding: 8, maxHeight: 200 }}>
+                <ScrollView style={{ marginTop: 8, backgroundColor: '#f4f4f4ff', borderRadius: 4, padding: 8, maxHeight: 200 }} nestedScrollEnabled>
                   {logs.sort((a, b) => {
                     return b.toLocaleLowerCase().localeCompare(a.toLocaleLowerCase());
                   }).map((log, i) => (

@@ -57,6 +57,10 @@ export type Subscription = {
   remove: () => void;
 };
 
+export type AsyncSubscription = {
+  remove: () => Promise<void>;
+}
+
 export enum BLEState {
   Unknown = 'Unknown',
   Resetting = 'Resetting',
@@ -584,41 +588,41 @@ export class BleNitroManager {
     serviceId: string,
     characteristicId: string,
     callback: CharacteristicUpdateCallback
-  ): Subscription {
+  ): AsyncSubscription {
     // Check if connected first
     if (!this._connectedDevices[deviceId]) {
       throw new Error('Device not connected');
     }
 
-    let _success = false;
-
-    this.Instance.subscribeToCharacteristic(
+    const { success, error } = this.Instance.subscribeToCharacteristic(
       deviceId,
       BleNitroManager.normalizeGattUUID(serviceId),
       BleNitroManager.normalizeGattUUID(characteristicId),
       (charId: string, data: ArrayBuffer) => {
         callback(charId, arrayBufferToByteArray(data));
       },
-      (success, error) => {
-        _success = success;
-        if (!success) {
-          throw new Error(error);
-        }
-      }
     );
 
-    return {
-      remove: () => {
+    const _success = success;
+
+    if (!_success) {
+      throw new Error(error ?? 'Failed to subscribe to characteristic');
+    }
+
+    const sub: AsyncSubscription = {
+      remove: async () => {
         if (!_success) {
           return;
         }
-        this.unsubscribeFromCharacteristic(
+        await this.unsubscribeFromCharacteristic(
           deviceId,
           serviceId,
           characteristicId
         ).catch(() => {});
       }
     };
+
+    return sub;
   }
 
   /**

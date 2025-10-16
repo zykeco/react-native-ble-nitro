@@ -10,6 +10,7 @@ export {
   type OperationCallback,
   type CharacteristicUpdateCallback,
   type Subscription,
+  type AsyncSubscription,
   type BleNitroManagerOptions,
   BLEState,
   AndroidScanMode,

@@ -10,7 +10,7 @@ export class BleNitro extends BleNitroManager {
    */
   public static instance(): BleNitroManager {
     if (!_instance) {
-      _instance = new BleNitro();
+      _instance = new BleNitroManager();
     }
     return _instance;
   }
