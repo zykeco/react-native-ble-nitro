@@ -256,6 +256,9 @@ const emptyResult = await ble.writeCharacteristic(
 
 #### 📡 Characteristic Notifications
 
+> [!CAUTION]
+> From version 1.8.0 on the returned subscription object has the type `AsyncSubscription` instead of `Subscription` to indicate that the `remove` method is now async and returns a Promise for better multi-platform compatibility.
+
 ```typescript
 // Subscribe to characteristic notifications
 const subscription = ble.subscribeToCharacteristic(
@@ -269,7 +272,7 @@ const subscription = ble.subscribeToCharacteristic(
 );
 
 // Unsubscribe from notifications
-subscription.remove();
+await subscription.remove();
 
 // Or unsubscribe directly
 await ble.unsubscribeFromCharacteristic(deviceId, serviceUUID, characteristicUUID);
@@ -307,7 +310,7 @@ const subscription = ble.subscribeToCharacteristic(
 );
 
 // Unsubscribe when done
-subscription.remove();
+await subscription.remove();
 ```
 
 #### Battery Level Reading
@@ -422,6 +425,10 @@ interface ScanFilter {
 }
 
 interface Subscription {
+  remove: () => Promise<void>;
+}
+
+interface AsyncSubscription {
   remove: () => Promise<void>;
 }
 
