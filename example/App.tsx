@@ -302,7 +302,7 @@ export default function App() {
       await unsubscribeRx?.();
       setBleNotificationSubscription(false);
     }
-    const sub = ble.instance.subscribeToCharacteristic(connectedDeviceId, CUSTOM_SERVICE_UUID, RX_CHAR_UUID, (_, data) => {
+    const sub = await ble.instance.subscribeToCharacteristic(connectedDeviceId, CUSTOM_SERVICE_UUID, RX_CHAR_UUID, (_, data) => {
       logMessage('Received data', JSON.stringify(data));
     });
     logMessage('Subscribed to notifications');
@@ -327,7 +327,7 @@ export default function App() {
       await unsubscribeHr?.();
       setHrNotificationSubscription(false);
     }
-    const sub = ble.instance.subscribeToCharacteristic(connectedDeviceId, HEART_RATE_SERVICE_UUID, HEART_RATE_MEASUREMENT_UUID, (_, data) => {
+    const sub = await ble.instance.subscribeToCharacteristic(connectedDeviceId, HEART_RATE_SERVICE_UUID, HEART_RATE_MEASUREMENT_UUID, (_, data) => {
       const [type, hr] = data;
       logMessage('Heart Rate', hr);
       if (type === 0) return;
@@ -474,6 +474,14 @@ export default function App() {
                               {bleNotificationSubscription && (
                                 <TouchableOpacity style={styles.button} onPress={unlistenToBleNotifications}>
                                   <Text>Stop Listening to BLE Notifications</Text>
+                                </TouchableOpacity>
+                              )}
+                              {!bleNotificationSubscription && !hrNotificationSubscription && (
+                                <TouchableOpacity style={styles.button} onPress={async () => {
+                                  await listenToBleNotifications();
+                                  await listenToHrNotifications();
+                                }}>
+                                  <Text>Listen to HR and Custom Notifications</Text>
                                 </TouchableOpacity>
                               )}
                             </>
