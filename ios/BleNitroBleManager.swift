@@ -389,22 +389,24 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         deviceId: String,
         serviceId: String,
         characteristicId: String,
-        updateCallback: @escaping (String, ArrayBuffer) -> Void
-    ) throws -> OperationResult {
+        updateCallback: @escaping (String, ArrayBuffer) -> Void,
+        completionCallback: @escaping (Bool, String) -> Void
+    ) throws {
         guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
-            return OperationResult(success: false, error: "Characteristic not found")
+            completionCallback(false, "Characteristic not found")
+            return
         }
 
         // Ensure peripheral delegate exists
         guard let delegate = peripheralDelegates[deviceId] else {
-            return OperationResult(success: false, error: "Device not properly connected or delegate not found")
+            completionCallback(false, "Device not properly connected or delegate not found")
+            return
         }
 
         delegate.notificationCallbacks[characteristic.uuid] = updateCallback
+        delegate.subscriptionCallbacks[characteristic.uuid] = completionCallback
 
         characteristic.service?.peripheral?.setNotifyValue(true, for: characteristic)
-
-        return OperationResult(success: true, error: nil)
     }
 
     public func unsubscribeFromCharacteristic(

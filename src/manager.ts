@@ -581,48 +581,48 @@ export class BleNitroManager {
    * @param serviceId ID of the service
    * @param characteristicId ID of the characteristic
    * @param callback Callback function called when notification is received
-   * @returns Subscription
+   * @returns Promise resolving to AsyncSubscription when subscription is established
    */
-  public subscribeToCharacteristic(
+  public async subscribeToCharacteristic(
     deviceId: string,
     serviceId: string,
     characteristicId: string,
     callback: CharacteristicUpdateCallback
-  ): AsyncSubscription {
-    // Check if connected first
-    if (!this._connectedDevices[deviceId]) {
-      throw new Error('Device not connected');
-    }
-
-    const { success, error } = this.Instance.subscribeToCharacteristic(
-      deviceId,
-      BleNitroManager.normalizeGattUUID(serviceId),
-      BleNitroManager.normalizeGattUUID(characteristicId),
-      (charId: string, data: ArrayBuffer) => {
-        callback(charId, arrayBufferToByteArray(data));
-      },
-    );
-
-    const _success = success;
-
-    if (!_success) {
-      throw new Error(error ?? 'Failed to subscribe to characteristic');
-    }
-
-    const sub: AsyncSubscription = {
-      remove: async () => {
-        if (!_success) {
-          return;
-        }
-        await this.unsubscribeFromCharacteristic(
-          deviceId,
-          serviceId,
-          characteristicId
-        ).catch(() => {});
+  ): Promise<AsyncSubscription> {
+    return new Promise((resolve, reject) => {
+      // Check if connected first
+      if (!this._connectedDevices[deviceId]) {
+        reject(new Error('Device not connected'));
+        return;
       }
-    };
 
-    return sub;
+      this.Instance.subscribeToCharacteristic(
+        deviceId,
+        BleNitroManager.normalizeGattUUID(serviceId),
+        BleNitroManager.normalizeGattUUID(characteristicId),
+        (charId: string, data: ArrayBuffer) => {
+          callback(charId, arrayBufferToByteArray(data));
+        },
+        (success: boolean, error: string) => {
+          if (!success) {
+            reject(new Error(error || 'Failed to subscribe to characteristic'));
+            return;
+          }
+
+          const sub: AsyncSubscription = {
+            remove: async () => {
+              await this.unsubscribeFromCharacteristic(
+                deviceId,
+                serviceId,
+                characteristicId
+              ).catch(() => {});
+            }
+          };
+
+          resolve(sub);
+        }
+      );
+    });
   }
 
   /**

@@ -53,11 +53,22 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     private val connectedDevices = ConcurrentHashMap<String, BluetoothGatt>()
     private val deviceCallbacks = ConcurrentHashMap<String, DeviceCallbacks>()
     
+    // Read callback storage for proper response handling (key: deviceId:characteristicId)
+    private val readCallbacks = ConcurrentHashMap<String, (Boolean, ArrayBuffer, String) -> Unit>()
+
     // Write callback storage for proper response handling (key: deviceId:characteristicId)
     private val writeCallbacks = ConcurrentHashMap<String, (Boolean, ArrayBuffer, String) -> Unit>()
-    
+
     // RSSI callback storage (key: deviceId)
     private val rssiCallbacks = ConcurrentHashMap<String, (Boolean, Double, String) -> Unit>()
+
+    // GATT operation queue for sequential descriptor writes (Android BLE requirement)
+    private val gattOperationQueue = java.util.concurrent.LinkedBlockingQueue<GattOperation>()
+    private var isGattOperationInProgress = false
+    private val gattOperationLock = Any()
+
+    // Descriptor write callback storage (key: deviceId:descriptorUuid)
+    private val descriptorWriteCallbacks = ConcurrentHashMap<String, (Boolean, String) -> Unit>()
     
     // Helper class to store device callbacks
     private data class DeviceCallbacks(
@@ -66,6 +77,17 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         var serviceDiscoveryCallback: ((success: Boolean, error: String) -> Unit)? = null,
         var characteristicSubscriptions: MutableMap<String, (characteristicId: String, data: ArrayBuffer) -> Unit> = mutableMapOf()
     )
+
+    // Sealed class for GATT operations that need to be queued
+    private sealed class GattOperation {
+        data class WriteDescriptor(
+            val gatt: BluetoothGatt,
+            val descriptor: BluetoothGattDescriptor,
+            val value: ByteArray,
+            val deviceId: String,
+            val callback: (Boolean, String) -> Unit
+        ) : GattOperation()
+    }
     
     init {
         // Try to get context from React Native application context
@@ -275,17 +297,23 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             
             override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
                 // Handle characteristic read result
-                val data = if (status == BluetoothGatt.GATT_SUCCESS) {
-                    val value = characteristic.value ?: byteArrayOf()
-                    // Create direct ByteBuffer as required by ArrayBuffer.wrap()
-                    val directBuffer = java.nio.ByteBuffer.allocateDirect(value.size)
-                    directBuffer.put(value)
-                    directBuffer.flip()
-                    ArrayBuffer.wrap(directBuffer)
-                } else {
-                    ArrayBuffer.allocate(0)
+                val deviceId = gatt.device.address
+                val characteristicId = characteristic.uuid.toString()
+                val callbackKey = "$deviceId:$characteristicId"
+
+                readCallbacks.remove(callbackKey)?.let { callback ->
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        val value = characteristic.value ?: byteArrayOf()
+                        // Create direct ByteBuffer as required by ArrayBuffer.wrap()
+                        val directBuffer = java.nio.ByteBuffer.allocateDirect(value.size)
+                        directBuffer.put(value)
+                        directBuffer.flip()
+                        val data = ArrayBuffer.wrap(directBuffer)
+                        callback(true, data, "")
+                    } else {
+                        callback(false, ArrayBuffer.allocate(0), "Read failed with status: $status")
+                    }
                 }
-                // This will be handled by pending operations
             }
             
             override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
@@ -339,6 +367,68 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             
             override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
                 // Handle descriptor write (for enabling/disabling notifications)
+                val deviceId = gatt.device.address
+                val descriptorUuid = descriptor.uuid.toString()
+                val callbackKey = "$deviceId:$descriptorUuid"
+
+                // Get and invoke the stored callback
+                descriptorWriteCallbacks.remove(callbackKey)?.let { callback ->
+                    if (status == BluetoothGatt.GATT_SUCCESS) {
+                        callback(true, "")
+                    } else {
+                        callback(false, "Descriptor write failed with status: $status")
+                    }
+                }
+
+                // Process next queued operation
+                processNextGattOperation()
+            }
+        }
+    }
+
+    /**
+     * Enqueue a GATT operation to be executed sequentially.
+     * Android BLE requires that only one GATT operation runs at a time.
+     */
+    private fun enqueueGattOperation(operation: GattOperation) {
+        gattOperationQueue.add(operation)
+        processNextGattOperation()
+    }
+
+    /**
+     * Process the next GATT operation in the queue if none is currently running.
+     */
+    private fun processNextGattOperation() {
+        synchronized(gattOperationLock) {
+            if (isGattOperationInProgress) {
+                return
+            }
+
+            val operation = gattOperationQueue.poll() ?: return
+            isGattOperationInProgress = true
+
+            when (operation) {
+                is GattOperation.WriteDescriptor -> {
+                    val callbackKey = "${operation.deviceId}:${operation.descriptor.uuid}"
+                    descriptorWriteCallbacks[callbackKey] = { success, error ->
+                        synchronized(gattOperationLock) {
+                            isGattOperationInProgress = false
+                        }
+                        operation.callback(success, error)
+                    }
+
+                    operation.descriptor.value = operation.value
+                    val success = operation.gatt.writeDescriptor(operation.descriptor)
+                    if (!success) {
+                        descriptorWriteCallbacks.remove(callbackKey)
+                        synchronized(gattOperationLock) {
+                            isGattOperationInProgress = false
+                        }
+                        operation.callback(false, "Failed to initiate descriptor write")
+                        // Try next operation
+                        processNextGattOperation()
+                    }
+                }
             }
         }
     }
@@ -672,34 +762,32 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 callback(false, ArrayBuffer.allocate(0), "Device not connected")
                 return
             }
-            
+
             val service = gatt.getService(UUID.fromString(serviceId))
             if (service == null) {
                 callback(false, ArrayBuffer.allocate(0), "Service not found")
                 return
             }
-            
+
             val characteristic = service.getCharacteristic(UUID.fromString(characteristicId))
             if (characteristic == null) {
                 callback(false, ArrayBuffer.allocate(0), "Characteristic not found")
                 return
             }
-            
+
+            // Store callback for when read completes in onCharacteristicRead
+            val callbackKey = "$deviceId:$characteristicId"
+            readCallbacks[callbackKey] = callback
+
+            // Initiate the read operation
             val success = gatt.readCharacteristic(characteristic)
             if (!success) {
-                callback(false, ArrayBuffer.allocate(0), "Failed to start read operation")
+                // Remove callback and report failure immediately
+                readCallbacks.remove(callbackKey)
+                callback(false, ArrayBuffer.allocate(0), "Failed to initiate read operation")
             }
-            // The actual result will come in onCharacteristicRead callback
-            // For now, we'll return the cached value
-            val data = characteristic.value?.let { value ->
-                // Create direct ByteBuffer as required by ArrayBuffer.wrap()
-                val directBuffer = java.nio.ByteBuffer.allocateDirect(value.size)
-                directBuffer.put(value)
-                directBuffer.flip()
-                ArrayBuffer.wrap(directBuffer)
-            } ?: ArrayBuffer.allocate(0)
-            callback(success, data, if (success) "" else "Read operation failed")
-            
+            // If success, wait for onCharacteristicRead callback
+
         } catch (e: Exception) {
             callback(false, ArrayBuffer.allocate(0), "Read error: ${e.message}")
         }
@@ -772,47 +860,61 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         deviceId: String,
         serviceId: String,
         characteristicId: String,
-        updateCallback: (characteristicId: String, data: ArrayBuffer) -> Unit
-    ): OperationResult {
+        updateCallback: (characteristicId: String, data: ArrayBuffer) -> Unit,
+        completionCallback: (success: Boolean, error: String) -> Unit
+    ) {
         try {
             val gatt = connectedDevices[deviceId]
             if (gatt == null) {
-                return OperationResult(success = false, error = "Device not connected")
+                completionCallback(false, "Device not connected")
+                return
             }
 
             val service = gatt.getService(UUID.fromString(serviceId))
             if (service == null) {
-                return OperationResult(success = false, error = "Service not found")
+                completionCallback(false, "Service not found")
+                return
             }
 
             val characteristic = service.getCharacteristic(UUID.fromString(characteristicId))
             if (characteristic == null) {
-                return OperationResult(success = false, error = "Characteristic not found")
+                completionCallback(false, "Characteristic not found")
+                return
             }
 
-            // Enable notifications
+            // Enable notifications locally
             val success = gatt.setCharacteristicNotification(characteristic, true)
             if (!success) {
-                return OperationResult(success = false, error = "Failed to enable notifications")
+                completionCallback(false, "Failed to enable notifications")
+                return
             }
 
-            // Store the callback
+            // Store the update callback
             val callbacks = deviceCallbacks[deviceId]
             if (callbacks != null) {
                 callbacks.characteristicSubscriptions[characteristicId] = updateCallback
             }
 
-            // Write to the descriptor to enable notifications on the device
+            // Write to the CCCD descriptor to enable notifications on the remote device
+            // This must be queued to ensure sequential GATT operations
             val descriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
             if (descriptor != null) {
-                descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                gatt.writeDescriptor(descriptor)
+                enqueueGattOperation(
+                    GattOperation.WriteDescriptor(
+                        gatt = gatt,
+                        descriptor = descriptor,
+                        value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
+                        deviceId = deviceId,
+                        callback = completionCallback
+                    )
+                )
+            } else {
+                // No CCCD descriptor - some characteristics may not need it
+                completionCallback(true, "")
             }
 
-            return OperationResult(success = true, error = null)
-
         } catch (e: Exception) {
-            return OperationResult(success = false, error = "Subscription error: ${e.message}")
+            completionCallback(false, "Subscription error: ${e.message}")
         }
     }
 
@@ -828,39 +930,48 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 callback(false, "Device not connected")
                 return
             }
-            
+
             val service = gatt.getService(UUID.fromString(serviceId))
             if (service == null) {
                 callback(false, "Service not found")
                 return
             }
-            
+
             val characteristic = service.getCharacteristic(UUID.fromString(characteristicId))
             if (characteristic == null) {
                 callback(false, "Characteristic not found")
                 return
             }
-            
-            // Disable notifications
+
+            // Disable notifications locally
             val success = gatt.setCharacteristicNotification(characteristic, false)
             if (!success) {
                 callback(false, "Failed to disable notifications")
                 return
             }
-            
-            // Remove the callback
+
+            // Remove the update callback
             val callbacks = deviceCallbacks[deviceId]
             callbacks?.characteristicSubscriptions?.remove(characteristicId)
-            
-            // Write to the descriptor to disable notifications on the device
+
+            // Write to the CCCD descriptor to disable notifications on the remote device
+            // This must be queued to ensure sequential GATT operations
             val descriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
             if (descriptor != null) {
-                descriptor.value = BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
-                gatt.writeDescriptor(descriptor)
+                enqueueGattOperation(
+                    GattOperation.WriteDescriptor(
+                        gatt = gatt,
+                        descriptor = descriptor,
+                        value = BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE,
+                        deviceId = deviceId,
+                        callback = callback
+                    )
+                )
+            } else {
+                // No CCCD descriptor - some characteristics may not need it
+                callback(true, "")
             }
-            
-            callback(true, "")
-            
+
         } catch (e: Exception) {
             callback(false, "Unsubscription error: ${e.message}")
         }

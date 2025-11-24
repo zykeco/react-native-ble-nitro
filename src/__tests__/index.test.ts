@@ -245,17 +245,17 @@ describe('BleNitro', () => {
     });
     await BleManager.connect('device');
 
-    // Mock subscription - now returns OperationResult
-    mockNative.subscribeToCharacteristic.mockImplementation((_device: string, _service: string, _char: string, updateCallback: (charId: string, data: ArrayBuffer) => void) => {
+    // Mock subscription - now uses completion callback (async)
+    mockNative.subscribeToCharacteristic.mockImplementation((_device: string, _service: string, _char: string, updateCallback: (charId: string, data: ArrayBuffer) => void, completionCallback: (success: boolean, error: string) => void) => {
       // Simulate notification
       const testData = new Uint8Array([1, 2, 3]);
       updateCallback('char-id', testData.buffer);
-      // Return OperationResult
-      return { success: true, error: null };
+      // Call completion callback to signal subscription is established
+      completionCallback(true, '');
     });
 
     const notificationCallback = jest.fn();
-    const subscription = BleManager.subscribeToCharacteristic('device', 'service', 'char', notificationCallback);
+    const subscription = await BleManager.subscribeToCharacteristic('device', 'service', 'char', notificationCallback);
 
     expect(mockNative.subscribeToCharacteristic).toHaveBeenCalled();
     expect(notificationCallback).toHaveBeenCalledWith('char-id', [1, 2, 3]);
