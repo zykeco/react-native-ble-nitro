@@ -257,8 +257,8 @@ const emptyResult = await ble.writeCharacteristic(
 #### 📡 Characteristic Notifications
 
 > [!CAUTION]
-> From version 1.8.0 on the returned subscription object has the type `AsyncSubscription` instead of `Subscription` to indicate that the `remove` method is now async and returns a Promise for better multi-platform compatibility.
-> From version 1.9.0 on the `subscribeToCharacteristic` method is async, so use await when calling it. This was introduced to fix the handling of gatt queuing on Android.
+> **From version 1.8.0** on the returned subscription object has the type `AsyncSubscription` instead of `Subscription` to indicate that the `remove` method is now async and returns a Promise for better multi-platform compatibility.
+> **From version 1.9.0** on the `subscribeToCharacteristic` method is async, so use await when calling it. This was introduced to fix the handling of gatt queuing on Android.
 
 > [!IMPORTANT]  
 > It is only possible to have one active notification subscription per specific characteristic. If you call `subscribeToCharacteristic` again for the same characteristic, the previous subscription won't receive any more updates and should be removed previously.
@@ -303,7 +303,7 @@ const deviceId = await ble.connect(
 );
 await ble.discoverServices(deviceId);
 
-const subscription = ble.subscribeToCharacteristic(
+const subscription = await ble.subscribeToCharacteristic(
   deviceId,
   HEART_RATE_SERVICE,
   HEART_RATE_MEASUREMENT,
