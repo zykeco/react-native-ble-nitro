@@ -214,6 +214,9 @@ export default function App() {
     if (!connectedDeviceId) {
       return;
     }
+    if (!deviceIsConnected) {
+      return;
+    }
     await ble.instance.disconnect(connectedDeviceId);
     onDisconnected(connectedDeviceId, false);
   }
