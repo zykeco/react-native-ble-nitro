@@ -656,7 +656,10 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     }
 
     override fun isConnected(deviceId: String): Boolean {
-        return connectedDevices.containsKey(deviceId)
+        val gatt = connectedDevices[deviceId] ?: return false
+        val bluetoothManager = appContext?.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager ?: return false
+        val connectionState = bluetoothManager.getConnectionState(gatt.device, BluetoothProfile.GATT)
+        return connectionState == BluetoothProfile.STATE_CONNECTED
     }
 
     override fun requestMTU(deviceId: String, mtu: Double): Double {

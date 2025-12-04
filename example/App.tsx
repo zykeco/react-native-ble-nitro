@@ -25,6 +25,7 @@ export default function App() {
   const [scanServiceUUIDs, setScanServiceUUIDs] = useState<string>(`${HEART_RATE_SERVICE_UUID}`);
   const [scanResults, setScanResults] = useState<BLEDevice[]>([]);
   const [connectedDeviceId, setConnectedDeviceId] = useState<string | null>(null);
+  const [deviceIsConnected, setDeviceIsConnected] = useState(false);
   const [connectedDeviceServiceUUIDs, setConnectedDeviceServiceUUIDs] = useState<string[]>([]);
   const [connectedDeviceCharacteristics, setConnectedDeviceCharacteristics] = useState<Record<string, string[]>>({});
   const [bleNotificationSubscription, setBleNotificationSubscription] = useState<boolean>(false);
@@ -147,7 +148,7 @@ export default function App() {
     }
     await unlistenToBleNotifications();
     await unlistenToHrNotifications();
-    setConnectedDeviceId(null);
+    checkConnection(deviceId);
     setConnectedDeviceServiceUUIDs([]);
     setConnectedDeviceCharacteristics({});
   }
@@ -161,6 +162,7 @@ export default function App() {
       logMessage(`1 Connecting to ${deviceId}`);
       const connectedId = await ble.instance.connect(deviceId, onDisconnected);
       setConnectedDeviceId(connectedId);
+      checkConnection(connectedId);
       logMessage(`2 Connected to ${connectedId}`);
       await ble.instance.discoverServices(connectedId);
       logMessage(`3 Discovered services for ${connectedId}`);
@@ -192,6 +194,7 @@ export default function App() {
       });
       logMessage('Found and connected', connectedId);
       setConnectedDeviceId(connectedId);
+      checkConnection(connectedId);
       const servicesWithCharacteristics = await ble.instance.getServicesWithCharacteristics(connectedId);
       setConnectedDeviceServiceUUIDs(servicesWithCharacteristics.map((s) => s.uuid));
       resetScannedDevices();
@@ -212,6 +215,7 @@ export default function App() {
       return;
     }
     await ble.instance.disconnect(connectedDeviceId);
+    onDisconnected(connectedDeviceId, false);
   }
 
   const readRSSI = async () => {
@@ -375,6 +379,17 @@ export default function App() {
     }
   };
 
+  const checkConnection = (deviceId = connectedDeviceId) => {
+    if (!deviceId) {
+      logMessage('No connected device');
+      return false;
+    }
+    const isConnected = ble.instance.isConnected(deviceId);
+    setDeviceIsConnected(isConnected);
+    logMessage(`Device ${deviceId} is ${isConnected ? 'connected' : 'disconnected'}`);
+    return isConnected;
+  };
+
   return (
     <>
     <StatusBar style="auto" />
@@ -441,6 +456,7 @@ export default function App() {
                     <Text style={{ marginTop: 16 }}>Connected Device:</Text>
                     <View style={{ padding: 8, marginTop: 8, backgroundColor: '#f4f4f4ff', borderRadius: 4, }}>
                       <Text selectable>ID: {connectedDeviceId}</Text>
+                      <Text>Is connected: {deviceIsConnected.toString()}</Text>
                       <Text style={{ borderTopWidth: 1 }}>Services:</Text>
                       {connectedDeviceServiceUUIDs.map((s, i) => (
                         <View key={s} style={{ borderBottomWidth: i === connectedDeviceServiceUUIDs.length - 1 ? 0 : 1 }}>
@@ -516,14 +532,26 @@ export default function App() {
                       <TouchableOpacity style={styles.button} onPress={readRSSI}>
                         <Text>Read RSSI</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.button} onPress={disconnectDevice}>
-                        <Text>Disconnect</Text>
-                      </TouchableOpacity>
+                      {deviceIsConnected && (
+                        <TouchableOpacity style={styles.button} onPress={disconnectDevice}>
+                          <Text>Disconnect</Text>
+                        </TouchableOpacity>
+                      )}
+                      {!deviceIsConnected && (
+                        <TouchableOpacity style={styles.button} onPress={() => {
+                          connectDevice(connectedDeviceId);
+                        }}>
+                          <Text>Connect</Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   </>
                 )}
               </>
             )}
+            <TouchableOpacity style={styles.button} onPress={() => checkConnection()}>
+              <Text>Check Connection</Text>
+            </TouchableOpacity>
             {(logs.length > 0) && (
               <View>
                 <Text style={{ marginTop: 16 }}>Logs:</Text>
