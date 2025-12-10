@@ -1,0 +1,80 @@
+# Source files needed for React Native (exports points to src/)
+# /src/ - DO NOT IGNORE: React Native needs TypeScript source files
+
+# Development files
+.eslintrc.*
+jest.config.*
+jest.setup.*
+tsconfig.*
+*.tsbuildinfo
+
+# Tests (but keep them out of src/ since React Native uses it)
+src/__tests__/
+src/**/*.test.*
+src/**/*.spec.*
+**/*.test.*
+**/*.spec.*
+coverage/
+.nyc_output/
+
+# Development dependencies and tools
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Generated Nitro code is INCLUDED in npm package
+# Users need the generated native bindings to use the library
+
+# Build artifacts not needed in npm
+plugin/src/
+plugin/tsconfig.json
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# Development documentation
+CONTRIBUTING.md
+API_DIFFERENCES.md
+
+# Temporary and cache files
+*.tmp
+*.temp
+.cache/
+.parcel-cache/
+
+# Environment files
+.env
+.env.*
+
+# Example and demo files
+example/
+examples/
+demo/
+docs/
+
+# CI/CD files
+.github/
+.travis.yml
+.circleci/
+appveyor.yml
+
+# Misc
+.claude/
+*.log
