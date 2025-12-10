@@ -1,0 +1,13 @@
+{
+  "cxxNamespace": ["margelo", "nitro", "co", "zyke", "ble", "dfu"],
+  "autolinking": {
+    "NativeDfuManager": {
+      "swift": "DfuNitroManager",
+      "kotlin": "DfuNitroManager"
+    },
+    "NativeDfuManagerFactory": {
+      "swift": "DfuNitroManagerFactory",
+      "kotlin": "DfuNitroManagerFactory"
+    }
+  }
+}
