@@ -18,3 +18,19 @@ export {
 } from "./manager";
 
 export { BleNitro } from './singleton';
+
+// DFU (Device Firmware Update) exports
+export {
+  type DfuProgressInfo,
+  type DfuServiceInitiatorOptions,
+  type DfuProgressCallback,
+  type DfuStateCallback,
+  type DfuErrorCallback,
+  type DfuCompletionCallback,
+  DfuState,
+  DfuFirmwareType,
+  DfuError,
+  DfuManager,
+} from './dfu-manager';
+
+export { DfuNitro } from './dfu-singleton';
