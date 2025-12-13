@@ -77,7 +77,7 @@ const ble = BleNitro.instance();
 // Use custom manager instance (e.g. for iOS state restoration)
 // It is recommended to create this instance in an extra file seperated from other BLE business logic for better fast-refresh support
 const ble = new BleNitroManager({
-  restoreStateIdentifier: 'my-unique-identifier',
+  restoreIdentifier: 'my-unique-identifier',
   onRestoredState: (peripherals) => {
     console.log('Restored peripherals:', peripherals);
   },
@@ -389,7 +389,7 @@ There is built-in support for iOS state restoration. You need to provide a uniqu
 import { BleNitroManager, BLEDevice } from 'react-native-ble-nitro';
 
 const customBleInstance = new BleNitroManager({
-  restoreStateIdentifier: 'my-unique-identifier', // unique identifier for state restoration
+  restoreIdentifier: 'my-unique-identifier', // unique identifier for state restoration
   onRestoredState: (peripherals: BLEDevice[]) => {
     console.log('Restored peripherals:', peripherals);
     // Handle restored peripherals
