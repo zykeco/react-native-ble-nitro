@@ -293,7 +293,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     
     public func getCharacteristics(
         deviceId: String,
-        serviceId: String,
+        serviceId: String
     ) throws -> [String] {
         guard let peripheral = connectedPeripherals[deviceId] else {
             return []
