@@ -9,18 +9,18 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "expo": "~53.0.20",
-    "expo-status-bar": "~2.2.3",
-    "react": "19.0.0",
-    "react-native": "0.79.5",
-    "react-native-ble-nitro": "file:../react-native-ble-nitro-1.9.1.tgz",
-    "react-native-nitro-modules": "^0.30.0",
-    "react-native-safe-area-context": "5.4.0"
+    "expo": "^54.0.0",
+    "expo-status-bar": "~3.0.9",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-ble-nitro": "file:../react-native-ble-nitro-1.9.3.tgz",
+    "react-native-nitro-modules": "^0.33.2",
+    "react-native-safe-area-context": "~5.6.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.25.2",
-    "@types/react": "~19.0.10",
-    "typescript": "~5.8.3"
+    "@babel/core": "^7.28.6",
+    "@types/react": "~19.1.0",
+    "typescript": "~5.9.2"
   },
   "private": true
 }
