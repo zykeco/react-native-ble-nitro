@@ -21,6 +21,8 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     private var isCurrentlyScanning = false
     private var currentScanFilter: ScanFilter?
     private var centralManagerDelegate: BleCentralManagerDelegate!
+    private let lazyInitEnabled: Bool
+    private var isCentralManagerInitialized = false
     
     // MARK: - Restore State Properties
     internal var restoreStateCallback: (([BLEDevice]) -> Void)?
@@ -32,8 +34,14 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     public init(restoreStateIdentifier: String? = nil, restoreStateCallback: (([BLEDevice]) -> Void)? = nil) {
         self.restoreStateIdentifier = restoreStateIdentifier
         self.restoreStateCallback = restoreStateCallback
+        self.lazyInitEnabled = Bundle.main.object(forInfoDictionaryKey: "BLENitroLazyInit") as? Bool ?? false
         super.init()
-        setupCentralManager()
+        if lazyInitEnabled && restoreStateIdentifier != nil {
+            print("[BleNitro] Warning: lazyInit is enabled with restoreStateIdentifier. State restoration will be delayed until first BLE API call.")
+        }
+        if !lazyInitEnabled {
+            setupCentralManager()
+        }
     }
     
     private func setupCentralManager() {
@@ -47,11 +55,26 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         }
 
         centralManager = CBCentralManager(delegate: centralManagerDelegate, queue: DispatchQueue.main, options: options.isEmpty ? nil : options)
+        isCentralManagerInitialized = true
     }
-    
-    
+
+    // MARK: - Thread-Safe Lazy Initialization
+    private func ensureCentralManager() {
+        guard !isCentralManagerInitialized else { return }
+        if Thread.isMainThread {
+            setupCentralManager()
+        } else {
+            DispatchQueue.main.sync {
+                guard !self.isCentralManagerInitialized else { return }
+                self.setupCentralManager()
+            }
+        }
+    }
+
+
     // MARK: - State Management
     public func state() throws -> BLEState {
+        ensureCentralManager()
         let bleState = mapCBManagerStateToBLEState(centralManager.state)
         return bleState
     }
@@ -65,6 +88,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     public func subscribeToStateChange(
         stateCallback: @escaping (BLEState) -> Void
     ) throws -> OperationResult {
+        ensureCentralManager()
         self.stateChangeCallback = stateCallback
         return OperationResult(success: true, error: nil)
     }
@@ -83,6 +107,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     
     // MARK: - Scanning Operations
     public func startScan(filter: ScanFilter, callback: @escaping (BLEDevice?, String?) -> Void) throws {
+        ensureCentralManager()
         guard centralManager.state == .poweredOn else {
             throw NSError(domain: "BleNitroError", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "Bluetooth is not powered on"
@@ -110,6 +135,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     }
     
     public func stopScan() throws -> Bool {
+        ensureCentralManager()
         centralManager.stopScan()
         isCurrentlyScanning = false
         scanCallback = nil
@@ -124,6 +150,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     
     // MARK: - Device Discovery
     public func getConnectedDevices(services: [String]) throws -> [BLEDevice] {
+        ensureCentralManager()
         var connectedDevices: [BLEDevice] = []
         
         // First check our tracked connected peripherals
@@ -198,6 +225,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     
     // MARK: - Connection Management
     public func connect(deviceId: String, callback: @escaping (Bool, String, String) -> Void, disconnectCallback: ((String, Bool, String) -> Void)?, autoConnectAndroid: Bool?) throws {
+        ensureCentralManager()
         // Find peripheral by identifier
         guard let peripheral = findPeripheral(by: deviceId) else {
             callback(false, "", "Peripheral not found")
@@ -222,6 +250,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     }
     
     public func disconnect(deviceId: String, callback: @escaping (Bool, String) -> Void) throws {
+        ensureCentralManager()
         guard let peripheral = connectedPeripherals[deviceId] else {
             callback(false, "Peripheral not connected")
             return
@@ -434,6 +463,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     
     // MARK: - Helper Methods
     private func findPeripheral(by deviceId: String) -> CBPeripheral? {
+        ensureCentralManager()
         // Check connected peripherals first
         if let peripheral = connectedPeripherals[deviceId] {
             return peripheral
