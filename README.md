@@ -488,7 +488,17 @@ interface BleNitroPluginProps {
   modes?: ('peripheral' | 'central')[]; // iOS background modes
   bluetoothAlwaysPermission?: string | false; // iOS permission message
   androidAdvertisingEnabled?: boolean; // Android Peripheral mode (advertising)
+  iOSLazyInit?: boolean;            // Lazy init BLE module to prevent permission dialog on app launch (delays state restoration)
 }
+```
+
+### React Native CLI
+
+To use lazy BLE initialization, add the following to your `Info.plist`:
+
+```xml
+<key>BLENitroLazyInit</key>
+<true/>
 ```
 
 ### iOS Background Modes
