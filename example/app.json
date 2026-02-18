@@ -38,6 +38,11 @@
           "androidAdvertisingEnabled": false
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e0af1bc4-4583-4a90-bad5-5d04558e85bb"
+      }
+    }
   }
 }
