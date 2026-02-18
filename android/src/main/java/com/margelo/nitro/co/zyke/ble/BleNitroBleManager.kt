@@ -438,6 +438,10 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         return
     }
 
+    // iOS-only method, no-op on Android
+    override fun iosLazyInit() {
+    }
+
     // Scanning operations
     override fun startScan(filter: com.margelo.nitro.co.zyke.ble.ScanFilter, callback: (device: BLEDevice?, error: String?) -> Unit) {
         try {

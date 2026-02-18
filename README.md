@@ -109,6 +109,11 @@ subscription.remove();
 
 // Open Bluetooth settings
 await ble.openSettings();
+
+// Explicitly initialize BLE on iOS (optional, iOS only)
+// Useful to trigger the Bluetooth permission dialog at a specific moment
+// when using lazy iOS initialization.
+ble.iosLazyInit();
 ```
 
 #### 🔍 Device Scanning
@@ -488,7 +493,25 @@ interface BleNitroPluginProps {
   modes?: ('peripheral' | 'central')[]; // iOS background modes
   bluetoothAlwaysPermission?: string | false; // iOS permission message
   androidAdvertisingEnabled?: boolean; // Android Peripheral mode (advertising)
+  iOSLazyInit?: boolean;            // Lazy init BLE module to prevent permission dialog on app launch (delays state restoration)
 }
+```
+
+### React Native CLI
+
+To use lazy BLE initialization, add the following to your `Info.plist`:
+
+```xml
+<key>BLENitroLazyInit</key>
+<true/>
+```
+
+
+### Lazy initialization
+With iOS Lazy initialization, BLE will be automatically initialized on the first API call (e.g. `startScan()`, `connect()`, `state()`), which will also trigger the permission dialog. Optionally, you can call `iosLazyInit()` to explicitly initialize BLE ahead of time:
+
+```typescript
+bleNitro.iosLazyInit();
 ```
 
 ### iOS Background Modes

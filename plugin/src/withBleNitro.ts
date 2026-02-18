@@ -39,6 +39,15 @@ export interface BleNitroPluginProps {
    * @default "Allow $(PRODUCT_NAME) to advertise bluetooth devices"
    */
   androidAdvertisingEnabled?: boolean;
+
+  /**
+   * iOS only: Enables lazy-initialisation for CBCentralManager until first BLE API call.
+   * Prevents the Bluetooth permission dialog from appearing at app launch.
+   * Note: When used with a restoreStateIdentifier, state restoration will be
+   * delayed until the first BLE API call.
+   * @default false
+   */
+  iOSLazyInit?: boolean;
 }
 
 const BLUETOOTH_PERMISSIONS = [
@@ -120,15 +129,20 @@ export const withBleNitroAndroid: ConfigPlugin<BleNitroPluginProps> = (config, p
 };
 
 export const withBleNitroIOS: ConfigPlugin<BleNitroPluginProps> = (config, props = {}) => {
-  const { 
-    modes, 
-    bluetoothAlwaysPermission = 'Allow $(PRODUCT_NAME) to connect to bluetooth devices' 
+  const {
+    modes,
+    bluetoothAlwaysPermission = 'Allow $(PRODUCT_NAME) to connect to bluetooth devices',
+    iOSLazyInit,
   } = props;
 
   return withInfoPlist(config, (config) => {
     // Add NSBluetoothAlwaysUsageDescription
     if (bluetoothAlwaysPermission !== false) {
       config.modResults.NSBluetoothAlwaysUsageDescription = bluetoothAlwaysPermission;
+    }
+
+    if (iOSLazyInit) {
+      config.modResults.BLENitroLazyInit = true;
     }
 
     // Add background modes if specified

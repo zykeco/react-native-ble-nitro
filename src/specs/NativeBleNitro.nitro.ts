@@ -73,6 +73,7 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
   // ios only
   restoreStateIdentifier?: string;
   setRestoreStateCallback(callback: RestoreCallback): void;
+  iosLazyInit(): void;
 
   // Scanning operations
   startScan(filter: ScanFilter, callback: ScanCallback): void;
