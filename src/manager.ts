@@ -155,7 +155,17 @@ export class BleNitroManager {
   }
 
   /**
-   * 
+   * Explicitly initializes BLE on iOS.
+   * Call this to trigger the Bluetooth permission dialog at a specific moment
+   * when using lazy iOS initialization.
+   * No-op on Android.
+   */
+  public iosLazyInit(): void {
+    this.Instance.iosLazyInit();
+  }
+
+  /**
+   *
    * Registers callback and returns restored peripheral state in it. Not working from 1.7.x upwards for singleton implementation!
    * @deprecated This method is deprecated and will be removed in 2.x, use onRestoredState option in BleNitroManageroptions instead!
    */

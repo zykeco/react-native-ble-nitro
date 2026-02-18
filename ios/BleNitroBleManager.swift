@@ -72,6 +72,11 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     }
 
 
+    // MARK: - Trigger iOS Lazy Initialization
+    public func iosLazyInit() throws {
+        ensureCentralManager()
+    }
+
     // MARK: - State Management
     public func state() throws -> BLEState {
         ensureCentralManager()
