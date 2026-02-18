@@ -320,7 +320,7 @@ export class BleNitroManager {
    * @param scanTimeout Optional timeout for the scan in milliseconds (default: 5000ms)
    * @returns Promise resolving deviceId when connected
    */
-  public findAndConnect(deviceId: string, options?: { scanTimeout?: number, autoConnectAndroid?: boolean, onDisconnect?: DisconnectEventCallback }): Promise<string> {
+  public findAndConnect(deviceId: string, options?: { scanTimeout?: number, autoConnectAndroid?: boolean, onDisconnect?: DisconnectEventCallback, onFound?: (device: BLEDevice) => void }): Promise<string> {
     const isConnected = this.isConnected(deviceId);
     if (isConnected) {
       return Promise.resolve(deviceId);
@@ -337,6 +337,7 @@ export class BleNitroManager {
         if (device.id === deviceId) {
           this.stopScan();
           clearTimeout(timeoutScan);
+          options?.onFound?.(device);
           this.connect(deviceId, options?.onDisconnect, options?.autoConnectAndroid).then(async (connectedDeviceId) => {
             resolve(connectedDeviceId);
           }).catch((error) => {

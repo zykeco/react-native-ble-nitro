@@ -1,0 +1,12 @@
+{                                                                                                                                                                          
+  "build": {                                                                                                                                                               
+    "preview": {                                                                                                                                                           
+      "android": {                                                                                                                                                         
+        "buildType": "apk"                                                                                                                                                 
+      }                                                                                                                                                                    
+    }                                                                                                                                                                      
+  },
+  "cli": {
+    "appVersionSource": "remote"
+  }                                                                                                                                                                    
+} 

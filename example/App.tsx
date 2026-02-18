@@ -16,6 +16,15 @@ const CUSTOM_SERVICE_UUID = 'AAE28F00-71B5-42A1-8C3C-F9CF6AC969D0'.toLowerCase()
 const RX_CHAR_UUID = 'AAE28F01-71B5-42A1-8C3C-F9CF6AC969D0'.toLowerCase();
 const TX_CHAR_UUID = 'AAE28F02-71B5-42A1-8C3C-F9CF6AC969D0'.toLowerCase();
 
+const PROFILE_SERVICE_UUID = '0000180A-0000-1000-8000-00805f9b34fb'.toLowerCase();
+const PROFILE_MANUFACTURER_UUID = '00002A29-0000-1000-8000-00805f9b34fb'.toLowerCase();
+// const PROFILE_SERIAL_UUID = '00002A25-0000-1000-8000-00805f9b34fb'.toLowerCase();
+const PROFILE_FIRMWARE_UUID = '00002A26-0000-1000-8000-00805f9b34fb'.toLowerCase();
+const PROFILE_HARDWARE_UUID = '00002A27-0000-1000-8000-00805f9b34fb'.toLowerCase();
+const PROFILE_SOFTWARE_UUID = '00002A28-0000-1000-8000-00805f9b34fb'.toLowerCase();
+const PROFILE_MODEL_UUID = '00002A24-0000-1000-8000-00805f9b34fb'.toLowerCase();
+const PROFILE_SYSTEMID_UUID = '00002A23-0000-1000-8000-00805f9b34fb'.toLowerCase();
+
 let unsubscribeRx: AsyncSubscription['remove'] | null = null;
 let unsubscribeHr: AsyncSubscription['remove'] | null = null;
 
@@ -109,6 +118,7 @@ export default function App() {
       rssiThreshold: -100,
       allowDuplicates: false,
     }, (device) => {
+      logMessage(`Scan result: ${device.id} with Manufacturer Data: ${JSON.stringify(device.manufacturerData)}`);
       setScanResults((prev) => {
         const index = prev.findIndex((d) => d.id === device.id);
         if (index === -1) {
@@ -151,6 +161,7 @@ export default function App() {
     checkConnection(deviceId);
     setConnectedDeviceServiceUUIDs([]);
     setConnectedDeviceCharacteristics({});
+    setConnectedDeviceId(null);
   }
 
   const connectDevice = async (deviceId: string) => {
@@ -221,6 +232,13 @@ export default function App() {
     onDisconnected(connectedDeviceId, false);
   }
 
+  const readCharacteristic = (serviceId: string, characteristicId: string) => {
+    if (!connectedDeviceId) {
+      throw new Error('No device connected');
+    }
+    return ble.instance.readCharacteristic(connectedDeviceId, serviceId, characteristicId);
+  }
+
   const readRSSI = async () => {
     if (!connectedDeviceId) {
       throw new Error('No device connected');
@@ -230,11 +248,7 @@ export default function App() {
   }
 
   const readBatteryLevel = async () => {
-    if (!connectedDeviceId) {
-      throw new Error('No device connected');
-    }
-    const batteryLevel = await ble.instance.readCharacteristic(
-      connectedDeviceId,
+    const batteryLevel = await readCharacteristic(
       BATTERY_SERVICE_UUID,
       BATTERY_CHARACTERISTIC_LEVEL_UUID,
     );
@@ -243,11 +257,7 @@ export default function App() {
   };
 
   const readBodySensorLocation = async () => {
-    if (!connectedDeviceId) {
-      throw new Error('No device connected');
-    }
-    const [bodySensorLocation] = await ble.instance.readCharacteristic(
-      connectedDeviceId,
+    const [bodySensorLocation] = await readCharacteristic(
       HEART_RATE_SERVICE_UUID,
       BODY_SENSOR_LOCATION_UUID,
     );
@@ -263,6 +273,62 @@ export default function App() {
     const mtu = ble.instance.requestMTU(connectedDeviceId, 517);
     logMessage('MTU', mtu);
   };
+
+  const stringFromBytes = (bytes: number[]) => {
+    return String.fromCharCode(...bytes).replace(/\0/g, '');
+  }
+
+  const hexFromBytes = (bytes: number[]) => {                                                                                                                                
+    return bytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(':');                                                                                          
+  };   
+
+  const readFirmwareVersion = async () => {
+    const fVersion = await readCharacteristic(
+      PROFILE_SERVICE_UUID,
+      PROFILE_FIRMWARE_UUID,
+    );
+    logMessage('Firmware Version', stringFromBytes(fVersion));
+  };
+
+  const readHardwareVersion = async () => {
+    const hVersion = await readCharacteristic(
+      PROFILE_SERVICE_UUID,
+      PROFILE_HARDWARE_UUID,
+    );
+    logMessage('Hardware Version', stringFromBytes(hVersion));
+  };
+
+  const readSoftwareVersion = async () => {
+    const sVersion = await readCharacteristic(
+      PROFILE_SERVICE_UUID,
+      PROFILE_SOFTWARE_UUID,
+    );
+    logMessage('Software Version', stringFromBytes(sVersion));
+  };
+
+  const readModelNumber = async () => {
+    const modelNumber = await readCharacteristic(
+      PROFILE_SERVICE_UUID,
+      PROFILE_MODEL_UUID,
+    );
+    logMessage('Model Number', stringFromBytes(modelNumber));
+  };
+
+  const readManufacturer = async () => {
+    const manufacturer = await readCharacteristic(
+      PROFILE_SERVICE_UUID,
+      PROFILE_MANUFACTURER_UUID,
+    )
+    logMessage('Manufacturer', stringFromBytes(manufacturer));
+  };
+
+  const readSystemid = async () => {
+    const systemid = await readCharacteristic(
+      PROFILE_SERVICE_UUID,
+      PROFILE_SYSTEMID_UUID
+    );
+    logMessage('System ID', hexFromBytes(systemid));
+  }
 
   const logMessage = (...message: (string | number)[]) => {
     const date = new Date().toLocaleTimeString('de-DE');
@@ -444,7 +510,7 @@ export default function App() {
                           <Text>ID: {device.id}</Text>
                           <Text>Name: {device.name}</Text>
                           <Text>RSSI: {device.rssi}</Text>
-                          <Text>Manufacturer Data: {JSON.stringify(device.manufacturerData)}</Text>
+                          <Text selectable>Manufacturer Data: {JSON.stringify(device.manufacturerData)}</Text>
                           <Text>Service UUIDs: {JSON.stringify(device.serviceUUIDs)}</Text>
                           <Text>Is Connectable: {device.isConnectable.toString()}</Text>
                           <Text>Tap to connect</Text>
@@ -461,8 +527,8 @@ export default function App() {
                       <Text selectable>ID: {connectedDeviceId}</Text>
                       <Text>Is connected: {deviceIsConnected.toString()}</Text>
                       <Text style={{ borderTopWidth: 1 }}>Services:</Text>
-                      {connectedDeviceServiceUUIDs.map((s, i) => (
-                        <View key={s} style={{ borderBottomWidth: i === connectedDeviceServiceUUIDs.length - 1 ? 0 : 1 }}>
+                      {connectedDeviceServiceUUIDs.map((s) => (
+                        <View key={s} style={{ paddingTop: 2, borderBottomWidth: 1 }}>
                           <Text>Service: {s}</Text>
                           <Text>Characteristics:</Text>
                           {connectedDeviceCharacteristics[s]?.map((c) => (
@@ -527,6 +593,40 @@ export default function App() {
                               </TouchableOpacity>
                             </>
                           )}
+                          {s === PROFILE_SERVICE_UUID && (
+                            <>
+                              {connectedDeviceCharacteristics[s]?.includes(PROFILE_FIRMWARE_UUID) && (
+                                <TouchableOpacity style={styles.button} onPress={readFirmwareVersion}>
+                                  <Text>Read Firmware Version</Text>
+                                </TouchableOpacity>
+                              )}
+                              {connectedDeviceCharacteristics[s]?.includes(PROFILE_HARDWARE_UUID) && (
+                                <TouchableOpacity style={styles.button} onPress={readHardwareVersion}>
+                                  <Text>Read Hardware Version</Text>
+                                </TouchableOpacity>
+                              )}
+                              {connectedDeviceCharacteristics[s]?.includes(PROFILE_SOFTWARE_UUID) && (
+                                <TouchableOpacity style={styles.button} onPress={readSoftwareVersion}>
+                                  <Text>Read Software Version</Text>
+                                </TouchableOpacity>
+                              )}
+                              {connectedDeviceCharacteristics[s]?.includes(PROFILE_MODEL_UUID) && (
+                                <TouchableOpacity style={styles.button} onPress={readModelNumber}>
+                                  <Text>Read Model Number</Text>
+                                </TouchableOpacity>
+                              )}
+                              {connectedDeviceCharacteristics[s]?.includes(PROFILE_MANUFACTURER_UUID) && (
+                                <TouchableOpacity style={styles.button} onPress={readManufacturer}>
+                                  <Text>Read Manufacturer</Text>
+                                </TouchableOpacity>
+                              )}
+                              {connectedDeviceCharacteristics[s]?.includes(PROFILE_SYSTEMID_UUID) && (
+                                <TouchableOpacity style={styles.button} onPress={readSystemid}>
+                                  <Text>Read System ID</Text>
+                                </TouchableOpacity>
+                              )}
+                            </>
+                          )}
                         </View>
                       ))}
                       <TouchableOpacity style={styles.button} onPress={requestMtu}>
@@ -562,7 +662,7 @@ export default function App() {
                   {logs.sort((a, b) => {
                     return b.toLocaleLowerCase().localeCompare(a.toLocaleLowerCase());
                   }).map((log, i) => (
-                    <Text key={i} style={{ fontSize: 11, fontFamily: 'monospace', color: '#444', borderBottomWidth: i === logs.length - 1 ? 0 : 1, padding: 6 }}>{log}</Text>
+                    <Text key={i} style={{ fontSize: 11, fontFamily: 'monospace', color: '#444', borderBottomWidth: i === logs.length - 1 ? 0 : 1, padding: 6 }} selectable>{log}</Text>
                   ))}
                 </ScrollView>
                 <TouchableOpacity style={styles.button} onPress={clearLogs}>
