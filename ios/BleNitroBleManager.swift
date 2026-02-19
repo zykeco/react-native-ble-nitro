@@ -111,7 +111,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     }
     
     // MARK: - Scanning Operations
-    public func startScan(filter: ScanFilter, callback: @escaping (BLEDevice?, String?) -> Void) throws {
+    public func startScan(filter: ScanFilter, callback: @escaping (Variant_NullType_BLEDevice?, Variant_NullType_String?) -> Void) throws {
         ensureCentralManager()
         guard centralManager.state == .poweredOn else {
             throw NSError(domain: "BleNitroError", code: 1, userInfo: [
@@ -119,9 +119,8 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
             ])
         }
 
-        // remove error option from callback
-        func scanCallbackWrapper(device: BLEDevice?) {
-            callback(device, nil)
+        func scanCallbackWrapper(device: BLEDevice) {
+            callback(.second(device), nil)
         }
         self.scanCallback = scanCallbackWrapper
         self.currentScanFilter = filter
