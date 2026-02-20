@@ -1,5 +1,5 @@
 PODS:
-  - BleNitro (1.10.0):
+  - BleNitro (1.10.2):
     - boost
     - DoubleConversion
     - fast_float
@@ -2727,7 +2727,7 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  BleNitro: c4ff00d37293af2fbf246f340342d1cc8047d9a1
+  BleNitro: f24ad3a918efc090db677a6bd730266c5061df26
   boost: 7e761d76ca2ce687f7cc98e698152abd03a18f90
   DoubleConversion: cb417026b2400c8f53ae97020b2be961b59470cb
   EXConstants: 3feb66fd1d94202fc1f0946d74e029d8b224b60e
