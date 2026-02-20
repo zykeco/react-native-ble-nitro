@@ -46,7 +46,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     private var bleScanner: BluetoothLeScanner? = null
     private var isCurrentlyScanning = false
     private var scanCallback: ScanCallback? = null
-    private var deviceFoundCallback: ((device: BLEDevice?, error: String?) -> Unit)? = null
+    private var deviceFoundCallback: ((device: Variant_NullType_BLEDevice?, error: Variant_NullType_String?) -> Unit)? = null
     private val discoveredDevicesInCurrentScan = mutableSetOf<String>()
     
     // Device connections
@@ -443,7 +443,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     }
 
     // Scanning operations
-    override fun startScan(filter: com.margelo.nitro.co.zyke.ble.ScanFilter, callback: (device: BLEDevice?, error: String?) -> Unit) {
+    override fun startScan(filter: com.margelo.nitro.co.zyke.ble.ScanFilter, callback: (device: Variant_NullType_BLEDevice?, error: Variant_NullType_String?) -> Unit) {
         try {
             initializeBluetoothIfNeeded()
             val adapter = bluetoothAdapter ?: return
@@ -481,7 +481,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         discoveredDevicesInCurrentScan.add(device.id)
                     }
                     
-                    callback(device, null)
+                    callback(Variant_NullType_BLEDevice.create(device), null)
                 }
                 
                 override fun onBatchScanResults(results: MutableList<ScanResult>) {
@@ -501,7 +501,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                             discoveredDevicesInCurrentScan.add(device.id)
                         }
                         
-                        callback(device, null)
+                        callback(Variant_NullType_BLEDevice.create(device), null)
                     }
                 }
                 
@@ -515,7 +515,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         ScanCallback.SCAN_FAILED_SCANNING_TOO_FREQUENTLY -> "Scanning too frequently"
                         else -> "Scan failed with error code: $errorCode"
                     }
-                    callback(null, errorMessage)
+                    callback(null, Variant_NullType_String.create(errorMessage))
                     stopScan()
                 }
             }
