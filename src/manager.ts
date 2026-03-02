@@ -361,6 +361,12 @@ export class BleNitroManager {
         return;
       }
 
+      if (!this.isConnected(deviceId)) {
+        delete this._connectedDevices[deviceId];
+        resolve();
+        return;
+      }
+
       this.Instance.disconnect(
         deviceId,
         (success: boolean, error: string) => {
