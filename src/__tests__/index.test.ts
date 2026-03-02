@@ -227,6 +227,10 @@ describe('BleNitro', () => {
     });
     await BleManager.connect('device');
 
+    mockNative.isConnected.mockImplementation((id: string) => {
+      return id === 'device';
+    });
+
     // Then disconnect
     mockNative.disconnect.mockImplementation((_id: string, callback: (success: boolean, error: string) => void) => {
       callback(true, '');

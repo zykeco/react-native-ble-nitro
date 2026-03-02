@@ -356,12 +356,7 @@ export class BleNitroManager {
   public disconnect(deviceId: string): Promise<void> {
     return new Promise((resolve, reject) => {
       // Check if already disconnected
-      if (!this._connectedDevices[deviceId]) {
-        resolve();
-        return;
-      }
-
-      if (!this.isConnected(deviceId)) {
+      if (!this._connectedDevices[deviceId] || !this.isConnected(deviceId)) {
         delete this._connectedDevices[deviceId];
         resolve();
         return;
