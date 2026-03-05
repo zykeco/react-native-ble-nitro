@@ -8,30 +8,28 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		384FD007CA2584D8BD8A0728 /* libPods-BleNitroExample.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 6CE39638918032FE86B68D77 /* libPods-BleNitroExample.a */; };
+		1494FEE75FC051EAD172121B /* libPods-BleNitroExample.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E0271C9BE7139EBF170FA15C /* libPods-BleNitroExample.a */; };
+		2E0B6CEC761A7DECDB784A77 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0E55CE2187D2800F7FDFC95 /* ExpoModulesProvider.swift */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		95C431AF9B784008CF04BFC7 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = AE4F76F1BC00B0FDD6203549 /* PrivacyInfo.xcprivacy */; };
-		A1D278A5BE1882546406F74B /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B2D182A18CF8A2199574F4C /* ExpoModulesProvider.swift */; };
-		B852A7F68D99C6957BE2759B /* libPods-BleNitroExample.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FD2E7ACCF0FF95084C5AFF74 /* libPods-BleNitroExample.a */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
+		E835E234F6144349DF599BF2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 77A3443F9A81BCEA940D3CA8 /* PrivacyInfo.xcprivacy */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		0411512931B5E4FDA35E0B03 /* Pods-BleNitroExample.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BleNitroExample.debug.xcconfig"; path = "Target Support Files/Pods-BleNitroExample/Pods-BleNitroExample.debug.xcconfig"; sourceTree = "<group>"; };
+		0C0B9472D9EAB41F8DCA6E8E /* Pods-BleNitroExample.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BleNitroExample.debug.xcconfig"; path = "Target Support Files/Pods-BleNitroExample/Pods-BleNitroExample.debug.xcconfig"; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* BleNitroExample.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BleNitroExample.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = BleNitroExample/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = BleNitroExample/Info.plist; sourceTree = "<group>"; };
-		6CE39638918032FE86B68D77 /* libPods-BleNitroExample.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-BleNitroExample.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		7B2D182A18CF8A2199574F4C /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-BleNitroExample/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		77A3443F9A81BCEA940D3CA8 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = BleNitroExample/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		8D607B0930B33C8AD9539BBA /* Pods-BleNitroExample.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BleNitroExample.release.xcconfig"; path = "Target Support Files/Pods-BleNitroExample/Pods-BleNitroExample.release.xcconfig"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = BleNitroExample/SplashScreen.storyboard; sourceTree = "<group>"; };
-		AE4F76F1BC00B0FDD6203549 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = BleNitroExample/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		B0E55CE2187D2800F7FDFC95 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-BleNitroExample/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
+		E0271C9BE7139EBF170FA15C /* libPods-BleNitroExample.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-BleNitroExample.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = BleNitroExample/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* BleNitroExample-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "BleNitroExample-Bridging-Header.h"; path = "BleNitroExample/BleNitroExample-Bridging-Header.h"; sourceTree = "<group>"; };
-		F6C392B3434AA0A4AE9DDE90 /* Pods-BleNitroExample.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BleNitroExample.release.xcconfig"; path = "Target Support Files/Pods-BleNitroExample/Pods-BleNitroExample.release.xcconfig"; sourceTree = "<group>"; };
-		FD2E7ACCF0FF95084C5AFF74 /* libPods-BleNitroExample.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-BleNitroExample.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -39,8 +37,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				384FD007CA2584D8BD8A0728 /* libPods-BleNitroExample.a in Frameworks */,
-				B852A7F68D99C6957BE2759B /* libPods-BleNitroExample.a in Frameworks */,
+				1494FEE75FC051EAD172121B /* libPods-BleNitroExample.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -56,7 +53,15 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				AE4F76F1BC00B0FDD6203549 /* PrivacyInfo.xcprivacy */,
+				77A3443F9A81BCEA940D3CA8 /* PrivacyInfo.xcprivacy */,
+			);
+			name = BleNitroExample;
+			sourceTree = "<group>";
+		};
+		26A34918B21E0D36C2A4587B /* BleNitroExample */ = {
+			isa = PBXGroup;
+			children = (
+				B0E55CE2187D2800F7FDFC95 /* ExpoModulesProvider.swift */,
 			);
 			name = BleNitroExample;
 			sourceTree = "<group>";
@@ -65,32 +70,14 @@
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				6CE39638918032FE86B68D77 /* libPods-BleNitroExample.a */,
+				E0271C9BE7139EBF170FA15C /* libPods-BleNitroExample.a */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		4F46803FED56F72DF3A529AD /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				FD2E7ACCF0FF95084C5AFF74 /* libPods-BleNitroExample.a */,
-			);
-			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		681536525781173AFA679EDE /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				0411512931B5E4FDA35E0B03 /* Pods-BleNitroExample.debug.xcconfig */,
-				F6C392B3434AA0A4AE9DDE90 /* Pods-BleNitroExample.release.xcconfig */,
-			);
-			path = Pods;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
 			isa = PBXGroup;
 			children = (
-				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 			);
 			name = Libraries;
 			sourceTree = "<group>";
@@ -101,9 +88,9 @@
 				13B07FAE1A68108700A75B9A /* BleNitroExample */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
-				681536525781173AFA679EDE /* Pods */,
-				A843AEAEE688D21475C59D55 /* ExpoModulesProviders */,
-				4F46803FED56F72DF3A529AD /* Frameworks */,
+				2D16E6871FA4F8E400B85C8A /* Frameworks */,
+				CD9615CAA98B0C46CDCDD2D6 /* Pods */,
+				F30557122ED86B62FDF1CE1A /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -118,22 +105,6 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		A843AEAEE688D21475C59D55 /* ExpoModulesProviders */ = {
-			isa = PBXGroup;
-			children = (
-				B7E09EEF88166C13CD39B9BA /* BleNitroExample */,
-			);
-			name = ExpoModulesProviders;
-			sourceTree = "<group>";
-		};
-		B7E09EEF88166C13CD39B9BA /* BleNitroExample */ = {
-			isa = PBXGroup;
-			children = (
-				7B2D182A18CF8A2199574F4C /* ExpoModulesProvider.swift */,
-			);
-			name = BleNitroExample;
-			sourceTree = "<group>";
-		};
 		BB2F792B24A3F905000567C9 /* Supporting */ = {
 			isa = PBXGroup;
 			children = (
@@ -141,6 +112,24 @@
 			);
 			name = Supporting;
 			path = BleNitroExample/Supporting;
+			sourceTree = "<group>";
+		};
+		CD9615CAA98B0C46CDCDD2D6 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				0C0B9472D9EAB41F8DCA6E8E /* Pods-BleNitroExample.debug.xcconfig */,
+				8D607B0930B33C8AD9539BBA /* Pods-BleNitroExample.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
+		F30557122ED86B62FDF1CE1A /* ExpoModulesProviders */ = {
+			isa = PBXGroup;
+			children = (
+				26A34918B21E0D36C2A4587B /* BleNitroExample */,
+			);
+			name = ExpoModulesProviders;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -151,13 +140,13 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "BleNitroExample" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				206368E11170C856637CC078 /* [Expo] Configure project */,
+				4200F40FDDF9832728F84F2D /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				95FF795CC36F6638F10120CB /* [CP] Embed Pods Frameworks */,
+				5F8B24E8EF7577BF6D2FE2E5 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -207,7 +196,7 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				95C431AF9B784008CF04BFC7 /* PrivacyInfo.xcprivacy in Resources */,
+				E835E234F6144349DF599BF2 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -221,6 +210,8 @@
 			files = (
 			);
 			inputPaths = (
+				"$(SRCROOT)/.xcode.env",
+				"$(SRCROOT)/.xcode.env.local",
 			);
 			name = "Bundle React Native code and images";
 			outputPaths = (
@@ -251,7 +242,7 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		206368E11170C856637CC078 /* [Expo] Configure project */ = {
+		4200F40FDDF9832728F84F2D /* [Expo] Configure project */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -275,6 +266,28 @@
 			shellPath = /bin/sh;
 			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-BleNitroExample/expo-configure-project.sh\"\n";
 		};
+		5F8B24E8EF7577BF6D2FE2E5 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-BleNitroExample/Pods-BleNitroExample-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework/React",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework/ReactNativeDependencies",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermesvm.framework/hermesvm",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermesvm.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-BleNitroExample/Pods-BleNitroExample-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -285,44 +298,20 @@
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/EXConstants.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/ExpoConstants_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoFileSystem/ExpoFileSystem_privacy.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/RCT-Folly/RCT-Folly_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/React-Core/React-Core_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/React-cxxreact/React-cxxreact_privacy.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/boost/boost_privacy.bundle",
-				"${PODS_CONFIGURATION_BUILD_DIR}/glog/glog_privacy.bundle",
 			);
 			name = "[CP] Copy Pods Resources";
 			outputPaths = (
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/EXConstants.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoConstants_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoFileSystem_privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/RCT-Folly_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/React-Core_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/React-cxxreact_privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/boost_privacy.bundle",
-				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/glog_privacy.bundle",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-BleNitroExample/Pods-BleNitroExample-resources.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		95FF795CC36F6638F10120CB /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-BleNitroExample/Pods-BleNitroExample-frameworks.sh",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputPaths = (
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-BleNitroExample/Pods-BleNitroExample-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -333,7 +322,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				A1D278A5BE1882546406F74B /* ExpoModulesProvider.swift in Sources */,
+				2E0B6CEC761A7DECDB784A77 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -342,13 +331,11 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 0411512931B5E4FDA35E0B03 /* Pods-BleNitroExample.debug.xcconfig */;
+			baseConfigurationReference = 0C0B9472D9EAB41F8DCA6E8E /* Pods-BleNitroExample.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = BleNitroExample/BleNitroExample.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 28B54UJ28M;
 				ENABLE_BITCODE = NO;
@@ -371,7 +358,6 @@
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = "co.zyke.ble-nitro-example";
 				PRODUCT_NAME = BleNitroExample;
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "BleNitroExample/BleNitroExample-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -382,13 +368,11 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = F6C392B3434AA0A4AE9DDE90 /* Pods-BleNitroExample.release.xcconfig */;
+			baseConfigurationReference = 8D607B0930B33C8AD9539BBA /* Pods-BleNitroExample.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = BleNitroExample/BleNitroExample.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 28B54UJ28M;
 				INFOPLIST_FILE = BleNitroExample/Info.plist;
@@ -406,7 +390,6 @@
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = "co.zyke.ble-nitro-example";
 				PRODUCT_NAME = BleNitroExample;
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "BleNitroExample/BleNitroExample-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -469,13 +452,12 @@
 				LIBRARY_SEARCH_PATHS = "$(SDKROOT)/usr/lib/swift\"$(inherited)\"";
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					" ",
-				);
+				OTHER_CFLAGS = "$(inherited)";
+				OTHER_CPLUSPLUSFLAGS = "$(inherited)";
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				USE_HERMES = true;
 			};
 			name = Debug;
@@ -527,12 +509,11 @@
 				);
 				LIBRARY_SEARCH_PATHS = "$(SDKROOT)/usr/lib/swift\"$(inherited)\"";
 				MTL_ENABLE_DEBUG_INFO = NO;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					" ",
-				);
+				OTHER_CFLAGS = "$(inherited)";
+				OTHER_CPLUSPLUSFLAGS = "$(inherited)";
 				REACT_NATIVE_PATH = "${PODS_ROOT}/../../node_modules/react-native";
 				SDKROOT = iphoneos;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				USE_HERMES = true;
 				VALIDATE_PRODUCT = YES;
 			};

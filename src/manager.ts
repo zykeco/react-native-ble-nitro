@@ -127,7 +127,6 @@ export function byteArrayToArrayBuffer(data: ByteArray): ArrayBuffer {
 
 export class BleNitroManager {
   private _isScanning: boolean = false;
-  private _connectedDevices: { [deviceId: string]: boolean } = {};
 
   private _restoredStateCallback: RestoreStateCallback | null;
   private _restoredState: BLEDevice[] | null = null;
@@ -144,9 +143,6 @@ export class BleNitroManager {
   private onNativeRestoreStateCallback(peripherals: NativeBLEDevice[]) {
     if (!this._restoreStateIdentifier) return;
     const bleDevices = peripherals.map((peripheral) => convertNativeBleDeviceToBleDevice(peripheral));
-    bleDevices.forEach((device) => {
-      this._connectedDevices[device.id] = device.isConnected;
-    });
     if (this._restoredStateCallback) {
       this._restoredStateCallback(bleDevices);
     } else {
@@ -289,7 +285,7 @@ export class BleNitroManager {
   ): Promise<string> {
     return new Promise((resolve, reject) => {
       // Check if already connected
-      if (this._connectedDevices[deviceId]) {
+      if (this.isConnected(deviceId)) {
         resolve(deviceId);
         return;
       }
@@ -298,15 +294,12 @@ export class BleNitroManager {
         deviceId,
         (success: boolean, connectedDeviceId: string, error: string) => {
           if (success) {
-            this._connectedDevices[deviceId] = true;
             resolve(connectedDeviceId);
           } else {
             reject(new Error(error));
           }
         },
         onDisconnect ? (deviceId: string, interrupted: boolean, error: string) => {
-          // Remove from connected devices when disconnected
-          delete this._connectedDevices[deviceId];
           onDisconnect(deviceId, interrupted, error);
         } : undefined,
         autoConnectAndroid ?? false,
@@ -321,8 +314,7 @@ export class BleNitroManager {
    * @returns Promise resolving deviceId when connected
    */
   public findAndConnect(deviceId: string, options?: { scanTimeout?: number, autoConnectAndroid?: boolean, onDisconnect?: DisconnectEventCallback, onFound?: (device: BLEDevice) => void }): Promise<string> {
-    const isConnected = this.isConnected(deviceId);
-    if (isConnected) {
+    if (this.isConnected(deviceId)) {
       return Promise.resolve(deviceId);
     }
     if (this._isScanning) {
@@ -351,14 +343,13 @@ export class BleNitroManager {
   /**
    * Disconnect from a Bluetooth device
    * @param deviceId ID of the device to disconnect from
-   * @returns Promise resolving when disconnected
+   * @returns Promise resolving with devices uuid or mac address when disconnected
    */
-  public disconnect(deviceId: string): Promise<void> {
+  public disconnect(deviceId: string): Promise<string> {
     return new Promise((resolve, reject) => {
       // Check if already disconnected
-      if (!this._connectedDevices[deviceId] || !this.isConnected(deviceId)) {
-        delete this._connectedDevices[deviceId];
-        resolve();
+      if (!this.isConnected(deviceId)) {
+        resolve(deviceId);
         return;
       }
 
@@ -366,8 +357,7 @@ export class BleNitroManager {
         deviceId,
         (success: boolean, error: string) => {
           if (success) {
-            delete this._connectedDevices[deviceId];
-            resolve();
+            resolve(deviceId);
           } else {
             reject(new Error(error));
           }
@@ -405,7 +395,7 @@ export class BleNitroManager {
   public readRSSI(deviceId: string): Promise<number> {
     return new Promise((resolve, reject) => {
       // Check if connected first
-      if (!this._connectedDevices[deviceId]) {
+      if (!this.isConnected(deviceId)) {
         reject(new Error('Device not connected'));
         return;
       }
@@ -431,7 +421,7 @@ export class BleNitroManager {
   public discoverServices(deviceId: string): Promise<boolean> {
     return new Promise((resolve, reject) => {
       // Check if connected first
-      if (!this._connectedDevices[deviceId]) {
+      if (!this.isConnected(deviceId)) {
         reject(new Error('Device not connected'));
         return;
       }
@@ -457,7 +447,7 @@ export class BleNitroManager {
   public getServices(deviceId: string): Promise<string[]> {
     return new Promise(async (resolve, reject) => {
       // Check if connected first
-      if (!this._connectedDevices[deviceId]) {
+      if (!this.isConnected(deviceId)) {
         reject(new Error('Device not connected'));
         return;
       }
@@ -482,7 +472,7 @@ export class BleNitroManager {
     deviceId: string,
     serviceId: string
   ): string[] {
-    if (!this._connectedDevices[deviceId]) {
+    if (!this.isConnected(deviceId)) {
       throw new Error('Device not connected');
     }
 
@@ -525,7 +515,7 @@ export class BleNitroManager {
   ): Promise<ByteArray> {
     return new Promise((resolve, reject) => {
       // Check if connected first
-      if (!this._connectedDevices[deviceId]) {
+      if (!this.isConnected(deviceId)) {
         reject(new Error('Device not connected'));
         return;
       }
@@ -563,7 +553,7 @@ export class BleNitroManager {
   ): Promise<ByteArray> {
     return new Promise((resolve, reject) => {
       // Check if connected first
-      if (!this._connectedDevices[deviceId]) {
+      if (!this.isConnected(deviceId)) {
         reject(new Error('Device not connected'));
         return;
       }
@@ -603,7 +593,7 @@ export class BleNitroManager {
   ): Promise<AsyncSubscription> {
     return new Promise((resolve, reject) => {
       // Check if connected first
-      if (!this._connectedDevices[deviceId]) {
+      if (!this.isConnected(deviceId)) {
         reject(new Error('Device not connected'));
         return;
       }
@@ -651,7 +641,7 @@ export class BleNitroManager {
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       // Check if connected first
-      if (!this._connectedDevices[deviceId]) {
+      if (!this.isConnected(deviceId)) {
         reject(new Error('Device not connected'));
         return;
       }
