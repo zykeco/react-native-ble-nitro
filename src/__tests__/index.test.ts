@@ -143,6 +143,10 @@ describe('BleNitro', () => {
     });
     await BleManager.connect('device-write');
 
+    mockNative.isConnected.mockImplementation((id: string) => {
+      return id === 'device-write';
+    });
+
     // Mock writeCharacteristic with new signature (success, responseData, error)
     mockNative.writeCharacteristic.mockImplementation((_deviceId: string, _serviceId: string, _charId: string, _data: ArrayBuffer, withResponse: boolean, callback: (success: boolean, responseData: ArrayBuffer, error: string) => void) => {
       // For withResponse=false, return empty ArrayBuffer
@@ -171,6 +175,10 @@ describe('BleNitro', () => {
     });
     await BleManager.connect('device-write-resp');
 
+    mockNative.isConnected.mockImplementation((id: string) => {
+      return id === 'device-write-resp';
+    });
+
     // Mock writeCharacteristic to return response data
     mockNative.writeCharacteristic.mockImplementation((_deviceId: string, _serviceId: string, _charId: string, _data: ArrayBuffer, withResponse: boolean, callback: (success: boolean, responseData: ArrayBuffer, error: string) => void) => {
       // For withResponse=true, return some response data
@@ -198,6 +206,9 @@ describe('BleNitro', () => {
       callback(true, id, '');
     });
     await BleManager.connect('device');
+    mockNative.isConnected.mockImplementation((id: string) => {
+      return id === 'device';
+    });
 
     // Then read
     mockNative.readCharacteristic.mockImplementation((_device: string, _service: string, _char: string, callback: (success: boolean, data: ArrayBuffer, error: string) => void) => {
@@ -239,7 +250,7 @@ describe('BleNitro', () => {
     const result = await BleManager.disconnect('device');
 
     expect(mockNative.disconnect).toHaveBeenCalledWith('device', expect.any(Function));
-    expect(result).toBe(undefined);
+    expect(result).toBe('device');
   });
 
   test('subscribeToCharacteristic calls callback', async () => {
@@ -305,6 +316,9 @@ describe('BleNitro', () => {
       callback(true, id, '');
     });
     await BleManager.connect('device-rssi');
+    mockNative.isConnected.mockImplementation((id: string) => {
+      return id === 'device-rssi';
+    });
 
     // Mock readRSSI with new signature (success, rssi, error)
     mockNative.readRSSI.mockImplementation((_deviceId: string, callback: (success: boolean, rssi: number, error: string) => void) => {
@@ -326,6 +340,9 @@ describe('BleNitro', () => {
       callback(true, id, '');
     });
     await BleManager.connect('device-rssi-fail');
+    mockNative.isConnected.mockImplementation((id: string) => {
+      return id === 'device-rssi-fail';
+    });
 
     // Mock readRSSI failure
     mockNative.readRSSI.mockImplementation((_deviceId: string, callback: (success: boolean, rssi: number, error: string) => void) => {
