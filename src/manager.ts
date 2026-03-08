@@ -491,7 +491,6 @@ export class BleNitroManager {
    * @see getCharacteristics
    */
   public async getServicesWithCharacteristics(deviceId: string): Promise<{ uuid: string; characteristics: string[] }[]> {
-    await this.discoverServices(deviceId);
     const services = await this.getServices(deviceId);
     return services.map((service) => {
       return {
