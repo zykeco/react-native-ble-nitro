@@ -285,6 +285,11 @@ await subscription.remove();
 
 // Or unsubscribe directly
 await ble.unsubscribeFromCharacteristic(deviceId, serviceUUID, characteristicUUID);
+
+// Check if a characteristic is currently subscribed to notifications
+const isSubscribed = ble.isSubscribedToCharacteristic(deviceId, serviceUUID, characteristicUUID);
+// Returns: boolean — synchronous, no async overhead
+// Returns false for disconnected or unknown devices without throwing
 ```
 
 ### Real-World Examples
