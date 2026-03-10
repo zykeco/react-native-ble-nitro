@@ -453,9 +453,13 @@ export default function App() {
       logMessage('No connected device');
       return;
     }
-    const hrSubscribed = ble.instance.isSubscribedToCharacteristic(connectedDeviceId, HEART_RATE_SERVICE_UUID, HEART_RATE_MEASUREMENT_UUID);
+    const hrSubscribed = ble.instance.isSubscribedToCharacteristic(
+      connectedDeviceId, HEART_RATE_SERVICE_UUID, HEART_RATE_MEASUREMENT_UUID
+    );
     logMessage('HR subscribed:', String(hrSubscribed));
-    const rxSubscribed = ble.instance.isSubscribedToCharacteristic(connectedDeviceId, CUSTOM_SERVICE_UUID, RX_CHAR_UUID);
+    const rxSubscribed = ble.instance.isSubscribedToCharacteristic(
+      connectedDeviceId, CUSTOM_SERVICE_UUID, RX_CHAR_UUID
+    );
     logMessage('RX subscribed:', String(rxSubscribed));
   };
 

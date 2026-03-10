@@ -465,6 +465,8 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         characteristic.service?.peripheral?.setNotifyValue(false, for: characteristic)
     }
 
+    // `throws` is required by the Nitro-generated HybridNativeBleNitroSpec protocol
+    // for all synchronous methods, even though this implementation never throws.
     public func isSubscribedToCharacteristic(
         deviceId: String,
         serviceId: String,

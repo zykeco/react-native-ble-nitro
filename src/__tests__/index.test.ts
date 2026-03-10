@@ -305,17 +305,7 @@ describe('BleNitro', () => {
     expect(onDisconnect).toHaveBeenCalledWith(deviceId, true, 'Connection lost');
   });
 
-  test('isSubscribedToCharacteristic returns false for disconnected device', () => {
-    mockNative.isConnected.mockReturnValueOnce(false);
-
-    const result = BleManager.isSubscribedToCharacteristic('device', 'service', 'char');
-
-    expect(result).toBe(false);
-    expect(mockNative.isSubscribedToCharacteristic).not.toHaveBeenCalled();
-  });
-
-  test('isSubscribedToCharacteristic returns true when subscribed', () => {
-    mockNative.isConnected.mockReturnValueOnce(true);
+  test('isSubscribedToCharacteristic delegates to native with normalized UUIDs', () => {
     mockNative.isSubscribedToCharacteristic.mockReturnValueOnce(true);
 
     const result = BleManager.isSubscribedToCharacteristic('device', 'service', 'char');
@@ -329,12 +319,31 @@ describe('BleNitro', () => {
   });
 
   test('isSubscribedToCharacteristic returns false when not subscribed', () => {
-    mockNative.isConnected.mockReturnValueOnce(true);
     mockNative.isSubscribedToCharacteristic.mockReturnValueOnce(false);
 
     const result = BleManager.isSubscribedToCharacteristic('device', 'service', 'char');
 
     expect(result).toBe(false);
+  });
+
+  test('isSubscribedToCharacteristic returns false for disconnected device', () => {
+    // Native layer returns false for unknown/disconnected devices
+    mockNative.isSubscribedToCharacteristic.mockReturnValueOnce(false);
+
+    const result = BleManager.isSubscribedToCharacteristic('unknown-device', 'service', 'char');
+
+    expect(result).toBe(false);
+    expect(mockNative.isSubscribedToCharacteristic).toHaveBeenCalled();
+  });
+
+  test('isSubscribedToCharacteristic propagates native exception', () => {
+    mockNative.isSubscribedToCharacteristic.mockImplementationOnce(() => {
+      throw new Error('Native error');
+    });
+
+    expect(() =>
+      BleManager.isSubscribedToCharacteristic('device', 'service', 'char')
+    ).toThrow('Native error');
   });
 
   test('readRSSI requires connected device', async () => {

@@ -672,9 +672,8 @@ export class BleNitroManager {
     serviceId: string,
     characteristicId: string
   ): boolean {
-    if (!this.isConnected(deviceId)) {
-      return false;
-    }
+    // No isConnected guard — both native implementations already return false
+    // for disconnected devices, and an extra check would introduce a TOCTOU race.
     return this.Instance.isSubscribedToCharacteristic(
       deviceId,
       BleNitroManager.normalizeGattUUID(serviceId),
