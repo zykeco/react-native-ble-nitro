@@ -18,7 +18,13 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     var disconnectEventCallback: ((String, Bool, String) -> Void)?
     var serviceDiscoveryCallback: ((Bool, String) -> Void)?
     var characteristicDiscoveryCallbacks: [String: (Bool, String) -> Void] = [:]
-    
+
+    // Full discovery (services + characteristics) callback and state
+    var fullDiscoveryCallback: ((Bool, String) -> Void)?
+    var servicesDiscovered = false
+    var characteristicsDiscoveredCount = 0
+    var expectedCharacteristicsCount = 0
+
     // RSSI callback
     var rssiCallback: ((Bool, Double, String) -> Void)?
     
@@ -45,15 +51,30 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         if let error = error {
             serviceDiscoveryCallback?(false, error.localizedDescription)
+            serviceDiscoveryCallback = nil
+            fullDiscoveryCallback?(false, error.localizedDescription)
+            fullDiscoveryCallback = nil
+            return
+        }
+
+        servicesDiscovered = true
+
+        // Resolve service-only callback immediately
+        serviceDiscoveryCallback?(true, "")
+        serviceDiscoveryCallback = nil
+
+        // Trigger characteristic discovery for all services
+        let services = peripheral.services ?? []
+        if services.isEmpty {
+            fullDiscoveryCallback?(true, "")
+            fullDiscoveryCallback = nil
         } else {
-            serviceDiscoveryCallback?(true, "")
-            
-            // Automatically discover characteristics for all services
-            peripheral.services?.forEach { service in
+            expectedCharacteristicsCount = services.count
+            characteristicsDiscoveredCount = 0
+            for service in services {
                 peripheral.discoverCharacteristics(nil, for: service)
             }
         }
-        serviceDiscoveryCallback = nil
     }
     
     func peripheral(
@@ -62,13 +83,20 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         error: Error?
     ) {
         let serviceId = service.uuid.uuidString
-        
+
         if let error = error {
             characteristicDiscoveryCallbacks[serviceId]?(false, error.localizedDescription)
         } else {
             characteristicDiscoveryCallbacks[serviceId]?(true, "")
         }
         characteristicDiscoveryCallbacks.removeValue(forKey: serviceId)
+
+        // Track full discovery progress
+        characteristicsDiscoveredCount += 1
+        if characteristicsDiscoveredCount >= expectedCharacteristicsCount {
+            fullDiscoveryCallback?(true, "")
+            fullDiscoveryCallback = nil
+        }
     }
     
     // MARK: - CBPeripheralDelegate - Characteristic Read
@@ -197,8 +225,9 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     // MARK: - CBPeripheralDelegate - Connection Events
     
     func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
-        // Handle service modifications
-        // This might require re-discovery of services
+        servicesDiscovered = false
+        characteristicsDiscoveredCount = 0
+        expectedCharacteristicsCount = 0
     }
     
     func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
@@ -213,6 +242,10 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         disconnectionCallback = nil
         disconnectEventCallback = nil
         serviceDiscoveryCallback = nil
+        fullDiscoveryCallback = nil
+        servicesDiscovered = false
+        characteristicsDiscoveredCount = 0
+        expectedCharacteristicsCount = 0
         characteristicDiscoveryCallbacks.removeAll()
         rssiCallback = nil
         readCallbacks.removeAll()

@@ -310,8 +310,43 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
             callback(false, "Peripheral not connected")
             return
         }
-        
-        peripheralDelegates[deviceId]?.serviceDiscoveryCallback = callback
+
+        guard let delegate = peripheralDelegates[deviceId] else {
+            callback(false, "Peripheral delegate not found")
+            return
+        }
+
+        // If services already discovered, resolve immediately to avoid
+        // CoreBluetooth silently skipping the didDiscoverServices callback.
+        if delegate.servicesDiscovered, let services = peripheral.services, !services.isEmpty {
+            callback(true, "")
+            return
+        }
+
+        delegate.serviceDiscoveryCallback = callback
+        peripheral.discoverServices(nil)
+    }
+
+    public func discoverServicesWithCharacteristics(deviceId: String, callback: @escaping (Bool, String) -> Void) throws {
+        guard let peripheral = connectedPeripherals[deviceId] else {
+            callback(false, "Peripheral not connected")
+            return
+        }
+
+        guard let delegate = peripheralDelegates[deviceId] else {
+            callback(false, "Peripheral delegate not found")
+            return
+        }
+
+        // If services and all characteristics are already discovered, resolve immediately.
+        if delegate.servicesDiscovered,
+           let services = peripheral.services, !services.isEmpty,
+           services.allSatisfy({ $0.characteristics != nil }) {
+            callback(true, "")
+            return
+        }
+
+        delegate.fullDiscoveryCallback = callback
         peripheral.discoverServices(nil)
     }
     
