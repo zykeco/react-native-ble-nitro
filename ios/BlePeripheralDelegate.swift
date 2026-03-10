@@ -63,15 +63,20 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         serviceDiscoveryCallback?(true, "")
         serviceDiscoveryCallback = nil
 
-        // Trigger characteristic discovery for all services
+        // Trigger characteristic discovery only for services that still need it.
+        // CoreBluetooth may skip the didDiscoverCharacteristicsFor callback for
+        // services whose characteristics are already cached, which would leave the
+        // counter stuck below expectedCharacteristicsCount.
         let services = peripheral.services ?? []
-        if services.isEmpty {
+        let undiscovered = services.filter { $0.characteristics == nil }
+
+        if undiscovered.isEmpty {
             resolveFullDiscoveryCallbacks(success: true, error: "")
         } else {
-            expectedCharacteristicsCount = services.count
+            expectedCharacteristicsCount = undiscovered.count
             characteristicsDiscoveredCount = 0
             characteristicDiscoveryError = nil
-            for service in services {
+            for service in undiscovered {
                 peripheral.discoverCharacteristics(nil, for: service)
             }
         }

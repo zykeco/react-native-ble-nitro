@@ -264,6 +264,28 @@ describe('BleNitro', () => {
     await expect(BleManager.getServicesWithCharacteristics('unknown-device')).rejects.toThrow('Device not connected');
   });
 
+  test('getServicesWithCharacteristics rejects with BleTimeoutError on timeout', async () => {
+    jest.useFakeTimers();
+
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void) => {
+      callback(true, id, '');
+    });
+    await BleManager.connect('device-timeout');
+
+    mockNative.isConnected.mockImplementation((id: string) => id === 'device-timeout');
+
+    // Mock that NEVER calls its callback — simulates hung native discovery
+    mockNative.discoverServicesWithCharacteristics.mockImplementation(() => {});
+
+    const promise = BleManager.getServicesWithCharacteristics('device-timeout');
+
+    jest.advanceTimersByTime(30_000);
+
+    await expect(promise).rejects.toThrow('timed out after 30000ms');
+
+    jest.useRealTimers();
+  });
+
   test('readCharacteristic works after connection', async () => {
     // First connect
     mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {

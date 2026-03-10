@@ -15,6 +15,7 @@ export {
   BLEState,
   AndroidScanMode,
   BleNitroManager,
+  BleTimeoutError,
 } from "./manager";
 
 export { BleNitro } from './singleton';
