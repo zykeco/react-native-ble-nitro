@@ -326,8 +326,8 @@ describe('BleNitro', () => {
     expect(result).toBe(false);
   });
 
-  test('isSubscribedToCharacteristic returns false for disconnected device', () => {
-    // Native layer returns false for unknown/disconnected devices
+  test('isSubscribedToCharacteristic delegates to native for unknown devices', () => {
+    // Native layer handles unknown/disconnected devices by returning false
     mockNative.isSubscribedToCharacteristic.mockReturnValueOnce(false);
 
     const result = BleManager.isSubscribedToCharacteristic('unknown-device', 'service', 'char');

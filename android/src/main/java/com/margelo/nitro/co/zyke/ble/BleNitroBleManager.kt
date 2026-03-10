@@ -354,7 +354,11 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
                 // Handle characteristic notifications
                 val characteristicId = characteristic.uuid.toString()
-                val serviceId = characteristic.service?.uuid?.toString() ?: ""
+                val serviceId = characteristic.service?.uuid?.toString()
+                if (serviceId == null) {
+                    android.util.Log.w("BleNitro", "onCharacteristicChanged: characteristic.service is null for $characteristicId")
+                    return
+                }
                 val subscriptionKey = "$serviceId:$characteristicId"
                 val value = characteristic.value ?: byteArrayOf()
 
@@ -966,13 +970,12 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 return
             }
 
-            // Remove the update callback
             val subscriptionKey = "$serviceId:$characteristicId"
-            val callbacks = deviceCallbacks[deviceId]
-            callbacks?.characteristicSubscriptions?.remove(subscriptionKey)
 
-            // Write to the CCCD descriptor to disable notifications on the remote device
-            // This must be queued to ensure sequential GATT operations
+            // Write to the CCCD descriptor to disable notifications on the remote device.
+            // The subscription entry is removed only after the descriptor write succeeds,
+            // mirroring the subscribe pattern to avoid a stale-entry race when
+            // subscribe and unsubscribe are called in rapid succession.
             val descriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
             if (descriptor != null) {
                 enqueueGattOperation(
@@ -981,11 +984,19 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         descriptor = descriptor,
                         value = BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE,
                         deviceId = deviceId,
-                        callback = callback
+                        callback = { success, error ->
+                            if (success) {
+                                val callbacks = deviceCallbacks[deviceId]
+                                callbacks?.characteristicSubscriptions?.remove(subscriptionKey)
+                            }
+                            callback(success, error)
+                        }
                     )
                 )
             } else {
-                // No CCCD descriptor - some characteristics may not need it
+                // No CCCD descriptor - remove immediately
+                val callbacks = deviceCallbacks[deviceId]
+                callbacks?.characteristicSubscriptions?.remove(subscriptionKey)
                 callback(true, "")
             }
 
