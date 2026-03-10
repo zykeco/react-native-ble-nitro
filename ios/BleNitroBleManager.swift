@@ -464,7 +464,22 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         
         characteristic.service?.peripheral?.setNotifyValue(false, for: characteristic)
     }
-    
+
+    public func isSubscribedToCharacteristic(
+        deviceId: String,
+        serviceId: String,
+        characteristicId: String
+    ) throws -> Bool {
+        guard let characteristic = findCharacteristic(
+            deviceId: deviceId,
+            serviceId: serviceId,
+            characteristicId: characteristicId
+        ) else {
+            return false
+        }
+        return characteristic.isNotifying
+    }
+
     // MARK: - Helper Methods
     private func findPeripheral(by deviceId: String) -> CBPeripheral? {
         ensureCentralManager()

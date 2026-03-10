@@ -984,6 +984,15 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         }
     }
 
+    override fun isSubscribedToCharacteristic(
+        deviceId: String,
+        serviceId: String,
+        characteristicId: String
+    ): Boolean {
+        val callbacks = deviceCallbacks[deviceId] ?: return false
+        return callbacks.characteristicSubscriptions.containsKey(characteristicId)
+    }
+
     // Bluetooth state management
     override fun requestBluetoothEnable(callback: (success: Boolean, error: String) -> Unit) {
         try {

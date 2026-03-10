@@ -1,5 +1,5 @@
 PODS:
-  - BleNitro (1.10.3):
+  - BleNitro (1.11.0):
     - hermes-engine
     - NitroModules
     - RCTRequired
@@ -2231,7 +2231,7 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  BleNitro: e8d1a6e468fad089c6c861bca85078cccf3f169e
+  BleNitro: c16ca805fd8b64918fd4e71e966b70fd5aba09cf
   EXConstants: a16ad8db13865e97aaecf64bb92e8ad8e8ce1ae8
   Expo: c71804d329301c4b0840cfa6432707e63898c538
   ExpoAsset: 4fc5f72f8a74135c522fa61df0bfb869e5b3c3e6
