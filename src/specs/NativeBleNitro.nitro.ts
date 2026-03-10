@@ -92,6 +92,7 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
 
   // Service discovery
   discoverServices(deviceId: string, callback: OperationCallback): void;
+  /** Discover services and wait for all characteristic discovery to complete before resolving. */
   discoverServicesWithCharacteristics(deviceId: string, callback: OperationCallback): void;
   getServices(deviceId: string): string[];
   getCharacteristics(deviceId: string, serviceId: string): string[];

@@ -346,8 +346,13 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
             return
         }
 
-        delegate.fullDiscoveryCallback = callback
-        peripheral.discoverServices(nil)
+        let isFirstCaller = delegate.fullDiscoveryCallbacks.isEmpty
+        delegate.fullDiscoveryCallbacks.append(callback)
+        // Only trigger discovery if this is the first caller; subsequent
+        // callers piggyback on the in-flight discovery via the callback array.
+        if isFirstCaller {
+            peripheral.discoverServices(nil)
+        }
     }
     
     public func getServices(deviceId: String) throws -> [String] {

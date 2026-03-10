@@ -7,6 +7,25 @@ import {
   AndroidScanMode as NativeAndroidScanMode,
 } from './specs/NativeBleNitro';
 
+export class BleTimeoutError extends Error {
+  constructor(operation: string, ms: number) {
+    super(`${operation} timed out after ${ms}ms`);
+    this.name = 'BleTimeoutError';
+  }
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  operation: string
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new BleTimeoutError(operation, ms)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 export type ByteArray = number[];
 
 export interface ScanFilter {
@@ -505,10 +524,12 @@ export class BleNitroManager {
     }));
   }
 
+  private static readonly DISCOVERY_TIMEOUT_MS = 30_000;
+
   private _discoverServicesWithCharacteristics(
     deviceId: string
   ): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+    const inner = new Promise<void>((resolve, reject) => {
       if (!this.isConnected(deviceId)) {
         reject(new Error('Device not connected'));
         return;
@@ -524,6 +545,11 @@ export class BleNitroManager {
         }
       );
     });
+    return withTimeout(
+      inner,
+      BleNitroManager.DISCOVERY_TIMEOUT_MS,
+      'discoverServicesWithCharacteristics'
+    );
   }
 
   /**
