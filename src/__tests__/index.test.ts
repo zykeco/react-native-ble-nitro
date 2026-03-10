@@ -16,6 +16,7 @@ const mockNativeInstance = {
   writeCharacteristic: jest.fn(),
   subscribeToCharacteristic: jest.fn(),
   unsubscribeFromCharacteristic: jest.fn(),
+  isSubscribedToCharacteristic: jest.fn(),
   getConnectedDevices: jest.fn(),
   requestBluetoothEnable: jest.fn(),
   state: jest.fn(),
@@ -302,6 +303,47 @@ describe('BleNitro', () => {
     // Wait for disconnect callback
     await new Promise(resolve => setTimeout(resolve, 30));
     expect(onDisconnect).toHaveBeenCalledWith(deviceId, true, 'Connection lost');
+  });
+
+  test('isSubscribedToCharacteristic delegates to native with normalized UUIDs', () => {
+    mockNative.isSubscribedToCharacteristic.mockReturnValueOnce(true);
+
+    const result = BleManager.isSubscribedToCharacteristic('device', 'service', 'char');
+
+    expect(result).toBe(true);
+    expect(mockNative.isSubscribedToCharacteristic).toHaveBeenCalledWith(
+      'device',
+      '0service-0000-1000-8000-00805f9b34fb',
+      '0000char-0000-1000-8000-00805f9b34fb'
+    );
+  });
+
+  test('isSubscribedToCharacteristic returns false when not subscribed', () => {
+    mockNative.isSubscribedToCharacteristic.mockReturnValueOnce(false);
+
+    const result = BleManager.isSubscribedToCharacteristic('device', 'service', 'char');
+
+    expect(result).toBe(false);
+  });
+
+  test('isSubscribedToCharacteristic delegates to native for unknown devices', () => {
+    // Native layer handles unknown/disconnected devices by returning false
+    mockNative.isSubscribedToCharacteristic.mockReturnValueOnce(false);
+
+    const result = BleManager.isSubscribedToCharacteristic('unknown-device', 'service', 'char');
+
+    expect(result).toBe(false);
+    expect(mockNative.isSubscribedToCharacteristic).toHaveBeenCalled();
+  });
+
+  test('isSubscribedToCharacteristic propagates native exception', () => {
+    mockNative.isSubscribedToCharacteristic.mockImplementationOnce(() => {
+      throw new Error('Native error');
+    });
+
+    expect(() =>
+      BleManager.isSubscribedToCharacteristic('device', 'service', 'char')
+    ).toThrow('Native error');
   });
 
   test('readRSSI requires connected device', async () => {

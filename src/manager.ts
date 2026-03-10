@@ -661,6 +661,27 @@ export class BleNitroManager {
   }
 
   /**
+   * Check if currently subscribed to a characteristic's notifications
+   * @param deviceId ID of the device
+   * @param serviceId ID of the service
+   * @param characteristicId ID of the characteristic
+   * @returns Boolean indicating if subscribed to notifications
+   */
+  public isSubscribedToCharacteristic(
+    deviceId: string,
+    serviceId: string,
+    characteristicId: string
+  ): boolean {
+    // No isConnected guard — both native implementations already return false
+    // for disconnected devices, and an extra check would introduce a TOCTOU race.
+    return this.Instance.isSubscribedToCharacteristic(
+      deviceId,
+      BleNitroManager.normalizeGattUUID(serviceId),
+      BleNitroManager.normalizeGattUUID(characteristicId)
+    );
+  }
+
+  /**
    * Check if Bluetooth is enabled
    * @returns returns Boolean according to Bluetooth state
    */

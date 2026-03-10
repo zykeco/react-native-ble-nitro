@@ -75,7 +75,9 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         var connectCallback: ((success: Boolean, deviceId: String, error: String) -> Unit)? = null,
         var disconnectCallback: ((deviceId: String, interrupted: Boolean, error: String) -> Unit)? = null,
         var serviceDiscoveryCallback: ((success: Boolean, error: String) -> Unit)? = null,
-        var characteristicSubscriptions: MutableMap<String, (characteristicId: String, data: ArrayBuffer) -> Unit> = mutableMapOf()
+        // Key: "serviceId:characteristicId" for correct scoping when the same
+        // characteristic UUID exists under multiple services.
+        var characteristicSubscriptions: MutableMap<String, (characteristicId: String, data: ArrayBuffer) -> Unit> = ConcurrentHashMap()
     )
 
     // Sealed class for GATT operations that need to be queued
@@ -352,17 +354,23 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
                 // Handle characteristic notifications
                 val characteristicId = characteristic.uuid.toString()
+                val serviceId = characteristic.service?.uuid?.toString()
+                if (serviceId == null) {
+                    android.util.Log.w("BleNitro", "onCharacteristicChanged: characteristic.service is null for $characteristicId")
+                    return
+                }
+                val subscriptionKey = "$serviceId:$characteristicId"
                 val value = characteristic.value ?: byteArrayOf()
-                
+
                 // Create direct ByteBuffer as required by ArrayBuffer.wrap()
                 val directBuffer = java.nio.ByteBuffer.allocateDirect(value.size)
                 directBuffer.put(value)
                 directBuffer.flip()
-                
+
                 val data = ArrayBuffer.wrap(directBuffer)
-                
+
                 val callbacks = deviceCallbacks[deviceId]
-                callbacks?.characteristicSubscriptions?.get(characteristicId)?.invoke(characteristicId, data)
+                callbacks?.characteristicSubscriptions?.get(subscriptionKey)?.invoke(characteristicId, data)
             }
             
             override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
@@ -896,14 +904,11 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 return
             }
 
-            // Store the update callback
-            val callbacks = deviceCallbacks[deviceId]
-            if (callbacks != null) {
-                callbacks.characteristicSubscriptions[characteristicId] = updateCallback
-            }
+            val subscriptionKey = "$serviceId:$characteristicId"
 
-            // Write to the CCCD descriptor to enable notifications on the remote device
-            // This must be queued to ensure sequential GATT operations
+            // Write to the CCCD descriptor to enable notifications on the remote device.
+            // The update callback is stored only after the descriptor write succeeds
+            // so that isSubscribedToCharacteristic reflects actual BLE state.
             val descriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
             if (descriptor != null) {
                 enqueueGattOperation(
@@ -912,11 +917,19 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         descriptor = descriptor,
                         value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
                         deviceId = deviceId,
-                        callback = completionCallback
+                        callback = { success, error ->
+                            if (success) {
+                                val callbacks = deviceCallbacks[deviceId]
+                                callbacks?.characteristicSubscriptions?.set(subscriptionKey, updateCallback)
+                            }
+                            completionCallback(success, error)
+                        }
                     )
                 )
             } else {
-                // No CCCD descriptor - some characteristics may not need it
+                // No CCCD descriptor - store callback and report success
+                val callbacks = deviceCallbacks[deviceId]
+                callbacks?.characteristicSubscriptions?.set(subscriptionKey, updateCallback)
                 completionCallback(true, "")
             }
 
@@ -957,12 +970,12 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 return
             }
 
-            // Remove the update callback
-            val callbacks = deviceCallbacks[deviceId]
-            callbacks?.characteristicSubscriptions?.remove(characteristicId)
+            val subscriptionKey = "$serviceId:$characteristicId"
 
-            // Write to the CCCD descriptor to disable notifications on the remote device
-            // This must be queued to ensure sequential GATT operations
+            // Write to the CCCD descriptor to disable notifications on the remote device.
+            // The subscription entry is removed only after the descriptor write succeeds,
+            // mirroring the subscribe pattern to avoid a stale-entry race when
+            // subscribe and unsubscribe are called in rapid succession.
             val descriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
             if (descriptor != null) {
                 enqueueGattOperation(
@@ -971,17 +984,35 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         descriptor = descriptor,
                         value = BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE,
                         deviceId = deviceId,
-                        callback = callback
+                        callback = { success, error ->
+                            if (success) {
+                                val callbacks = deviceCallbacks[deviceId]
+                                callbacks?.characteristicSubscriptions?.remove(subscriptionKey)
+                            }
+                            callback(success, error)
+                        }
                     )
                 )
             } else {
-                // No CCCD descriptor - some characteristics may not need it
+                // No CCCD descriptor - remove immediately
+                val callbacks = deviceCallbacks[deviceId]
+                callbacks?.characteristicSubscriptions?.remove(subscriptionKey)
                 callback(true, "")
             }
 
         } catch (e: Exception) {
             callback(false, "Unsubscription error: ${e.message}")
         }
+    }
+
+    override fun isSubscribedToCharacteristic(
+        deviceId: String,
+        serviceId: String,
+        characteristicId: String
+    ): Boolean {
+        val callbacks = deviceCallbacks[deviceId] ?: return false
+        val subscriptionKey = "$serviceId:$characteristicId"
+        return callbacks.characteristicSubscriptions.containsKey(subscriptionKey)
     }
 
     // Bluetooth state management
