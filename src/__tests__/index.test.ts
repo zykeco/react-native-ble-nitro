@@ -10,6 +10,7 @@ const mockNativeInstance = {
   requestMTU: jest.fn(),
   readRSSI: jest.fn(),
   discoverServices: jest.fn(),
+  discoverServicesWithCharacteristics: jest.fn(),
   getServices: jest.fn(),
   getCharacteristics: jest.fn(),
   readCharacteristic: jest.fn(),
@@ -199,6 +200,68 @@ describe('BleNitro', () => {
       expect.any(Function)
     );
     expect(result).toEqual([0xAA, 0xBB, 0xCC]); // Response data as ByteArray
+  });
+
+  test('getServicesWithCharacteristics discovers and returns services with characteristics', async () => {
+    // First connect
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
+      callback(true, id, '');
+    });
+    await BleManager.connect('device-svc');
+
+    mockNative.isConnected.mockImplementation((id: string) => {
+      return id === 'device-svc';
+    });
+
+    // Mock discoverServicesWithCharacteristics
+    mockNative.discoverServicesWithCharacteristics.mockImplementation((_deviceId: string, callback: (success: boolean, error: string) => void) => {
+      callback(true, '');
+    });
+
+    // Mock getServices to return service UUIDs
+    mockNative.getServices.mockReturnValue(['0000180a-0000-1000-8000-00805f9b34fb', '0000180f-0000-1000-8000-00805f9b34fb']);
+
+    // Mock getCharacteristics per service
+    mockNative.getCharacteristics.mockImplementation((_deviceId: string, serviceId: string) => {
+      if (serviceId === '0000180a-0000-1000-8000-00805f9b34fb') {
+        return ['00002a29-0000-1000-8000-00805f9b34fb'];
+      }
+      return ['00002a19-0000-1000-8000-00805f9b34fb'];
+    });
+
+    const result = await BleManager.getServicesWithCharacteristics('device-svc');
+
+    expect(mockNative.discoverServicesWithCharacteristics).toHaveBeenCalledWith(
+      'device-svc',
+      expect.any(Function)
+    );
+    expect(result).toHaveLength(2);
+    expect(result[0]).toHaveProperty('uuid');
+    expect(result[0]).toHaveProperty('characteristics');
+    expect(result[0].characteristics.length).toBeGreaterThan(0);
+  });
+
+  test('getServicesWithCharacteristics rejects on discovery failure', async () => {
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
+      callback(true, id, '');
+    });
+    await BleManager.connect('device-svc-fail');
+
+    mockNative.isConnected.mockImplementation((id: string) => {
+      return id === 'device-svc-fail';
+    });
+
+    mockNative.discoverServicesWithCharacteristics.mockImplementation((_deviceId: string, callback: (success: boolean, error: string) => void) => {
+      callback(false, 'Discovery failed');
+    });
+
+    await expect(BleManager.getServicesWithCharacteristics('device-svc-fail')).rejects.toThrow('Discovery failed');
+  });
+
+  test('getServicesWithCharacteristics rejects when not connected', async () => {
+    mockNative.isConnected.mockReturnValue(false);
+
+    await expect(BleManager.getServicesWithCharacteristics('unknown-device')).rejects.toThrow('Device not connected');
   });
 
   test('readCharacteristic works after connection', async () => {
