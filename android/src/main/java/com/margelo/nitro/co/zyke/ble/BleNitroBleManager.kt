@@ -741,6 +741,12 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         }
     }
 
+    override fun discoverServicesWithCharacteristics(deviceId: String, callback: (success: Boolean, error: String) -> Unit) {
+        // On Android, discoverServices() already discovers characteristics automatically.
+        // Delegate directly to discoverServices.
+        discoverServices(deviceId, callback)
+    }
+
     override fun getServices(deviceId: String): Array<String> {
         return try {
             val gatt = connectedDevices[deviceId]

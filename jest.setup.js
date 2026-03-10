@@ -12,6 +12,7 @@ const createMockNativeModule = () => ({
   
   // Service discovery
   discoverServices: jest.fn(),
+  discoverServicesWithCharacteristics: jest.fn(),
   getServices: jest.fn(),
   getCharacteristics: jest.fn(),
   

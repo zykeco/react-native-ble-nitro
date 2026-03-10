@@ -7,6 +7,25 @@ import {
   AndroidScanMode as NativeAndroidScanMode,
 } from './specs/NativeBleNitro';
 
+export class BleTimeoutError extends Error {
+  constructor(operation: string, ms: number) {
+    super(`${operation} timed out after ${ms}ms`);
+    this.name = 'BleTimeoutError';
+  }
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  operation: string
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new BleTimeoutError(operation, ms)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 export type ByteArray = number[];
 
 export interface ScanFilter {
@@ -484,20 +503,53 @@ export class BleNitroManager {
   }
 
   /**
-   * Get services and characteristics for a connected device
+   * Get services and characteristics for a connected device.
+   * Uses a native method that waits for both service and characteristic
+   * discovery to complete before reading, avoiding the CoreBluetooth race
+   * where didDiscoverServices may not re-fire for cached services.
    * @param deviceId ID of the device
    * @returns Promise resolving to array of service and characteristic UUIDs
    * @see getServices
    * @see getCharacteristics
    */
-  public async getServicesWithCharacteristics(deviceId: string): Promise<{ uuid: string; characteristics: string[] }[]> {
-    const services = await this.getServices(deviceId);
-    return services.map((service) => {
-      return {
-        uuid: service,
-        characteristics: this.getCharacteristics(deviceId, service),
-      };
+  public async getServicesWithCharacteristics(
+    deviceId: string
+  ): Promise<{ uuid: string; characteristics: string[] }[]> {
+    await this._discoverServicesWithCharacteristics(deviceId);
+
+    const services = this.Instance.getServices(deviceId);
+    return BleNitroManager.normalizeGattUUIDs(services).map((service) => ({
+      uuid: service,
+      characteristics: this.getCharacteristics(deviceId, service),
+    }));
+  }
+
+  private static readonly DISCOVERY_TIMEOUT_MS = 30_000;
+
+  private _discoverServicesWithCharacteristics(
+    deviceId: string
+  ): Promise<void> {
+    const inner = new Promise<void>((resolve, reject) => {
+      if (!this.isConnected(deviceId)) {
+        reject(new Error('Device not connected'));
+        return;
+      }
+      this.Instance.discoverServicesWithCharacteristics(
+        deviceId,
+        (success: boolean, error: string) => {
+          if (success) {
+            resolve();
+          } else {
+            reject(new Error(error));
+          }
+        }
+      );
     });
+    return withTimeout(
+      inner,
+      BleNitroManager.DISCOVERY_TIMEOUT_MS,
+      'discoverServicesWithCharacteristics'
+    );
   }
 
   /**

@@ -18,7 +18,14 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     var disconnectEventCallback: ((String, Bool, String) -> Void)?
     var serviceDiscoveryCallback: ((Bool, String) -> Void)?
     var characteristicDiscoveryCallbacks: [String: (Bool, String) -> Void] = [:]
-    
+
+    // Full discovery (services + characteristics) callbacks and state
+    var fullDiscoveryCallbacks: [(Bool, String) -> Void] = []
+    var servicesDiscovered = false
+    var characteristicsDiscoveredCount = 0
+    var expectedCharacteristicsCount = 0
+    var characteristicDiscoveryError: String?
+
     // RSSI callback
     var rssiCallback: ((Bool, Double, String) -> Void)?
     
@@ -45,15 +52,34 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         if let error = error {
             serviceDiscoveryCallback?(false, error.localizedDescription)
+            serviceDiscoveryCallback = nil
+            resolveFullDiscoveryCallbacks(success: false, error: error.localizedDescription)
+            return
+        }
+
+        servicesDiscovered = true
+
+        // Resolve service-only callback immediately
+        serviceDiscoveryCallback?(true, "")
+        serviceDiscoveryCallback = nil
+
+        // Trigger characteristic discovery only for services that still need it.
+        // CoreBluetooth may skip the didDiscoverCharacteristicsFor callback for
+        // services whose characteristics are already cached, which would leave the
+        // counter stuck below expectedCharacteristicsCount.
+        let services = peripheral.services ?? []
+        let undiscovered = services.filter { $0.characteristics == nil }
+
+        if undiscovered.isEmpty {
+            resolveFullDiscoveryCallbacks(success: true, error: "")
         } else {
-            serviceDiscoveryCallback?(true, "")
-            
-            // Automatically discover characteristics for all services
-            peripheral.services?.forEach { service in
+            expectedCharacteristicsCount = undiscovered.count
+            characteristicsDiscoveredCount = 0
+            characteristicDiscoveryError = nil
+            for service in undiscovered {
                 peripheral.discoverCharacteristics(nil, for: service)
             }
         }
-        serviceDiscoveryCallback = nil
     }
     
     func peripheral(
@@ -62,13 +88,27 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         error: Error?
     ) {
         let serviceId = service.uuid.uuidString
-        
+
         if let error = error {
             characteristicDiscoveryCallbacks[serviceId]?(false, error.localizedDescription)
+            // Record the first error for the full discovery callback
+            if characteristicDiscoveryError == nil {
+                characteristicDiscoveryError = "Characteristic discovery failed for service \(serviceId): \(error.localizedDescription)"
+            }
         } else {
             characteristicDiscoveryCallbacks[serviceId]?(true, "")
         }
         characteristicDiscoveryCallbacks.removeValue(forKey: serviceId)
+
+        // Track full discovery progress
+        characteristicsDiscoveredCount += 1
+        if characteristicsDiscoveredCount >= expectedCharacteristicsCount {
+            if let discoveryError = characteristicDiscoveryError {
+                resolveFullDiscoveryCallbacks(success: false, error: discoveryError)
+            } else {
+                resolveFullDiscoveryCallbacks(success: true, error: "")
+            }
+        }
     }
     
     // MARK: - CBPeripheralDelegate - Characteristic Read
@@ -197,10 +237,23 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     // MARK: - CBPeripheralDelegate - Connection Events
     
     func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
-        // Handle service modifications
-        // This might require re-discovery of services
+        resolveFullDiscoveryCallbacks(success: false, error: "Services were invalidated during discovery")
+        servicesDiscovered = false
+        characteristicsDiscoveredCount = 0
+        expectedCharacteristicsCount = 0
+        characteristicDiscoveryError = nil
     }
     
+    // MARK: - Full Discovery Helpers
+
+    private func resolveFullDiscoveryCallbacks(success: Bool, error: String) {
+        let callbacks = fullDiscoveryCallbacks
+        fullDiscoveryCallbacks.removeAll()
+        for callback in callbacks {
+            callback(success, error)
+        }
+    }
+
     func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
         // Handle write without response ready state
         // Can be used to implement queuing for write operations
@@ -208,11 +261,17 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     
     // MARK: - Cleanup
     func cleanup() {
+        // Reject in-flight discovery callbacks before clearing
+        resolveFullDiscoveryCallbacks(success: false, error: "Peripheral disconnected during discovery")
         // Clear all callbacks to prevent memory leaks
         connectionCallback = nil
         disconnectionCallback = nil
         disconnectEventCallback = nil
         serviceDiscoveryCallback = nil
+        servicesDiscovered = false
+        characteristicsDiscoveredCount = 0
+        expectedCharacteristicsCount = 0
+        characteristicDiscoveryError = nil
         characteristicDiscoveryCallbacks.removeAll()
         rssiCallback = nil
         readCallbacks.removeAll()
