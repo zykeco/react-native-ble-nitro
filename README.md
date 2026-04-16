@@ -470,6 +470,119 @@ type DisconnectEventCallback = (deviceId: string, interrupted: boolean, error: s
 type CharacteristicUpdateCallback = (characteristicId: string, data: ArrayBuffer) => void;
 ```
 
+## 📡 Peripheral Mode
+
+Peripheral mode lets your device act as a BLE server — advertising services and responding to read/write requests from nearby centrals.
+
+### Config Plugin Setup
+
+Enable peripheral mode in your Expo config:
+
+```json
+{
+  "expo": {
+    "plugins": [
+      [
+        "react-native-ble-nitro",
+        {
+          "modes": ["peripheral"],
+          "androidAdvertisingEnabled": true
+        }
+      ]
+    ]
+  }
+}
+```
+
+- `modes: ['peripheral']` adds the `bluetooth-peripheral` background mode to `Info.plist` on iOS
+- `androidAdvertisingEnabled: true` adds the `BLUETOOTH_ADVERTISE` permission on Android
+
+### Adding a GATT Service
+
+Define your service and characteristics before starting to advertise:
+
+```typescript
+import {
+  BleNitro,
+  GATTCharacteristicProperty,
+  GATTCharacteristicPermission,
+} from 'react-native-ble-nitro';
+
+const ble = BleNitro.instance();
+
+const MY_SERVICE_UUID = '12345678-1234-1234-1234-123456789abc';
+const MY_CHAR_UUID = '12345678-1234-1234-1234-123456789abd';
+
+ble.addService(MY_SERVICE_UUID, true, [
+  {
+    uuid: MY_CHAR_UUID,
+    properties: [GATTCharacteristicProperty.Read, GATTCharacteristicProperty.Notify],
+    permissions: [GATTCharacteristicPermission.Readable],
+    value: null, // null = dynamic value, respond via onReadRequest
+  },
+]);
+```
+
+### Starting & Stopping Advertising
+
+```typescript
+// Start advertising (pass service UUIDs and optional local name)
+ble.startAdvertising([MY_SERVICE_UUID], 'MyDevice');
+
+// Check advertising state
+const advertising = ble.isAdvertising();
+
+// Stop advertising
+ble.stopAdvertising();
+```
+
+### Handling Read Requests
+
+When a characteristic has `value: null`, read requests are delivered to your callback. You must respond with `respondToRequest`:
+
+```typescript
+ble.onReadRequest((deviceId, characteristicUUID, requestId, offset) => {
+  console.log(`Read request from ${deviceId} for ${characteristicUUID}`);
+
+  // Respond with data (status 0 = GATT_SUCCESS)
+  const responseData = [0x48, 0x65, 0x6c, 0x6c, 0x6f]; // "Hello"
+  ble.respondToRequest(requestId, 0, offset, responseData);
+});
+```
+
+### Updating Characteristic Values
+
+Update the cached value of a characteristic (used when the characteristic has a static value or before sending notifications):
+
+```typescript
+const newValue = [0x42, 0x50, 0x4d]; // "BPM"
+ble.updateCharacteristicValue(MY_SERVICE_UUID, MY_CHAR_UUID, newValue);
+```
+
+### Sending Notifications
+
+Push data to subscribed centrals:
+
+```typescript
+const notificationData = [0x01, 0x02, 0x03];
+ble.notifyCharacteristic(MY_SERVICE_UUID, MY_CHAR_UUID, notificationData);
+```
+
+### Service & Cleanup
+
+```typescript
+// Remove a single service
+ble.removeService(MY_SERVICE_UUID);
+
+// Remove all services
+ble.removeAllServices();
+```
+
+### iOS Background Behavior
+
+> [!NOTE]
+> When your app is backgrounded on iOS, the advertisement packet is reduced to the service UUID only — the local name is stripped by the system. GATT read/write requests from connected centrals continue to work normally in the background.
+
 ## 🏗️ Architecture
 
 ### Nitro Modules Foundation

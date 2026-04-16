@@ -2,7 +2,8 @@ import { StatusBar } from 'expo-status-bar';
 import { AppState, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { createBle } from './src/bluetooth';
 import { useLayoutEffect, useRef, useState } from 'react';
-import type { BLEDevice, AsyncSubscription } from 'react-native-ble-nitro';
+import type { BLEDevice, AsyncSubscription, GATTCharacteristicConfig } from 'react-native-ble-nitro';
+import { GATTCharacteristicProperty, GATTCharacteristicPermission } from 'react-native-ble-nitro';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const HEART_RATE_SERVICE_UUID = '0000180d-0000-1000-8000-00805f9b34fb'.toLowerCase();
@@ -25,6 +26,10 @@ const PROFILE_SOFTWARE_UUID = '00002A28-0000-1000-8000-00805f9b34fb'.toLowerCase
 const PROFILE_MODEL_UUID = '00002A24-0000-1000-8000-00805f9b34fb'.toLowerCase();
 const PROFILE_SYSTEMID_UUID = '00002A23-0000-1000-8000-00805f9b34fb'.toLowerCase();
 
+// Peripheral mode constants
+const PERIPHERAL_SERVICE_UUID = '0000aa00-0000-1000-8000-00805f9b34fb';
+const PERIPHERAL_CHAR_UUID = '0000aa01-0000-1000-8000-00805f9b34fb';
+
 let unsubscribeRx: AsyncSubscription['remove'] | null = null;
 let unsubscribeHr: AsyncSubscription['remove'] | null = null;
 
@@ -39,6 +44,8 @@ export default function App() {
   const [connectedDeviceCharacteristics, setConnectedDeviceCharacteristics] = useState<Record<string, string[]>>({});
   const [bleNotificationSubscription, setBleNotificationSubscription] = useState<boolean>(false);
   const [hrNotificationSubscription, setHrNotificationSubscription] = useState<boolean>(false);
+  const [showPeripheral, setShowPeripheral] = useState(false);
+  const [isAdvertising, setIsAdvertising] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const bleModule = useRef(createBle({
     onEnabledChange: (enabled) => setIsEnabled(enabled),
@@ -330,6 +337,47 @@ export default function App() {
     logMessage('System ID', hexFromBytes(systemid));
   }
 
+  // --- Peripheral Mode ---
+
+  const setupPeripheralService = () => {
+    const characteristics: GATTCharacteristicConfig[] = [
+      {
+        uuid: PERIPHERAL_CHAR_UUID,
+        properties: [GATTCharacteristicProperty.Read],
+        permissions: [GATTCharacteristicPermission.Readable],
+        value: null, // dynamic — handled by onReadRequest
+      },
+    ];
+    ble.instance.addService(PERIPHERAL_SERVICE_UUID, true, characteristics);
+    logMessage('Added peripheral service');
+
+    ble.instance.onReadRequest((deviceId, characteristicUUID, requestId, offset) => {
+      logMessage(`Read request from ${deviceId} char=${characteristicUUID}`);
+      const response = Array.from(new TextEncoder().encode('Hello from peripheral'));
+      ble.instance.respondToRequest(requestId, 0, offset, response);
+      logMessage('Responded to read request');
+    });
+    logMessage('Registered onReadRequest handler');
+  };
+
+  const startPeripheralAdvertising = () => {
+    try {
+      setupPeripheralService();
+      ble.instance.startAdvertising([PERIPHERAL_SERVICE_UUID], 'BleNitroExample');
+      setIsAdvertising(true);
+      logMessage('Advertising started');
+    } catch (e) {
+      logMessage('Advertising error: ' + String(e));
+    }
+  };
+
+  const stopPeripheralAdvertising = () => {
+    ble.instance.stopAdvertising();
+    ble.instance.removeAllServices();
+    setIsAdvertising(false);
+    logMessage('Advertising stopped');
+  };
+
   const logMessage = (...message: (string | number)[]) => {
     const date = new Date().toLocaleTimeString('de-DE');
     setLogs((prev) => [...prev, `${date} - ${message.join(' ')}`]);
@@ -534,6 +582,29 @@ export default function App() {
                     </View>
                   )}
                   </>
+                )}
+                {!connectedDeviceId && (
+                  <TouchableOpacity
+                    style={[styles.button, { backgroundColor: showPeripheral ? '#6a6' : '#999' }]}
+                    onPress={() => setShowPeripheral((v) => !v)}
+                  >
+                    <Text>{showPeripheral ? 'Hide Peripheral Mode' : 'Show Peripheral Mode'}</Text>
+                  </TouchableOpacity>
+                )}
+                {showPeripheral && !connectedDeviceId && (
+                  <View style={{ padding: 8, marginTop: 8, backgroundColor: '#eef6ee', borderRadius: 4 }}>
+                    <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>Peripheral Mode</Text>
+                    <Text>Advertising: {isAdvertising.toString()}</Text>
+                    {!isAdvertising ? (
+                      <TouchableOpacity style={styles.button} onPress={startPeripheralAdvertising}>
+                        <Text>Start Advertising</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity style={styles.button} onPress={stopPeripheralAdvertising}>
+                        <Text>Stop Advertising</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 )}
                 {connectedDeviceId && (
                   <>
