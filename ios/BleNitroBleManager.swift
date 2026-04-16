@@ -23,6 +23,24 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     private var centralManagerDelegate: BleCentralManagerDelegate!
     private let lazyInitEnabled: Bool
     private var isCentralManagerInitialized = false
+
+    // MARK: - Peripheral Mode Properties
+    private var peripheralManager: CBPeripheralManager!
+    private var gattServerDelegate: BleGattServerDelegate!
+    private var isCurrentlyAdvertising = false
+    private var addedServices: [String: CBMutableService] = [:]
+    /// Cache for characteristic values with 60s TTL. Key format: "serviceUUID:characteristicUUID"
+    private var characteristicValueCache: [String: (data: Data, timestamp: Date)] = [:]
+    private var readRequestCallback: ((String, String, Double, Double) -> Void)?
+    private var writeRequestCallback: ((String, String, Double, ArrayBuffer, Bool) -> Void)?
+    private var peripheralStateCallback: ((BLEState) -> Void)?
+    /// Pending read requests keyed by requestId
+    private var pendingReadRequests: [Double: CBATTRequest] = [:]
+    /// Pending write requests keyed by requestId
+    private var pendingWriteRequests: [Double: [CBATTRequest]] = [:]
+    private var nextRequestId: Double = 1
+    /// Subscribed centrals keyed by characteristic UUID string
+    private var subscribedCentrals: [String: [CBCentral]] = [:]
     
     // MARK: - Restore State Properties
     internal var restoreStateCallback: (([BLEDevice]) -> Void)?
@@ -55,6 +73,11 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         }
 
         centralManager = CBCentralManager(delegate: centralManagerDelegate, queue: DispatchQueue.main, options: options.isEmpty ? nil : options)
+
+        // Initialize peripheral manager for GATT server / advertising
+        gattServerDelegate = BleGattServerDelegate(manager: self)
+        peripheralManager = CBPeripheralManager(delegate: gattServerDelegate, queue: DispatchQueue.main)
+
         isCentralManagerInitialized = true
     }
 
@@ -777,6 +800,331 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
                 await UIApplication.shared.open(url)
             }
         }
+    }
+
+    // MARK: - Peripheral / GATT Server Methods
+
+    public func startAdvertising(serviceUUIDs: [String], localName: String) throws {
+        ensureCentralManager()
+        guard peripheralManager.state == .poweredOn else {
+            throw NSError(domain: "BleNitroError", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Peripheral manager is not powered on"
+            ])
+        }
+
+        var advertisementData: [String: Any] = [:]
+        if !serviceUUIDs.isEmpty {
+            advertisementData[CBAdvertisementDataServiceUUIDsKey] = serviceUUIDs.map { CBUUID(string: $0) }
+        }
+        if !localName.isEmpty {
+            advertisementData[CBAdvertisementDataLocalNameKey] = localName
+        }
+
+        peripheralManager.startAdvertising(advertisementData.isEmpty ? nil : advertisementData)
+        isCurrentlyAdvertising = true
+    }
+
+    public func stopAdvertising() throws {
+        ensureCentralManager()
+        peripheralManager.stopAdvertising()
+        isCurrentlyAdvertising = false
+    }
+
+    public func isAdvertising() throws -> Bool {
+        return isCurrentlyAdvertising
+    }
+
+    public func addService(serviceUUID: String, isPrimary: Bool, characteristics: [GATTCharacteristicConfig]) throws {
+        ensureCentralManager()
+
+        let cbUUID = CBUUID(string: serviceUUID)
+        let service = CBMutableService(type: cbUUID, primary: isPrimary)
+
+        var cbCharacteristics: [CBMutableCharacteristic] = []
+        for config in characteristics {
+            let charUUID = CBUUID(string: config.uuid)
+
+            // Map properties
+            var cbProperties: CBCharacteristicProperties = []
+            for prop in config.properties {
+                switch prop {
+                case .read:
+                    cbProperties.insert(.read)
+                case .write:
+                    cbProperties.insert(.write)
+                case .writewithoutresponse:
+                    cbProperties.insert(.writeWithoutResponse)
+                case .notify:
+                    cbProperties.insert(.notify)
+                case .indicate:
+                    cbProperties.insert(.indicate)
+                }
+            }
+
+            // Map permissions
+            var cbPermissions: CBAttributePermissions = []
+            for perm in config.permissions {
+                switch perm {
+                case .readable:
+                    cbPermissions.insert(.readable)
+                case .writeable:
+                    cbPermissions.insert(.writeable)
+                }
+            }
+
+            // Extract value: nil triggers didReceiveReadRequest (dynamic), non-nil is served by CoreBluetooth directly
+            var charValue: Data? = nil
+            if let variantValue = config.value {
+                switch variantValue {
+                case .first(_):
+                    // NullType — dynamic value, use nil
+                    charValue = nil
+                case .second(let arrayBuffer):
+                    charValue = arrayBuffer.toData(copyIfNeeded: true)
+                }
+            }
+
+            let characteristic = CBMutableCharacteristic(
+                type: charUUID,
+                properties: cbProperties,
+                value: charValue,
+                permissions: cbPermissions
+            )
+            cbCharacteristics.append(characteristic)
+        }
+
+        service.characteristics = cbCharacteristics
+        addedServices[serviceUUID] = service
+        peripheralManager.add(service)
+    }
+
+    public func removeService(serviceUUID: String) throws {
+        ensureCentralManager()
+        guard let service = addedServices[serviceUUID] else {
+            throw NSError(domain: "BleNitroError", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "Service not found: \(serviceUUID)"
+            ])
+        }
+        peripheralManager.remove(service)
+        addedServices.removeValue(forKey: serviceUUID)
+    }
+
+    public func removeAllServices() throws {
+        ensureCentralManager()
+        peripheralManager.removeAllServices()
+        addedServices.removeAll()
+    }
+
+    public func updateCharacteristicValue(serviceUUID: String, characteristicUUID: String, data: ArrayBuffer) throws {
+        ensureCentralManager()
+        let writeData = data.toData(copyIfNeeded: true)
+
+        // Update cache with 60s TTL
+        let cacheKey = "\(serviceUUID):\(characteristicUUID)"
+        characteristicValueCache[cacheKey] = (data: writeData, timestamp: Date())
+
+        // Also update the CBMutableCharacteristic value if possible
+        if let service = addedServices[serviceUUID],
+           let chars = service.characteristics {
+            let targetUUID = CBUUID(string: characteristicUUID)
+            if let mutableChar = chars.first(where: { $0.uuid == targetUUID }) as? CBMutableCharacteristic {
+                mutableChar.value = writeData
+            }
+        }
+    }
+
+    public func onReadRequest(callback: @escaping (String, String, Double, Double) -> Void) throws {
+        self.readRequestCallback = callback
+    }
+
+    public func onWriteRequest(callback: @escaping (String, String, Double, ArrayBuffer, Bool) -> Void) throws {
+        self.writeRequestCallback = callback
+    }
+
+    public func respondToRequest(requestId: Double, status: Double, offset: Double, data: ArrayBuffer) throws {
+        ensureCentralManager()
+
+        let attResult = CBATTError.Code(rawValue: Int(status)) ?? .success
+        let responseData = data.toData(copyIfNeeded: true)
+
+        // Handle read request response
+        if let request = pendingReadRequests[requestId] {
+            if !responseData.isEmpty {
+                let requestOffset = Int(request.offset)
+                if requestOffset < responseData.count {
+                    request.value = responseData.subdata(in: requestOffset..<responseData.count)
+                } else {
+                    request.value = Data()
+                }
+            }
+            peripheralManager.respond(to: request, withResult: CBATTError(attResult))
+            pendingReadRequests.removeValue(forKey: requestId)
+            return
+        }
+
+        // Handle write request response
+        if let requests = pendingWriteRequests[requestId], let firstRequest = requests.first {
+            peripheralManager.respond(to: firstRequest, withResult: CBATTError(attResult))
+            pendingWriteRequests.removeValue(forKey: requestId)
+            return
+        }
+    }
+
+    public func notifyCharacteristic(serviceUUID: String, characteristicUUID: String, data: ArrayBuffer) throws {
+        ensureCentralManager()
+
+        guard let service = addedServices[serviceUUID],
+              let chars = service.characteristics else {
+            throw NSError(domain: "BleNitroError", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "Service not found: \(serviceUUID)"
+            ])
+        }
+
+        let targetUUID = CBUUID(string: characteristicUUID)
+        guard let mutableChar = chars.first(where: { $0.uuid == targetUUID }) as? CBMutableCharacteristic else {
+            throw NSError(domain: "BleNitroError", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: "Characteristic not found: \(characteristicUUID)"
+            ])
+        }
+
+        let notifyData = data.toData(copyIfNeeded: true)
+
+        // updateValue sends to all subscribed centrals when centrals param is nil
+        let didSend = peripheralManager.updateValue(notifyData, for: mutableChar, onSubscribedCentrals: nil)
+        if !didSend {
+            print("[BleNitro] updateValue returned false — transmit queue is full, will retry on peripheralManagerIsReady")
+        }
+    }
+
+    public func peripheralState() throws -> BLEState {
+        ensureCentralManager()
+        let cbState = CBManagerState(rawValue: peripheralManager.state.rawValue) ?? .unknown
+        return mapCBManagerStateToBLEState(cbState)
+    }
+
+    public func subscribeToPeripheralStateChange(
+        callback: @escaping (BLEState) -> Void
+    ) throws -> OperationResult {
+        ensureCentralManager()
+        self.peripheralStateCallback = callback
+        return OperationResult(success: true, error: nil)
+    }
+
+    public func unsubscribeFromPeripheralStateChange() throws -> OperationResult {
+        self.peripheralStateCallback = nil
+        return OperationResult(success: true, error: nil)
+    }
+
+    // MARK: - Internal Peripheral Handlers
+
+    internal func handlePeripheralStateChange(_ state: BLEState) {
+        peripheralStateCallback?(state)
+    }
+
+    internal func handleAdvertisingStarted(error: Error?) {
+        if let error = error {
+            print("[BleNitro] Advertising failed: \(error.localizedDescription)")
+            isCurrentlyAdvertising = false
+        } else {
+            print("[BleNitro] Advertising started successfully")
+            isCurrentlyAdvertising = true
+        }
+    }
+
+    internal func handleReadRequest(_ request: CBATTRequest) {
+        let deviceId = request.central.identifier.uuidString
+        let characteristicUUID = request.characteristic.uuid.uuidString
+
+        // Check cache first with 60s TTL
+        let cacheKey = findCacheKey(forCharacteristicUUID: characteristicUUID)
+        if let cacheKey = cacheKey,
+           let cached = characteristicValueCache[cacheKey],
+           Date().timeIntervalSince(cached.timestamp) < 60.0 {
+            let offset = Int(request.offset)
+            if offset < cached.data.count {
+                request.value = cached.data.subdata(in: offset..<cached.data.count)
+            } else {
+                request.value = Data()
+            }
+            peripheralManager.respond(to: request, withResult: .success)
+            return
+        }
+
+        // No valid cache — forward to JS callback
+        guard let callback = readRequestCallback else {
+            // No JS handler registered, respond with error
+            peripheralManager.respond(to: request, withResult: .readNotPermitted)
+            return
+        }
+
+        let requestId = nextRequestId
+        nextRequestId += 1
+        pendingReadRequests[requestId] = request
+
+        callback(deviceId, characteristicUUID, requestId, Double(request.offset))
+    }
+
+    internal func handleWriteRequests(_ requests: [CBATTRequest]) {
+        guard let firstRequest = requests.first else { return }
+
+        let deviceId = firstRequest.central.identifier.uuidString
+
+        guard let callback = writeRequestCallback else {
+            // No JS handler registered, respond with error
+            peripheralManager.respond(to: firstRequest, withResult: .writeNotPermitted)
+            return
+        }
+
+        // Group all writes under a single requestId
+        let requestId = nextRequestId
+        nextRequestId += 1
+        pendingWriteRequests[requestId] = requests
+
+        // Forward each write request to JS
+        for request in requests {
+            let characteristicUUID = request.characteristic.uuid.uuidString
+            let writeData = request.value ?? Data()
+
+            do {
+                let arrayBuffer = try ArrayBuffer.copy(data: writeData)
+                // responseNeeded is true when the write type is .withResponse
+                let responseNeeded = true
+                callback(deviceId, characteristicUUID, requestId, arrayBuffer, responseNeeded)
+            } catch {
+                let emptyBuffer = try! ArrayBuffer.copy(data: Data())
+                callback(deviceId, characteristicUUID, requestId, emptyBuffer, true)
+            }
+        }
+    }
+
+    internal func handleCentralSubscribed(central: CBCentral, characteristic: CBCharacteristic) {
+        let charUUID = characteristic.uuid.uuidString
+        if subscribedCentrals[charUUID] == nil {
+            subscribedCentrals[charUUID] = []
+        }
+        // Avoid duplicate entries
+        if !subscribedCentrals[charUUID]!.contains(where: { $0.identifier == central.identifier }) {
+            subscribedCentrals[charUUID]!.append(central)
+        }
+        print("[BleNitro] Central \(central.identifier.uuidString) subscribed to \(charUUID)")
+    }
+
+    internal func handleCentralUnsubscribed(central: CBCentral, characteristic: CBCharacteristic) {
+        let charUUID = characteristic.uuid.uuidString
+        subscribedCentrals[charUUID]?.removeAll(where: { $0.identifier == central.identifier })
+        print("[BleNitro] Central \(central.identifier.uuidString) unsubscribed from \(charUUID)")
+    }
+
+    // MARK: - Private Peripheral Helpers
+
+    /// Find cache key matching a characteristic UUID across all services
+    private func findCacheKey(forCharacteristicUUID charUUID: String) -> String? {
+        for (key, _) in characteristicValueCache {
+            if key.hasSuffix(":\(charUUID)") {
+                return key
+            }
+        }
+        return nil
     }
 }
 
