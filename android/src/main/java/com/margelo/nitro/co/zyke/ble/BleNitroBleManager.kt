@@ -7,9 +7,15 @@ import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothGattServer
+import android.bluetooth.BluetoothGattServerCallback
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.le.AdvertiseCallback
+import android.bluetooth.le.AdvertiseData
+import android.bluetooth.le.AdvertiseSettings
+import android.bluetooth.le.BluetoothLeAdvertiser
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
@@ -53,6 +59,22 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     private val connectedDevices = ConcurrentHashMap<String, BluetoothGatt>()
     private val deviceCallbacks = ConcurrentHashMap<String, DeviceCallbacks>()
     
+    // BLE Peripheral / GATT Server
+    private var gattServer: BluetoothGattServer? = null
+    private var bleAdvertiser: BluetoothLeAdvertiser? = null
+    private var isCurrentlyAdvertising = false
+    private var advertiseCallback: AdvertiseCallback? = null
+    private val addedGattServices = ConcurrentHashMap<String, BluetoothGattService>()
+    private val characteristicValueCache = ConcurrentHashMap<String, Pair<ByteArray, Long>>()
+    private val cacheTimeToLiveMs = 60_000L
+    private var readRequestCallback: ((deviceId: String, characteristicUUID: String, requestId: Double, offset: Double) -> Unit)? = null
+    private var writeRequestCallback: ((deviceId: String, characteristicUUID: String, requestId: Double, data: ArrayBuffer, responseNeeded: Boolean) -> Unit)? = null
+    private var peripheralStateCallback: ((state: BLEState) -> Unit)? = null
+    private var peripheralStateReceiver: BroadcastReceiver? = null
+    private val pendingReadRequests = ConcurrentHashMap<Int, Pair<BluetoothDevice, Int>>()
+    private val pendingWriteRequests = ConcurrentHashMap<Int, Pair<BluetoothDevice, Int>>()
+    private var nextRequestId = 1
+
     // Read callback storage for proper response handling (key: deviceId:characteristicId)
     private val readCallbacks = ConcurrentHashMap<String, (Boolean, ArrayBuffer, String) -> Unit>()
 
@@ -1132,5 +1154,491 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             promise.reject(Exception("Error opening Bluetooth settings: ${e.message}"))
         }
         return promise
+    }
+
+    // ==================== Peripheral / GATT Server ====================
+
+    private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+
+    private fun createGattServerCallback(): BluetoothGattServerCallback {
+        return object : BluetoothGattServerCallback() {
+            override fun onCharacteristicReadRequest(
+                device: BluetoothDevice,
+                requestId: Int,
+                offset: Int,
+                characteristic: BluetoothGattCharacteristic
+            ) {
+                val charUuid = characteristic.uuid.toString()
+                val cacheKey = "${characteristic.service?.uuid}:$charUuid"
+
+                // Check cache with TTL
+                val cached = characteristicValueCache[cacheKey]
+                if (cached != null && (System.currentTimeMillis() - cached.second) < cacheTimeToLiveMs) {
+                    val value = cached.first
+                    val responseValue = if (offset > 0 && offset < value.size) {
+                        value.copyOfRange(offset, value.size)
+                    } else if (offset == 0) {
+                        value
+                    } else {
+                        byteArrayOf()
+                    }
+                    try {
+                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, responseValue)
+                    } catch (e: SecurityException) {
+                        android.util.Log.w("BleNitro", "SecurityException sending read response: ${e.message}")
+                    }
+                    return
+                }
+
+                // Fallback to JS callback
+                val jsCallback = readRequestCallback
+                if (jsCallback != null) {
+                    val jsRequestId = nextRequestId++
+                    pendingReadRequests[jsRequestId] = Pair(device, requestId)
+                    jsCallback(device.address, charUuid, jsRequestId.toDouble(), offset.toDouble())
+                } else {
+                    // No callback registered, send empty response
+                    try {
+                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, byteArrayOf())
+                    } catch (e: SecurityException) {
+                        android.util.Log.w("BleNitro", "SecurityException sending default read response: ${e.message}")
+                    }
+                }
+            }
+
+            override fun onCharacteristicWriteRequest(
+                device: BluetoothDevice,
+                requestId: Int,
+                characteristic: BluetoothGattCharacteristic,
+                preparedWrite: Boolean,
+                responseNeeded: Boolean,
+                offset: Int,
+                value: ByteArray?
+            ) {
+                val charUuid = characteristic.uuid.toString()
+                val jsCallback = writeRequestCallback
+
+                if (jsCallback != null) {
+                    val jsRequestId = nextRequestId++
+                    if (responseNeeded) {
+                        pendingWriteRequests[jsRequestId] = Pair(device, requestId)
+                    }
+
+                    val bytes = value ?: byteArrayOf()
+                    val directBuffer = java.nio.ByteBuffer.allocateDirect(bytes.size)
+                    directBuffer.put(bytes)
+                    directBuffer.flip()
+                    val data = ArrayBuffer.wrap(directBuffer)
+
+                    jsCallback(device.address, charUuid, jsRequestId.toDouble(), data, responseNeeded)
+                } else if (responseNeeded) {
+                    // No callback registered, acknowledge write
+                    try {
+                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                    } catch (e: SecurityException) {
+                        android.util.Log.w("BleNitro", "SecurityException sending write response: ${e.message}")
+                    }
+                }
+            }
+
+            override fun onDescriptorReadRequest(
+                device: BluetoothDevice,
+                requestId: Int,
+                offset: Int,
+                descriptor: BluetoothGattDescriptor
+            ) {
+                if (descriptor.uuid == CCCD_UUID) {
+                    val value = descriptor.value ?: BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
+                    try {
+                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                    } catch (e: SecurityException) {
+                        android.util.Log.w("BleNitro", "SecurityException sending descriptor read response: ${e.message}")
+                    }
+                } else {
+                    try {
+                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, descriptor.value ?: byteArrayOf())
+                    } catch (e: SecurityException) {
+                        android.util.Log.w("BleNitro", "SecurityException sending descriptor read response: ${e.message}")
+                    }
+                }
+            }
+
+            override fun onDescriptorWriteRequest(
+                device: BluetoothDevice,
+                requestId: Int,
+                descriptor: BluetoothGattDescriptor,
+                preparedWrite: Boolean,
+                responseNeeded: Boolean,
+                offset: Int,
+                value: ByteArray?
+            ) {
+                if (descriptor.uuid == CCCD_UUID) {
+                    descriptor.value = value
+                }
+                if (responseNeeded) {
+                    try {
+                        gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+                    } catch (e: SecurityException) {
+                        android.util.Log.w("BleNitro", "SecurityException sending descriptor write response: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+
+    private fun createAdvertiseCallback(): AdvertiseCallback {
+        return object : AdvertiseCallback() {
+            override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
+                isCurrentlyAdvertising = true
+            }
+
+            override fun onStartFailure(errorCode: Int) {
+                isCurrentlyAdvertising = false
+                val errorMessage = when (errorCode) {
+                    ADVERTISE_FAILED_DATA_TOO_LARGE -> "Advertise data too large"
+                    ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "Too many advertisers"
+                    ADVERTISE_FAILED_ALREADY_STARTED -> "Already started"
+                    ADVERTISE_FAILED_INTERNAL_ERROR -> "Internal error"
+                    ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "Feature unsupported"
+                    else -> "Advertise failed with error code: $errorCode"
+                }
+                android.util.Log.e("BleNitro", "Advertising failed: $errorMessage")
+            }
+        }
+    }
+
+    private fun openGattServerIfNeeded() {
+        if (gattServer != null) return
+        val context = appContext ?: return
+        val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager ?: return
+        try {
+            gattServer = bluetoothManager.openGattServer(context, createGattServerCallback())
+        } catch (e: SecurityException) {
+            android.util.Log.e("BleNitro", "SecurityException opening GATT server: ${e.message}")
+        }
+    }
+
+    override fun startAdvertising(serviceUUIDs: Array<String>, localName: String) {
+        try {
+            initializeBluetoothIfNeeded()
+            val adapter = bluetoothAdapter ?: return
+
+            if (!adapter.isEnabled) return
+            if (isCurrentlyAdvertising) return
+
+            // Open GATT server if needed
+            openGattServerIfNeeded()
+
+            // Get advertiser
+            bleAdvertiser = adapter.bluetoothLeAdvertiser ?: return
+
+            // Build advertise settings
+            val settingsBuilder = AdvertiseSettings.Builder()
+                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
+                .setConnectable(true)
+                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
+                .setTimeout(0) // Advertise indefinitely
+
+            val settings = settingsBuilder.build()
+
+            // Build advertise data
+            val dataBuilder = AdvertiseData.Builder()
+                .setIncludeDeviceName(localName.isNotEmpty())
+
+            for (uuid in serviceUUIDs) {
+                try {
+                    dataBuilder.addServiceUuid(ParcelUuid(UUID.fromString(uuid)))
+                } catch (e: Exception) {
+                    // Invalid UUID, skip
+                }
+            }
+
+            val data = dataBuilder.build()
+
+            // Create and store the callback
+            advertiseCallback = createAdvertiseCallback()
+
+            // Start advertising
+            bleAdvertiser?.startAdvertising(settings, data, advertiseCallback)
+
+        } catch (e: SecurityException) {
+            isCurrentlyAdvertising = false
+            android.util.Log.e("BleNitro", "SecurityException starting advertising: ${e.message}")
+        } catch (e: Exception) {
+            isCurrentlyAdvertising = false
+            android.util.Log.e("BleNitro", "Error starting advertising: ${e.message}")
+        }
+    }
+
+    override fun stopAdvertising() {
+        try {
+            advertiseCallback?.let { callback ->
+                bleAdvertiser?.stopAdvertising(callback)
+            }
+        } catch (e: SecurityException) {
+            android.util.Log.w("BleNitro", "SecurityException stopping advertising: ${e.message}")
+        } catch (e: Exception) {
+            android.util.Log.w("BleNitro", "Error stopping advertising: ${e.message}")
+        }
+        isCurrentlyAdvertising = false
+        advertiseCallback = null
+    }
+
+    override fun isAdvertising(): Boolean {
+        return isCurrentlyAdvertising
+    }
+
+    override fun addService(serviceUUID: String, isPrimary: Boolean, characteristics: Array<GATTCharacteristicConfig>) {
+        try {
+            openGattServerIfNeeded()
+            val server = gattServer ?: return
+
+            val serviceType = if (isPrimary) {
+                BluetoothGattService.SERVICE_TYPE_PRIMARY
+            } else {
+                BluetoothGattService.SERVICE_TYPE_SECONDARY
+            }
+
+            val service = BluetoothGattService(UUID.fromString(serviceUUID), serviceType)
+
+            for (charConfig in characteristics) {
+                // Map properties
+                var properties = 0
+                var needsCccd = false
+                for (prop in charConfig.properties) {
+                    when (prop) {
+                        GATTCharacteristicProperty.READ -> properties = properties or BluetoothGattCharacteristic.PROPERTY_READ
+                        GATTCharacteristicProperty.WRITE -> properties = properties or BluetoothGattCharacteristic.PROPERTY_WRITE
+                        GATTCharacteristicProperty.WRITEWITHOUTRESPONSE -> properties = properties or BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE
+                        GATTCharacteristicProperty.NOTIFY -> {
+                            properties = properties or BluetoothGattCharacteristic.PROPERTY_NOTIFY
+                            needsCccd = true
+                        }
+                        GATTCharacteristicProperty.INDICATE -> {
+                            properties = properties or BluetoothGattCharacteristic.PROPERTY_INDICATE
+                            needsCccd = true
+                        }
+                    }
+                }
+
+                // Map permissions
+                var permissions = 0
+                for (perm in charConfig.permissions) {
+                    when (perm) {
+                        GATTCharacteristicPermission.READABLE -> permissions = permissions or BluetoothGattCharacteristic.PERMISSION_READ
+                        GATTCharacteristicPermission.WRITEABLE -> permissions = permissions or BluetoothGattCharacteristic.PERMISSION_WRITE
+                    }
+                }
+
+                val characteristic = BluetoothGattCharacteristic(
+                    UUID.fromString(charConfig.uuid),
+                    properties,
+                    permissions
+                )
+
+                // Set initial value if provided
+                charConfig.value?.let { variant ->
+                    variant.asSecondOrNull()?.let { arrayBuffer ->
+                        val byteBuffer = arrayBuffer.getBuffer(copyIfNeeded = true)
+                        val bytes = ByteArray(byteBuffer.remaining())
+                        byteBuffer.get(bytes)
+                        characteristic.value = bytes
+                        // Also cache it
+                        val cacheKey = "$serviceUUID:${charConfig.uuid}"
+                        characteristicValueCache[cacheKey] = Pair(bytes, System.currentTimeMillis())
+                    }
+                }
+
+                // Add CCCD descriptor for notify/indicate characteristics
+                if (needsCccd) {
+                    val cccdDescriptor = BluetoothGattDescriptor(
+                        CCCD_UUID,
+                        BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
+                    )
+                    cccdDescriptor.value = BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
+                    characteristic.addDescriptor(cccdDescriptor)
+                }
+
+                service.addCharacteristic(characteristic)
+            }
+
+            server.addService(service)
+            addedGattServices[serviceUUID] = service
+
+        } catch (e: SecurityException) {
+            android.util.Log.e("BleNitro", "SecurityException adding service: ${e.message}")
+        } catch (e: Exception) {
+            android.util.Log.e("BleNitro", "Error adding service: ${e.message}")
+        }
+    }
+
+    override fun removeService(serviceUUID: String) {
+        try {
+            val server = gattServer ?: return
+            val service = addedGattServices.remove(serviceUUID) ?: return
+            server.removeService(service)
+        } catch (e: SecurityException) {
+            android.util.Log.w("BleNitro", "SecurityException removing service: ${e.message}")
+        } catch (e: Exception) {
+            android.util.Log.w("BleNitro", "Error removing service: ${e.message}")
+        }
+    }
+
+    override fun removeAllServices() {
+        try {
+            gattServer?.clearServices()
+            addedGattServices.clear()
+            characteristicValueCache.clear()
+        } catch (e: SecurityException) {
+            android.util.Log.w("BleNitro", "SecurityException removing all services: ${e.message}")
+        } catch (e: Exception) {
+            android.util.Log.w("BleNitro", "Error removing all services: ${e.message}")
+        }
+    }
+
+    override fun updateCharacteristicValue(serviceUUID: String, characteristicUUID: String, data: ArrayBuffer) {
+        val byteBuffer = data.getBuffer(copyIfNeeded = true)
+        val bytes = ByteArray(byteBuffer.remaining())
+        byteBuffer.get(bytes)
+
+        val cacheKey = "$serviceUUID:$characteristicUUID"
+        characteristicValueCache[cacheKey] = Pair(bytes, System.currentTimeMillis())
+    }
+
+    override fun onReadRequest(callback: (deviceId: String, characteristicUUID: String, requestId: Double, offset: Double) -> Unit) {
+        readRequestCallback = callback
+    }
+
+    override fun onWriteRequest(callback: (deviceId: String, characteristicUUID: String, requestId: Double, data: ArrayBuffer, responseNeeded: Boolean) -> Unit) {
+        writeRequestCallback = callback
+    }
+
+    override fun respondToRequest(requestId: Double, status: Double, offset: Double, data: ArrayBuffer) {
+        val jsRequestId = requestId.toInt()
+        val nativeStatus = status.toInt()
+        val nativeOffset = offset.toInt()
+
+        val byteBuffer = data.getBuffer(copyIfNeeded = true)
+        val bytes = ByteArray(byteBuffer.remaining())
+        byteBuffer.get(bytes)
+
+        // Check pending read requests first
+        pendingReadRequests.remove(jsRequestId)?.let { (device, nativeRequestId) ->
+            try {
+                gattServer?.sendResponse(device, nativeRequestId, nativeStatus, nativeOffset, bytes)
+            } catch (e: SecurityException) {
+                android.util.Log.w("BleNitro", "SecurityException sending read response: ${e.message}")
+            }
+            return
+        }
+
+        // Check pending write requests
+        pendingWriteRequests.remove(jsRequestId)?.let { (device, nativeRequestId) ->
+            try {
+                gattServer?.sendResponse(device, nativeRequestId, nativeStatus, nativeOffset, bytes)
+            } catch (e: SecurityException) {
+                android.util.Log.w("BleNitro", "SecurityException sending write response: ${e.message}")
+            }
+            return
+        }
+
+        android.util.Log.w("BleNitro", "respondToRequest: no pending request found for id $jsRequestId")
+    }
+
+    override fun notifyCharacteristic(serviceUUID: String, characteristicUUID: String, data: ArrayBuffer) {
+        try {
+            val server = gattServer ?: return
+            val context = appContext ?: return
+            val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager ?: return
+
+            val service = addedGattServices[serviceUUID] ?: return
+            val characteristic = service.getCharacteristic(UUID.fromString(characteristicUUID)) ?: return
+
+            val byteBuffer = data.getBuffer(copyIfNeeded = true)
+            val bytes = ByteArray(byteBuffer.remaining())
+            byteBuffer.get(bytes)
+            characteristic.value = bytes
+
+            // Also update cache
+            val cacheKey = "$serviceUUID:$characteristicUUID"
+            characteristicValueCache[cacheKey] = Pair(bytes, System.currentTimeMillis())
+
+            // Notify all connected devices
+            val connectedDevices = bluetoothManager.getConnectedDevices(BluetoothProfile.GATT_SERVER)
+            val isIndication = (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0
+            for (device in connectedDevices) {
+                try {
+                    server.notifyCharacteristicChanged(device, characteristic, isIndication)
+                } catch (e: SecurityException) {
+                    android.util.Log.w("BleNitro", "SecurityException notifying device ${device.address}: ${e.message}")
+                }
+            }
+
+        } catch (e: SecurityException) {
+            android.util.Log.e("BleNitro", "SecurityException notifying characteristic: ${e.message}")
+        } catch (e: Exception) {
+            android.util.Log.e("BleNitro", "Error notifying characteristic: ${e.message}")
+        }
+    }
+
+    override fun peripheralState(): BLEState {
+        // Android has no separate peripheral state; reuse adapter state
+        return state()
+    }
+
+    override fun subscribeToPeripheralStateChange(callback: (state: BLEState) -> Unit): OperationResult {
+        try {
+            val context = appContext ?: return OperationResult(success = false, error = "Context not available")
+
+            // Unsubscribe from any existing peripheral state subscription
+            unsubscribeFromPeripheralStateChange()
+
+            // Store the callback
+            this.peripheralStateCallback = callback
+
+            // Create and register broadcast receiver
+            peripheralStateReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (intent?.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                        val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                        val bleState = bluetoothStateToBlEState(state)
+                        peripheralStateCallback?.invoke(bleState)
+                    }
+                }
+            }
+            val intentFilter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(peripheralStateReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                context.registerReceiver(peripheralStateReceiver, intentFilter)
+            }
+
+            return OperationResult(success = true, error = null)
+        } catch (e: Exception) {
+            return OperationResult(success = false, error = "Error subscribing to peripheral state changes: ${e.message}")
+        }
+    }
+
+    override fun unsubscribeFromPeripheralStateChange(): OperationResult {
+        try {
+            this.peripheralStateCallback = null
+
+            peripheralStateReceiver?.let { receiver ->
+                val context = appContext
+                if (context != null) {
+                    try {
+                        context.unregisterReceiver(receiver)
+                    } catch (e: IllegalArgumentException) {
+                        // Receiver was not registered, ignore
+                    }
+                }
+                peripheralStateReceiver = null
+            }
+
+            return OperationResult(success = true, error = null)
+        } catch (e: Exception) {
+            return OperationResult(success = false, error = "Error unsubscribing from peripheral state changes: ${e.message}")
+        }
     }
 }

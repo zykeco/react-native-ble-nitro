@@ -18,4 +18,10 @@ export {
   BleTimeoutError,
 } from "./manager";
 
+export {
+  type GATTCharacteristicConfig,
+  GATTCharacteristicProperty,
+  GATTCharacteristicPermission,
+} from './specs/NativeBleNitro.nitro';
+
 export { BleNitro } from './singleton';
