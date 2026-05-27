@@ -657,6 +657,12 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         try {
             val gatt = connectedDevices[deviceId]
             if (gatt != null) {
+                val callbacks = deviceCallbacks[deviceId]
+                val pendingConnect = callbacks?.connectCallback
+                if (pendingConnect != null) {
+                    pendingConnect.invoke(false, deviceId, "Connection cancelled")
+                    deviceCallbacks[deviceId] = callbacks.copy(connectCallback = null)
+                }
                 gatt.disconnect()
                 callback(true, "")
             } else {
