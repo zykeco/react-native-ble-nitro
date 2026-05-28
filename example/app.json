@@ -24,6 +24,7 @@
       "package": "co.zyke.blenitroexample"
     },
     "plugins": [
+      ["expo-dev-client"],
       [
         "react-native-ble-nitro",
         {

@@ -207,6 +207,7 @@ export default function App() {
       setConnectedDeviceId(connectedId);
       checkConnection(connectedId);
       const servicesWithCharacteristics = await ble.instance.getServicesWithCharacteristics(connectedId);
+      logMessage(JSON.stringify(servicesWithCharacteristics));
       setConnectedDeviceServiceUUIDs(servicesWithCharacteristics.map((s) => s.uuid));
       resetScannedDevices();
       servicesWithCharacteristics.map(async (s) => {
