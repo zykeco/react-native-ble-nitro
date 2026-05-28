@@ -714,7 +714,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         rssi: Double
     ) -> BLEDevice {
         let deviceId = peripheral.identifier.uuidString
-        let deviceName = peripheral.name ?? advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? "Unknown"
+        let deviceName = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name ?? "Unknown"
         
         // Extract service UUIDs
         let serviceUUIDs = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID])?.map { $0.uuidString } ?? []
