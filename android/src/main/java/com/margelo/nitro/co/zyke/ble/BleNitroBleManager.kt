@@ -266,18 +266,21 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     private fun createGattCallback(deviceId: String): BluetoothGattCallback {
         return object : BluetoothGattCallback() {
             override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-                val callbacks = deviceCallbacks[deviceId]
-                
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> {
-                        callbacks?.connectCallback?.invoke(true, deviceId, "")
+                        var connectCb: ((Boolean, String, String) -> Unit)? = null
+                        deviceCallbacks.compute(deviceId) { _, callbacks ->
+                            connectCb = callbacks?.connectCallback
+                            callbacks?.copy(connectCallback = null)
+                        }
+                        connectCb?.invoke(true, deviceId, "")
                     }
                     BluetoothProfile.STATE_DISCONNECTED -> {
                         // Clean up
                         connectedDevices.remove(deviceId)
                         val interrupted = status != BluetoothGatt.GATT_SUCCESS
-                        callbacks?.disconnectCallback?.invoke(deviceId, interrupted, if (interrupted) "Connection lost" else "")
-                        deviceCallbacks.remove(deviceId)
+                        val cb = deviceCallbacks.remove(deviceId)
+                        cb?.disconnectCallback?.invoke(deviceId, interrupted, if (interrupted) "Connection lost" else "")
                         gatt.close()
                     }
                 }
@@ -657,12 +660,12 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         try {
             val gatt = connectedDevices[deviceId]
             if (gatt != null) {
-                val callbacks = deviceCallbacks[deviceId]
-                val pendingConnect = callbacks?.connectCallback
-                if (pendingConnect != null) {
-                    pendingConnect.invoke(false, deviceId, "Connection cancelled")
-                    deviceCallbacks[deviceId] = callbacks.copy(connectCallback = null)
+                var pendingConnect: ((Boolean, String, String) -> Unit)? = null
+                deviceCallbacks.compute(deviceId) { _, callbacks ->
+                    pendingConnect = callbacks?.connectCallback
+                    callbacks?.copy(connectCallback = null)
                 }
+                pendingConnect?.invoke(false, deviceId, "Connection cancelled")
                 gatt.disconnect()
                 callback(true, "")
             } else {
