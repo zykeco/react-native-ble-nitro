@@ -260,7 +260,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
             return
         }
 
-        if peripheral.state != .connected, let delegate = peripheralDelegates[deviceId] {
+        if peripheral.state == .connecting, let delegate = peripheralDelegates[deviceId] {
             delegate.connectionCallback?(false, "", "Connection cancelled")
             delegate.connectionCallback = nil
         }
