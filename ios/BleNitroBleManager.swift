@@ -255,17 +255,22 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     
     public func disconnect(deviceId: String, callback: @escaping (Bool, String) -> Void) throws {
         ensureCentralManager()
-        guard let peripheral = connectedPeripherals[deviceId] else {
-            callback(false, "Peripheral not connected")
+        guard let peripheral = connectedPeripherals[deviceId] ?? findPeripheral(by: deviceId) else {
+            callback(false, "Peripheral not found")
             return
         }
-        
+
+        if peripheral.state == .connecting, let delegate = peripheralDelegates[deviceId] {
+            delegate.connectionCallback?(false, "", "Connection cancelled")
+            delegate.connectionCallback = nil
+        }
+
         // Store disconnect callback in delegate
         peripheralDelegates[deviceId]?.disconnectionCallback = callback
-        
+
         // Mark this as an intentional disconnection
         intentionalDisconnections.insert(deviceId)
-        
+
         centralManager.cancelPeripheralConnection(peripheral)
     }
     
