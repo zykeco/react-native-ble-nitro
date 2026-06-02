@@ -5,6 +5,8 @@ export {
   type ScanCallback,
   type ManufacturerDataEntry,
   type ManufacturerData,
+  type ServiceDataEntry,
+  type ServiceData,
   type ConnectionCallback,
   type DisconnectEventCallback,
   type OperationCallback,

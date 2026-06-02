@@ -85,6 +85,43 @@ describe('BleNitro', () => {
     );
   });
 
+  test('startScan exposes converted service data to the callback', async () => {
+    // Reset any scanning state left over from previous tests
+    mockNative.stopScan.mockImplementation(() => true);
+    BleManager.stopScan();
+
+    const nativeDevice = {
+      id: 'device-1',
+      name: 'Treadmill',
+      rssi: -50,
+      manufacturerData: { companyIdentifiers: [] },
+      serviceData: {
+        services: [
+          {
+            uuid: '1826',
+            data: new Uint8Array([0x01, 0x02, 0x03]).buffer,
+          },
+        ],
+      },
+      serviceUUIDs: ['1826'],
+      isConnectable: true,
+      isConnected: false,
+    };
+
+    mockNative.startScan.mockImplementation((filter, callback) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+      callback(nativeDevice);
+    });
+
+    const scanCallback = jest.fn();
+    BleManager.startScan({}, scanCallback);
+
+    expect(scanCallback).toHaveBeenCalledTimes(1);
+    const device = scanCallback.mock.calls[0][0];
+    expect(device.serviceData.services).toHaveLength(1);
+    expect(device.serviceData.services[0].uuid).toBe('00001826-0000-1000-8000-00805f9b34fb');
+    expect(device.serviceData.services[0].data).toEqual([0x01, 0x02, 0x03]);
+  });
+
   test('stopScan calls native and resolves', async () => {
     // First start a scan to set _isScanning to true
     mockNative.startScan.mockImplementation((filter, callback) => { // eslint-disable-line @typescript-eslint/no-unused-vars
