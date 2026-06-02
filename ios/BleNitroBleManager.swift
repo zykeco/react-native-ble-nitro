@@ -726,19 +726,36 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         
         // Extract manufacturer data
         let manufacturerData = extractManufacturerData(from: advertisementData)
-        
+
+        // Extract service data
+        let serviceData = extractServiceData(from: advertisementData)
+
         // Check if connectable
         let isConnectable = (advertisementData[CBAdvertisementDataIsConnectable] as? Bool) ?? true
-        
+
         return BLEDevice(
             id: deviceId,
             name: deviceName,
             rssi: rssi,
             manufacturerData: manufacturerData,
+            serviceData: serviceData,
             serviceUUIDs: serviceUUIDs,
             isConnectable: isConnectable,
             isConnected: peripheral.state == .connected
         )
+    }
+
+    private func extractServiceData(from advertisementData: [String: Any]) -> ServiceData {
+        guard let serviceDataRaw = advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data] else {
+            return ServiceData(services: [])
+        }
+
+        let entries: [ServiceDataEntry] = serviceDataRaw.map { (uuid, data) in
+            let arrayBuffer = (try? ArrayBuffer.copy(data: data)) ?? (try! ArrayBuffer.copy(data: Data()))
+            return ServiceDataEntry(uuid: uuid.uuidString, data: arrayBuffer)
+        }
+
+        return ServiceData(services: entries)
     }
     
     private func extractManufacturerData(from advertisementData: [String: Any]) -> ManufacturerData {
