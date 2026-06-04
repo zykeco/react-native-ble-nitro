@@ -65,6 +65,43 @@ export type OperationResult = {
   error?: string;
 };
 
+// --- Peripheral / GATT Server Types ---
+
+export enum GATTCharacteristicProperty {
+  Read = 0,
+  Write = 1,
+  WriteWithoutResponse = 2,
+  Notify = 3,
+  Indicate = 4,
+}
+
+export enum GATTCharacteristicPermission {
+  Readable = 0,
+  Writeable = 1,
+}
+
+export interface GATTCharacteristicConfig {
+  uuid: string;
+  properties: GATTCharacteristicProperty[];
+  permissions: GATTCharacteristicPermission[];
+  value: BLEValue | null;
+}
+
+export type ReadRequestCallback = (
+  deviceId: string,
+  characteristicUUID: string,
+  requestId: number,
+  offset: number
+) => void;
+
+export type WriteRequestCallback = (
+  deviceId: string,
+  characteristicUUID: string,
+  requestId: number,
+  data: BLEValue,
+  responseNeeded: boolean
+) => void;
+
 /**
  * Native BLE Nitro Module Specification
  * Defines the interface between TypeScript and native implementations
@@ -110,4 +147,20 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
   subscribeToStateChange(stateCallback: StateCallback): OperationResult;
   unsubscribeFromStateChange(): OperationResult;
   openSettings(): Promise<void>;
+
+  // --- Peripheral / GATT Server ---
+  startAdvertising(serviceUUIDs: string[], localName: string): void;
+  stopAdvertising(): void;
+  isAdvertising(): boolean;
+  addService(serviceUUID: string, isPrimary: boolean, characteristics: GATTCharacteristicConfig[]): void;
+  removeService(serviceUUID: string): void;
+  removeAllServices(): void;
+  updateCharacteristicValue(serviceUUID: string, characteristicUUID: string, data: BLEValue): void;
+  onReadRequest(callback: ReadRequestCallback): void;
+  onWriteRequest(callback: WriteRequestCallback): void;
+  respondToRequest(requestId: number, status: number, offset: number, data: BLEValue): void;
+  notifyCharacteristic(serviceUUID: string, characteristicUUID: string, data: BLEValue): void;
+  peripheralState(): BLEState;
+  subscribeToPeripheralStateChange(callback: StateCallback): OperationResult;
+  unsubscribeFromPeripheralStateChange(): OperationResult;
 }

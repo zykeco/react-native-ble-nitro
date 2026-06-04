@@ -5,6 +5,7 @@ import {
   BLEState as NativeBLEState,
   ScanCallback as NativeScanCallback,
   AndroidScanMode as NativeAndroidScanMode,
+  type GATTCharacteristicConfig,
 } from './specs/NativeBleNitro';
 
 export class BleTimeoutError extends Error {
@@ -798,5 +799,170 @@ export class BleNitroManager {
    */
   public openSettings(): Promise<void> {
     return this.Instance.openSettings();
+  }
+
+  // --- Peripheral / GATT Server ---
+
+  private _isAdvertising: boolean = false;
+
+  /**
+   * Start BLE advertising with the given service UUIDs
+   * @param serviceUUIDs Array of service UUIDs to advertise
+   * @param localName Optional local name to advertise
+   */
+  public startAdvertising(serviceUUIDs: string[], localName: string = ''): void {
+    if (this._isAdvertising) return;
+    this.Instance.startAdvertising(serviceUUIDs, localName);
+    this._isAdvertising = true;
+  }
+
+  /**
+   * Stop BLE advertising
+   */
+  public stopAdvertising(): void {
+    if (!this._isAdvertising) return;
+    this.Instance.stopAdvertising();
+    this._isAdvertising = false;
+  }
+
+  /**
+   * Check if currently advertising
+   */
+  public isAdvertising(): boolean {
+    this._isAdvertising = this.Instance.isAdvertising();
+    return this._isAdvertising;
+  }
+
+  /**
+   * Add a GATT service with characteristics.
+   * Must be called before startAdvertising.
+   */
+  public addService(
+    serviceUUID: string,
+    isPrimary: boolean,
+    characteristics: GATTCharacteristicConfig[]
+  ): void {
+    this.Instance.addService(serviceUUID, isPrimary, characteristics);
+  }
+
+  /**
+   * Remove a GATT service
+   */
+  public removeService(serviceUUID: string): void {
+    this.Instance.removeService(serviceUUID);
+  }
+
+  /**
+   * Remove all GATT services
+   */
+  public removeAllServices(): void {
+    this.Instance.removeAllServices();
+  }
+
+  /**
+   * Update the cached value of a characteristic
+   */
+  public updateCharacteristicValue(
+    serviceUUID: string,
+    characteristicUUID: string,
+    data: ByteArray
+  ): void {
+    this.Instance.updateCharacteristicValue(
+      serviceUUID,
+      characteristicUUID,
+      byteArrayToArrayBuffer(data)
+    );
+  }
+
+  /**
+   * Register a callback for GATT read requests.
+   * Called when a central device reads a dynamic characteristic (value: null).
+   */
+  public onReadRequest(
+    callback: (
+      deviceId: string,
+      characteristicUUID: string,
+      requestId: number,
+      offset: number
+    ) => void
+  ): void {
+    this.Instance.onReadRequest(callback);
+  }
+
+  /**
+   * Register a callback for GATT write requests
+   */
+  public onWriteRequest(
+    callback: (
+      deviceId: string,
+      characteristicUUID: string,
+      requestId: number,
+      data: ByteArray,
+      responseNeeded: boolean
+    ) => void
+  ): void {
+    this.Instance.onWriteRequest(
+      (deviceId, charUUID, requestId, data, responseNeeded) => {
+        callback(deviceId, charUUID, requestId, arrayBufferToByteArray(data), responseNeeded);
+      }
+    );
+  }
+
+  /**
+   * Respond to a pending read or write request
+   * @param requestId The request ID from the callback
+   * @param status GATT status (0 = success)
+   * @param offset Byte offset for the response
+   * @param data Response data as ByteArray
+   */
+  public respondToRequest(
+    requestId: number,
+    status: number,
+    offset: number,
+    data: ByteArray
+  ): void {
+    this.Instance.respondToRequest(requestId, status, offset, byteArrayToArrayBuffer(data));
+  }
+
+  /**
+   * Send a notification to subscribed centrals
+   */
+  public notifyCharacteristic(
+    serviceUUID: string,
+    characteristicUUID: string,
+    data: ByteArray
+  ): void {
+    this.Instance.notifyCharacteristic(
+      serviceUUID,
+      characteristicUUID,
+      byteArrayToArrayBuffer(data)
+    );
+  }
+
+  /**
+   * Get the peripheral manager state
+   */
+  public peripheralState(): BLEState {
+    return mapNativeBLEStateToBLEState(this.Instance.peripheralState());
+  }
+
+  /**
+   * Subscribe to peripheral state changes
+   */
+  public subscribeToPeripheralStateChange(
+    callback: (state: BLEState) => void,
+    emitInitial = false
+  ): Subscription {
+    if (emitInitial) {
+      callback(this.peripheralState());
+    }
+    this.Instance.subscribeToPeripheralStateChange((nativeState: NativeBLEState) => {
+      callback(mapNativeBLEStateToBLEState(nativeState));
+    });
+    return {
+      remove: () => {
+        this.Instance.unsubscribeFromPeripheralStateChange();
+      },
+    };
   }
 }

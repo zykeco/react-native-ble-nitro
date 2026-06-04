@@ -25,6 +25,21 @@ const mockNativeInstance = {
   unsubscribeFromStateChange: jest.fn(),
   openSettings: jest.fn(),
   restoreStateIdentifier: null,
+  // Peripheral methods
+  startAdvertising: jest.fn(),
+  stopAdvertising: jest.fn(),
+  isAdvertising: jest.fn(),
+  addService: jest.fn(),
+  removeService: jest.fn(),
+  removeAllServices: jest.fn(),
+  updateCharacteristicValue: jest.fn(),
+  onReadRequest: jest.fn(),
+  onWriteRequest: jest.fn(),
+  respondToRequest: jest.fn(),
+  notifyCharacteristic: jest.fn(),
+  peripheralState: jest.fn(),
+  subscribeToPeripheralStateChange: jest.fn(),
+  unsubscribeFromPeripheralStateChange: jest.fn(),
 };
 
 jest.mock('../specs/NativeBleNitro', () => ({
@@ -482,5 +497,122 @@ describe('BleNitro', () => {
       'device-rssi-fail',
       expect.any(Function)
     );
+  });
+
+  // --- Peripheral Mode Tests ---
+
+  describe('Peripheral Mode', () => {
+    test('startAdvertising calls native with correct parameters', () => {
+      mockNative.startAdvertising.mockImplementation(() => {});
+      BleManager.startAdvertising(['d71f0000-5b7e-4e38-9c2a-1e0d3a8b7f21']);
+      expect(mockNative.startAdvertising).toHaveBeenCalledWith(
+        ['d71f0000-5b7e-4e38-9c2a-1e0d3a8b7f21'],
+        ''
+      );
+    });
+
+    test('startAdvertising with local name', () => {
+      mockNative.startAdvertising.mockImplementation(() => {});
+      // Reset advertising state
+      mockNative.isAdvertising.mockReturnValue(false);
+      BleManager.stopAdvertising();
+      BleManager.startAdvertising(['d71f0000-5b7e-4e38-9c2a-1e0d3a8b7f21'], 'TestDevice');
+      expect(mockNative.startAdvertising).toHaveBeenCalledWith(
+        ['d71f0000-5b7e-4e38-9c2a-1e0d3a8b7f21'],
+        'TestDevice'
+      );
+    });
+
+    test('stopAdvertising calls native', () => {
+      // Ensure advertising is started first
+      mockNative.startAdvertising.mockImplementation(() => {});
+      mockNative.isAdvertising.mockReturnValue(false);
+      BleManager.stopAdvertising(); // reset state
+      BleManager.startAdvertising(['test-uuid']);
+
+      mockNative.stopAdvertising.mockImplementation(() => {});
+      BleManager.stopAdvertising();
+      expect(mockNative.stopAdvertising).toHaveBeenCalled();
+    });
+
+    test('isAdvertising returns native state', () => {
+      mockNative.isAdvertising.mockReturnValue(true);
+      expect(BleManager.isAdvertising()).toBe(true);
+
+      mockNative.isAdvertising.mockReturnValue(false);
+      expect(BleManager.isAdvertising()).toBe(false);
+    });
+
+    test('addService calls native with correct config', () => {
+      mockNative.addService.mockImplementation(() => {});
+      BleManager.addService('d71f0000-5b7e-4e38-9c2a-1e0d3a8b7f21', true, [
+        {
+          uuid: 'd71f0001-5b7e-4e38-9c2a-1e0d3a8b7f21',
+          properties: [0], // Read
+          permissions: [0], // Readable
+          value: null,
+        },
+      ]);
+      expect(mockNative.addService).toHaveBeenCalledWith(
+        'd71f0000-5b7e-4e38-9c2a-1e0d3a8b7f21',
+        true,
+        [
+          {
+            uuid: 'd71f0001-5b7e-4e38-9c2a-1e0d3a8b7f21',
+            properties: [0],
+            permissions: [0],
+            value: null,
+          },
+        ]
+      );
+    });
+
+    test('removeAllServices calls native', () => {
+      mockNative.removeAllServices.mockImplementation(() => {});
+      BleManager.removeAllServices();
+      expect(mockNative.removeAllServices).toHaveBeenCalled();
+    });
+
+    test('updateCharacteristicValue converts ByteArray to ArrayBuffer', () => {
+      mockNative.updateCharacteristicValue.mockImplementation(() => {});
+      BleManager.updateCharacteristicValue('service-uuid', 'char-uuid', [0x41, 0x42, 0x43]);
+      expect(mockNative.updateCharacteristicValue).toHaveBeenCalledWith(
+        'service-uuid',
+        'char-uuid',
+        expect.any(ArrayBuffer)
+      );
+    });
+
+    test('onReadRequest registers callback', () => {
+      const callback = jest.fn();
+      mockNative.onReadRequest.mockImplementation(() => {});
+      BleManager.onReadRequest(callback);
+      expect(mockNative.onReadRequest).toHaveBeenCalledWith(expect.any(Function));
+    });
+
+    test('respondToRequest calls native with correct params', () => {
+      mockNative.respondToRequest.mockImplementation(() => {});
+      BleManager.respondToRequest(42, 0, 0, [0xAA, 0xBB]);
+      expect(mockNative.respondToRequest).toHaveBeenCalledWith(
+        42,
+        0,
+        0,
+        expect.any(ArrayBuffer)
+      );
+    });
+
+    test('peripheralState returns mapped state', () => {
+      mockNative.peripheralState.mockReturnValue(5); // PoweredOn
+      expect(BleManager.peripheralState()).toBe('PoweredOn');
+    });
+
+    test('subscribeToPeripheralStateChange registers callback', () => {
+      mockNative.subscribeToPeripheralStateChange.mockReturnValue({ success: true });
+      mockNative.peripheralState.mockReturnValue(5);
+      const callback = jest.fn();
+      const sub = BleManager.subscribeToPeripheralStateChange(callback, true);
+      expect(callback).toHaveBeenCalledWith('PoweredOn'); // emitInitial
+      expect(sub).toHaveProperty('remove');
+    });
   });
 });
