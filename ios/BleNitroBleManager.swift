@@ -164,6 +164,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
                 name: peripheral.name ?? "Unknown Device",
                 rssi: 0, // RSSI not available for connected devices without explicit read
                 manufacturerData: ManufacturerData(companyIdentifiers: []), // Not available for connected devices
+                serviceData: ServiceData(services: []), // Not available for connected devices
                 serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
                 isConnectable: true, // Already connected, so it was connectable
                 isConnected: true
@@ -185,12 +186,13 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
                     name: peripheral.name ?? "Unknown Device",
                     rssi: 0,
                     manufacturerData: ManufacturerData(companyIdentifiers: []),
+                    serviceData: ServiceData(services: []),
                     serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
                     isConnectable: true,
                     isConnected: true
                 )
                 connectedDevices.append(device)
-                
+
                 // Add to our tracking dictionary
                 connectedPeripherals[deviceId] = peripheral
             }
@@ -211,6 +213,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
                         name: peripheral.name ?? "Unknown Device",
                         rssi: 0,
                         manufacturerData: ManufacturerData(companyIdentifiers: []),
+                        serviceData: ServiceData(services: []),
                         serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
                         isConnectable: true,
                         isConnected: true
@@ -607,6 +610,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
                     name: peripheral.name ?? "Restored Device",
                     rssi: 0, // RSSI not available for restored peripherals
                     manufacturerData: ManufacturerData(companyIdentifiers: []),
+                    serviceData: ServiceData(services: []),
                     serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
                     isConnectable: true,
                     isConnected: peripheral.state == .connected
