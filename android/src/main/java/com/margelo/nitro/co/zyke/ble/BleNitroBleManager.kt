@@ -69,6 +69,16 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
 
     // Descriptor write callback storage (key: deviceId:descriptorUuid)
     private val descriptorWriteCallbacks = ConcurrentHashMap<String, (Boolean, String) -> Unit>()
+
+    // Android permits only one outstanding ATT operation per GATT connection.
+    // Defer service discovery while an MTU request is in flight so the two
+    // procedures cannot overlap when JS calls them back-to-back.
+    private val mtuInFlight = ConcurrentHashMap<String, Boolean>()
+    private val pendingDiscovery = ConcurrentHashMap<String, () -> Unit>()
+    private val mtuFallbackRunnables = ConcurrentHashMap<String, Runnable>()
+    private val mtuHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val mtuGateLock = Any()
+    private val mtuSettleFallbackMs = 1000L
     
     // Helper class to store device callbacks
     private data class DeviceCallbacks(
@@ -268,6 +278,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> {
+                        clearMtuGateState(deviceId)
                         var connectCb: ((Boolean, String, String) -> Unit)? = null
                         deviceCallbacks.compute(deviceId) { _, callbacks ->
                             connectCb = callbacks?.connectCallback
@@ -277,6 +288,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                     }
                     BluetoothProfile.STATE_DISCONNECTED -> {
                         // Clean up
+                        clearMtuGateState(deviceId)
                         connectedDevices.remove(deviceId)
                         val interrupted = status != BluetoothGatt.GATT_SUCCESS
                         val cb = deviceCallbacks.remove(deviceId)
@@ -284,6 +296,10 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         gatt.close()
                     }
                 }
+            }
+
+            override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+                settleMtu(gatt.device.address)
             }
             
             override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
@@ -394,6 +410,48 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 // Process next queued operation
                 processNextGattOperation()
             }
+        }
+    }
+
+    private fun runOrDeferDiscovery(deviceId: String, startDiscovery: () -> Unit) {
+        val shouldStartNow = synchronized(mtuGateLock) {
+            if (mtuInFlight[deviceId] == true) {
+                pendingDiscovery[deviceId] = startDiscovery
+                false
+            } else {
+                true
+            }
+        }
+
+        if (shouldStartNow) {
+            startDiscovery()
+        }
+    }
+
+    private fun markMtuInFlight(deviceId: String) {
+        synchronized(mtuGateLock) {
+            mtuInFlight[deviceId] = true
+            mtuFallbackRunnables.remove(deviceId)?.let { mtuHandler.removeCallbacks(it) }
+            val runnable = Runnable { settleMtu(deviceId) }
+            mtuFallbackRunnables[deviceId] = runnable
+            mtuHandler.postDelayed(runnable, mtuSettleFallbackMs)
+        }
+    }
+
+    private fun settleMtu(deviceId: String) {
+        val discoveryToStart = synchronized(mtuGateLock) {
+            mtuInFlight.remove(deviceId)
+            mtuFallbackRunnables.remove(deviceId)?.let { mtuHandler.removeCallbacks(it) }
+            pendingDiscovery.remove(deviceId)
+        }
+        discoveryToStart?.invoke()
+    }
+
+    private fun clearMtuGateState(deviceId: String) {
+        synchronized(mtuGateLock) {
+            mtuInFlight.remove(deviceId)
+            pendingDiscovery.remove(deviceId)
+            mtuFallbackRunnables.remove(deviceId)?.let { mtuHandler.removeCallbacks(it) }
         }
     }
 
@@ -688,6 +746,9 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             val gatt = connectedDevices[deviceId]
             if (gatt != null) {
                 val success = gatt.requestMtu(mtu.toInt())
+                if (success) {
+                    markMtuInFlight(deviceId)
+                }
                 if (success) mtu else 0.0
             } else {
                 0.0
@@ -731,14 +792,16 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                     // Store the callback for when service discovery completes
                     callbacks.serviceDiscoveryCallback = callback
                     
-                    // Start service discovery
-                    val success = gatt.discoverServices()
-                    if (!success) {
-                        // Clear callback and report failure immediately
-                        callbacks.serviceDiscoveryCallback = null
-                        callback(false, "Failed to start service discovery")
+                    runOrDeferDiscovery(deviceId) {
+                        // Start service discovery
+                        val success = gatt.discoverServices()
+                        if (!success) {
+                            // Clear callback and report failure immediately
+                            callbacks.serviceDiscoveryCallback = null
+                            callback(false, "Failed to start service discovery")
+                        }
+                        // If success, the callback will be invoked in onServicesDiscovered
                     }
-                    // If success, the callback will be invoked in onServicesDiscovered
                 } else {
                     callback(false, "Device callback not found")
                 }
