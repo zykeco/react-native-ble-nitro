@@ -921,7 +921,17 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
 
             val subscriptionKey = "$serviceId:$characteristicId"
 
-            // Write to the CCCD descriptor to enable notifications on the remote device.
+            val supportsNotify =
+                (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0
+            val supportsIndicate =
+                (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0
+            val cccdValue = if (supportsIndicate && !supportsNotify) {
+                BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+            } else {
+                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            }
+
+            // Write to the CCCD descriptor to enable notifications or indications on the remote device.
             // The update callback is stored only after the descriptor write succeeds
             // so that isSubscribedToCharacteristic reflects actual BLE state.
             val descriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
@@ -930,7 +940,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                     GattOperation.WriteDescriptor(
                         gatt = gatt,
                         descriptor = descriptor,
-                        value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
+                        value = cccdValue,
                         deviceId = deviceId,
                         callback = { success, error ->
                             if (success) {
