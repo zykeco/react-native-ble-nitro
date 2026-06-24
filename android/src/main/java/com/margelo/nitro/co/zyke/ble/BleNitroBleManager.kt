@@ -921,14 +921,13 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
 
             val subscriptionKey = "$serviceId:$characteristicId"
 
-            val supportsNotify =
-                (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0
-            val supportsIndicate =
-                (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0
-            val cccdValue = if (supportsIndicate && !supportsNotify) {
-                BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
-            } else {
-                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            val cccdValue = when (cccdSubscriptionMode(characteristic.properties)) {
+                CccdSubscriptionMode.INDICATE -> BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+                CccdSubscriptionMode.NOTIFY -> BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                CccdSubscriptionMode.UNSUPPORTED -> {
+                    completionCallback(false, "Characteristic does not support notify or indicate")
+                    return
+                }
             }
 
             // Write to the CCCD descriptor to enable notifications or indications on the remote device.
