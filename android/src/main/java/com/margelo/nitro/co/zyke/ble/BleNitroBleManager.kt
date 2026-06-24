@@ -73,9 +73,10 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     // Android permits only one outstanding ATT operation per GATT connection.
     // Defer service discovery while an MTU request is in flight so the two
     // procedures cannot overlap when JS calls them back-to-back.
-    private val mtuInFlight = ConcurrentHashMap<String, Boolean>()
-    private val pendingDiscovery = ConcurrentHashMap<String, () -> Unit>()
-    private val mtuFallbackRunnables = ConcurrentHashMap<String, Runnable>()
+    // All three maps below are guarded by mtuGateLock, so plain HashMaps suffice.
+    private val mtuInFlight = HashMap<String, Boolean>()
+    private val pendingDiscovery = HashMap<String, () -> Unit>()
+    private val mtuFallbackRunnables = HashMap<String, Runnable>()
     private val mtuHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val mtuGateLock = Any()
     private val mtuSettleFallbackMs = 1000L
@@ -292,6 +293,10 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         connectedDevices.remove(deviceId)
                         val interrupted = status != BluetoothGatt.GATT_SUCCESS
                         val cb = deviceCallbacks.remove(deviceId)
+                        // If a discoverServices() call was still in flight (or deferred
+                        // behind an MTU request), it will never receive onServicesDiscovered
+                        // now. Fail it explicitly so the JS promise does not hang forever.
+                        cb?.serviceDiscoveryCallback?.invoke(false, "Disconnected before service discovery completed")
                         cb?.disconnectCallback?.invoke(deviceId, interrupted, if (interrupted) "Connection lost" else "")
                         gatt.close()
                     }
@@ -299,7 +304,9 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             }
 
             override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
-                settleMtu(gatt.device.address)
+                // Use the deviceId captured for this callback so the gate key always
+                // matches the one markMtuInFlight() recorded under.
+                settleMtu(deviceId)
             }
             
             override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
@@ -444,7 +451,10 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             mtuFallbackRunnables.remove(deviceId)?.let { mtuHandler.removeCallbacks(it) }
             pendingDiscovery.remove(deviceId)
         }
-        discoveryToStart?.invoke()
+        // settleMtu can be invoked from the binder thread (onMtuChanged) or the main
+        // thread (fallback). Start the deferred discovery on the main looper so GATT
+        // operations are always issued from a single, consistent thread.
+        discoveryToStart?.let { mtuHandler.post(it) }
     }
 
     private fun clearMtuGateState(deviceId: String) {
