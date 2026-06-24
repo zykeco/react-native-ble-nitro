@@ -14,6 +14,7 @@ export {
   type BleNitroManagerOptions,
   BLEState,
   AndroidScanMode,
+  AndroidConnectionPriority,
   BleNitroManager,
   BleTimeoutError,
 } from "./manager";

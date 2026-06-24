@@ -289,6 +289,10 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         
         return Double(peripheral.maximumWriteValueLength(for: .withoutResponse))
     }
+
+    public func requestConnectionPriority(deviceId: String, androidConnectionPriority: AndroidConnectionPriority) throws -> Bool {
+        return false
+    }
     
     public func readRSSI(deviceId: String, callback: @escaping (Bool, Double, String) -> Void) throws {
         guard let peripheral = connectedPeripherals[deviceId] else {

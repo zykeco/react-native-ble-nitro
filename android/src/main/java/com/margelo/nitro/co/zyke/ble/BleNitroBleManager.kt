@@ -397,6 +397,14 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         }
     }
 
+    private fun mapAndroidConnectionPriority(androidConnectionPriority: AndroidConnectionPriority): Int {
+        return when (androidConnectionPriority) {
+            AndroidConnectionPriority.HIGH -> BluetoothGatt.CONNECTION_PRIORITY_HIGH
+            AndroidConnectionPriority.LOWPOWER -> BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER
+            AndroidConnectionPriority.BALANCED -> BluetoothGatt.CONNECTION_PRIORITY_BALANCED
+        }
+    }
+
     /**
      * Enqueue a GATT operation to be executed sequentially.
      * Android BLE requires that only one GATT operation runs at a time.
@@ -694,6 +702,17 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             }
         } catch (e: Exception) {
             0.0
+        }
+    }
+
+    override fun requestConnectionPriority(deviceId: String, androidConnectionPriority: AndroidConnectionPriority): Boolean {
+        return try {
+            val gatt = connectedDevices[deviceId] ?: return false
+            gatt.requestConnectionPriority(mapAndroidConnectionPriority(androidConnectionPriority))
+        } catch (_: SecurityException) {
+            false
+        } catch (_: Exception) {
+            false
         }
     }
 
