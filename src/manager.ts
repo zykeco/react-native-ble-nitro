@@ -44,11 +44,21 @@ export interface ManufacturerData {
   companyIdentifiers: ManufacturerDataEntry[];
 }
 
+export interface ServiceDataEntry {
+  uuid: string;
+  data: ByteArray;
+}
+
+export interface ServiceData {
+  services: ServiceDataEntry[];
+}
+
 export interface BLEDevice {
   id: string;
   name: string;
   rssi: number;
   manufacturerData: ManufacturerData;
+  serviceData: ServiceData;
   serviceUUIDs: string[];
   isConnectable: boolean;
   isConnected: boolean;
@@ -130,6 +140,12 @@ export function convertNativeBleDeviceToBleDevice(nativeBleDevice: NativeBLEDevi
     manufacturerData: {
       companyIdentifiers: nativeBleDevice.manufacturerData.companyIdentifiers.map(entry => ({
         id: entry.id,
+        data: arrayBufferToByteArray(entry.data)
+      }))
+    },
+    serviceData: {
+      services: nativeBleDevice.serviceData.services.map(entry => ({
+        uuid: BleNitroManager.normalizeGattUUID(entry.uuid),
         data: arrayBufferToByteArray(entry.data)
       }))
     }

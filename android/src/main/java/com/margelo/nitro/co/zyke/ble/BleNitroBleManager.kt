@@ -225,14 +225,32 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             ManufacturerData(companyIdentifiers = entries.toTypedArray())
         } ?: ManufacturerData(companyIdentifiers = emptyArray())
         
+        // Extract service data
+        val serviceData = scanRecord?.serviceData?.let { dataMap ->
+            val entries = mutableListOf<ServiceDataEntry>()
+            for ((uuid, value) in dataMap) {
+                // Create direct ByteBuffer as required by ArrayBuffer.wrap()
+                val directBuffer = java.nio.ByteBuffer.allocateDirect(value.size)
+                directBuffer.put(value)
+                directBuffer.flip()
+
+                entries.add(ServiceDataEntry(
+                    uuid = uuid.toString(),
+                    data = ArrayBuffer.wrap(directBuffer)
+                ))
+            }
+            ServiceData(services = entries.toTypedArray())
+        } ?: ServiceData(services = emptyArray())
+
         // Extract service UUIDs
         val serviceUUIDs = scanRecord?.serviceUuids?.map { it.toString() }?.toTypedArray() ?: emptyArray()
-        
+
         return BLEDevice(
             id = device.address,
             name = device.name ?: "",
             rssi = scanResult.rssi.toDouble(),
             manufacturerData = manufacturerData,
+            serviceData = serviceData,
             serviceUUIDs = serviceUUIDs,
             isConnectable = true, // Assume scannable devices are connectable
             isConnected = false // Scanned devices are not yet connected

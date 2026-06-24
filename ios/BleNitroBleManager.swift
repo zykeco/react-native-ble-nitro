@@ -164,6 +164,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
                 name: peripheral.name ?? "Unknown Device",
                 rssi: 0, // RSSI not available for connected devices without explicit read
                 manufacturerData: ManufacturerData(companyIdentifiers: []), // Not available for connected devices
+                serviceData: ServiceData(services: []), // Not available for connected devices
                 serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
                 isConnectable: true, // Already connected, so it was connectable
                 isConnected: true
@@ -185,12 +186,13 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
                     name: peripheral.name ?? "Unknown Device",
                     rssi: 0,
                     manufacturerData: ManufacturerData(companyIdentifiers: []),
+                    serviceData: ServiceData(services: []),
                     serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
                     isConnectable: true,
                     isConnected: true
                 )
                 connectedDevices.append(device)
-                
+
                 // Add to our tracking dictionary
                 connectedPeripherals[deviceId] = peripheral
             }
@@ -211,6 +213,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
                         name: peripheral.name ?? "Unknown Device",
                         rssi: 0,
                         manufacturerData: ManufacturerData(companyIdentifiers: []),
+                        serviceData: ServiceData(services: []),
                         serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
                         isConnectable: true,
                         isConnected: true
@@ -607,6 +610,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
                     name: peripheral.name ?? "Restored Device",
                     rssi: 0, // RSSI not available for restored peripherals
                     manufacturerData: ManufacturerData(companyIdentifiers: []),
+                    serviceData: ServiceData(services: []),
                     serviceUUIDs: peripheral.services?.map { $0.uuid.uuidString } ?? [],
                     isConnectable: true,
                     isConnected: peripheral.state == .connected
@@ -726,19 +730,36 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         
         // Extract manufacturer data
         let manufacturerData = extractManufacturerData(from: advertisementData)
-        
+
+        // Extract service data
+        let serviceData = extractServiceData(from: advertisementData)
+
         // Check if connectable
         let isConnectable = (advertisementData[CBAdvertisementDataIsConnectable] as? Bool) ?? true
-        
+
         return BLEDevice(
             id: deviceId,
             name: deviceName,
             rssi: rssi,
             manufacturerData: manufacturerData,
+            serviceData: serviceData,
             serviceUUIDs: serviceUUIDs,
             isConnectable: isConnectable,
             isConnected: peripheral.state == .connected
         )
+    }
+
+    private func extractServiceData(from advertisementData: [String: Any]) -> ServiceData {
+        guard let serviceDataRaw = advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data] else {
+            return ServiceData(services: [])
+        }
+
+        let entries: [ServiceDataEntry] = serviceDataRaw.map { (uuid, data) in
+            let arrayBuffer = (try? ArrayBuffer.copy(data: data)) ?? (try! ArrayBuffer.copy(data: Data()))
+            return ServiceDataEntry(uuid: uuid.uuidString, data: arrayBuffer)
+        }
+
+        return ServiceData(services: entries)
     }
     
     private func extractManufacturerData(from advertisementData: [String: Any]) -> ManufacturerData {
