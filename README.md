@@ -196,7 +196,8 @@ const newMTU = ble.requestMTU(deviceId, 247);
 console.log('MTU set to:', newMTU);
 
 // Request Android connection priority while connected
-// Returns true if Android accepted the request; returns false on iOS or error
+// Returns true if Android successfully initiated the request (the priority change
+// is applied asynchronously); returns false on iOS, an error, or a disconnected device
 const priorityRequested = ble.requestConnectionPriority(deviceId, AndroidConnectionPriority.High);
 
 // Read RSSI value

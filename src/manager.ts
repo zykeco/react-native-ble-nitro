@@ -425,16 +425,18 @@ export class BleNitroManager {
   /**
    * Request an Android connection priority for an active connection.
    * @param deviceId ID of the device
-   * @param androidConnectionPriority Desired Android connection priority
-   * @returns On Android: true if the request was accepted; on iOS or error: false
+   * @param priority Desired Android connection priority
+   * @returns On Android: true if the request was successfully initiated (the
+   *   priority change itself is applied asynchronously); on iOS, an error, or a
+   *   disconnected device: false
    */
   public requestConnectionPriority(
     deviceId: string,
-    androidConnectionPriority: AndroidConnectionPriority
+    priority: AndroidConnectionPriority
   ): boolean {
     return this.Instance.requestConnectionPriority(
       deviceId,
-      mapAndroidConnectionPriorityToNativeAndroidConnectionPriority(androidConnectionPriority)
+      mapAndroidConnectionPriorityToNativeAndroidConnectionPriority(priority)
     );
   }
 

@@ -709,8 +709,6 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         return try {
             val gatt = connectedDevices[deviceId] ?: return false
             gatt.requestConnectionPriority(mapAndroidConnectionPriority(androidConnectionPriority))
-        } catch (_: SecurityException) {
-            false
         } catch (_: Exception) {
             false
         }
