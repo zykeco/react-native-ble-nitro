@@ -13,6 +13,7 @@ Originally developed for [Zyke Band](https://zykeband.com?utm_source=github&utm_
 - 📱 **iOS Support**: Complete iOS implementation with Swift and Core Bluetooth
 - 🤖 **Android Support**: Complete Android implementation with Kotlin and Android BLE APIs
 - 🎯 **Type-Safe**: Full TypeScript support with comprehensive type definitions
+- 📡 **Advertisement Data**: Extract advertised service data and manufacturer data from scan results
 - 🔧 **Expo Ready**: Built-in Expo config plugin for easy setup
 - 🏗️ **New Architecture**: Full support for React Native's new architecture
 - ⚡ **Zero Bridge**: Direct JSI communication eliminates bridge bottlenecks
@@ -127,6 +128,16 @@ ble.startScan({
   androidScanMode: AndroidScanMode.Balanced // Optional: Android scan mode
 }, (device) => {
   console.log('Discovered device:', device);
+
+  // Advertised service data, keyed by service UUID (ArrayBuffer payloads)
+  device.serviceData.services.forEach(({ uuid, data }) => {
+    console.log(`Service data for ${uuid}:`, new Uint8Array(data));
+  });
+
+  // Advertised manufacturer data, keyed by company identifier
+  device.manufacturerData.companyIdentifiers.forEach(({ id, data }) => {
+    console.log(`Manufacturer data for ${id}:`, new Uint8Array(data));
+  });
 }, (error) => {
   // only called on Android
   console.error('Scan error:', error);
@@ -439,8 +450,30 @@ interface BLEDevice {
   name: string;
   rssi: number;
   manufacturerData: ManufacturerData;
+  serviceData: ServiceData;
   serviceUUIDs: string[];
   isConnectable: boolean;
+  isConnected: boolean;
+}
+
+// Advertised manufacturer-specific data, keyed by company identifier
+interface ManufacturerData {
+  companyIdentifiers: ManufacturerDataEntry[];
+}
+
+interface ManufacturerDataEntry {
+  id: string;        // company identifier (hex)
+  data: ArrayBuffer; // raw manufacturer payload
+}
+
+// Advertised service data, keyed by service UUID
+interface ServiceData {
+  services: ServiceDataEntry[];
+}
+
+interface ServiceDataEntry {
+  uuid: string;      // service UUID
+  data: ArrayBuffer; // raw service-data payload
 }
 
 interface ScanFilter {

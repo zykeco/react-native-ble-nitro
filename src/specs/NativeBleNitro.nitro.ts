@@ -22,11 +22,21 @@ export interface ManufacturerData {
   companyIdentifiers: ManufacturerDataEntry[];
 }
 
+export interface ServiceDataEntry {
+  uuid: string;
+  data: BLEValue;
+}
+
+export interface ServiceData {
+  services: ServiceDataEntry[];
+}
+
 export interface BLEDevice {
   id: string;
   name: string;
   rssi: number;
   manufacturerData: ManufacturerData;
+  serviceData: ServiceData;
   serviceUUIDs: string[];
   isConnectable: boolean;
   isConnected: boolean;
