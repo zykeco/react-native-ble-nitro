@@ -70,7 +70,7 @@ npx pod-install # iOS only
 ### Basic Setup
 
 ```typescript
-import { BleNitro, BleNitroManager, BLEState, AndroidScanMode, type BLEDevice } from 'react-native-ble-nitro';
+import { BleNitro, BleNitroManager, BLEState, AndroidScanMode, AndroidConnectionPriority, type BLEDevice } from 'react-native-ble-nitro';
 
 // Get the singleton instance
 const ble = BleNitro.instance();
@@ -170,6 +170,12 @@ const deviceId = await ble.connect(deviceId, (deviceId, interrupted, error) => {
 // Connect without disconnect callback
 const deviceId = await ble.connect(deviceId);
 
+// Request lower-latency connection parameters while connected (Android only)
+const priorityRequested = ble.requestConnectionPriority(
+  deviceId,
+  AndroidConnectionPriority.High
+);
+
 // You can also use findAndConnect to scan and connect in one step
 // This could be useful for reconnecting after app restart or when device was disconnected unexpectedly
 const deviceId = await ble.findAndConnect(deviceId, {
@@ -199,6 +205,11 @@ const mtu = await ble.requestMTU(deviceId, 256); // Request MTU size
 // iOS manages MTU automatically, this method returns current MTU size
 const newMTU = ble.requestMTU(deviceId, 247);
 console.log('MTU set to:', newMTU);
+
+// Request Android connection priority while connected
+// Returns true if Android successfully initiated the request (the priority change
+// is applied asynchronously); returns false on iOS, an error, or a disconnected device
+const priorityRequested = ble.requestConnectionPriority(deviceId, AndroidConnectionPriority.High);
 
 // Read RSSI value
 const rssi = await ble.readRSSI(deviceId);
@@ -322,6 +333,7 @@ const deviceId = await ble.connect(
   },
   autoConnectOnAndroid,
 );
+ble.requestConnectionPriority(deviceId, AndroidConnectionPriority.High);
 await ble.discoverServices(deviceId);
 
 const subscription = await ble.subscribeToCharacteristic(
@@ -493,6 +505,12 @@ enum AndroidScanMode {
   Balanced = 'Balanced',            // Balanced power/discovery (default)
   LowPower = 'LowPower',            // Lowest power, slower discovery  
   Opportunistic = 'Opportunistic',  // Only when other apps are scanning
+}
+
+enum AndroidConnectionPriority {
+  Balanced = 'Balanced', // Balanced connection interval
+  High = 'High',         // Lower latency, higher power
+  LowPower = 'LowPower', // Lower power, higher latency
 }
 
 // Callback types

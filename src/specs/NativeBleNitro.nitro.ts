@@ -49,6 +49,12 @@ export enum AndroidScanMode {
   Opportunistic = 3,
 }
 
+export enum AndroidConnectionPriority {
+  Balanced = 0,
+  High = 1,
+  LowPower = 2,
+}
+
 export interface ScanFilter {
   serviceUUIDs: string[];
   rssiThreshold: number;
@@ -98,6 +104,7 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
   disconnect(deviceId: string, callback: OperationCallback): void;
   isConnected(deviceId: string): boolean;
   requestMTU(deviceId: string, mtu: number): number;
+  requestConnectionPriority(deviceId: string, androidConnectionPriority: AndroidConnectionPriority): boolean;
   readRSSI(deviceId: string, callback: ReadRSSICallback): void;
 
   // Service discovery

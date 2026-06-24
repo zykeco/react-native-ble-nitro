@@ -5,6 +5,7 @@ import {
   BLEState as NativeBLEState,
   ScanCallback as NativeScanCallback,
   AndroidScanMode as NativeAndroidScanMode,
+  AndroidConnectionPriority as NativeAndroidConnectionPriority,
 } from './specs/NativeBleNitro';
 
 export class BleTimeoutError extends Error {
@@ -106,6 +107,12 @@ export enum AndroidScanMode {
   Opportunistic = 'Opportunistic',
 }
 
+export enum AndroidConnectionPriority {
+  Balanced = 'Balanced',
+  High = 'High',
+  LowPower = 'LowPower',
+}
+
 export type BleNitroManagerOptions = {
   restoreIdentifier?: string;
   onRestoredState?: RestoreStateCallback;
@@ -131,6 +138,15 @@ export function mapAndroidScanModeToNativeAndroidScanMode(scanMode: AndroidScanM
     Opportunistic: NativeAndroidScanMode.Opportunistic,
   }
   return map[scanMode];
+}
+
+export function mapAndroidConnectionPriorityToNativeAndroidConnectionPriority(priority: AndroidConnectionPriority): NativeAndroidConnectionPriority {
+  const map = {
+    Balanced: NativeAndroidConnectionPriority.Balanced,
+    High: NativeAndroidConnectionPriority.High,
+    LowPower: NativeAndroidConnectionPriority.LowPower,
+  }
+  return map[priority];
 }
 
 export function convertNativeBleDeviceToBleDevice(nativeBleDevice: NativeBLEDevice): BLEDevice {
@@ -420,6 +436,24 @@ export class BleNitroManager {
     mtu = parseInt(mtu.toString(), 10);
     const deviceMtu = this.Instance.requestMTU(deviceId, mtu);
     return deviceMtu;
+  }
+
+  /**
+   * Request an Android connection priority for an active connection.
+   * @param deviceId ID of the device
+   * @param priority Desired Android connection priority
+   * @returns On Android: true if the request was successfully initiated (the
+   *   priority change itself is applied asynchronously); on iOS, an error, or a
+   *   disconnected device: false
+   */
+  public requestConnectionPriority(
+    deviceId: string,
+    priority: AndroidConnectionPriority
+  ): boolean {
+    return this.Instance.requestConnectionPriority(
+      deviceId,
+      mapAndroidConnectionPriorityToNativeAndroidConnectionPriority(priority)
+    );
   }
 
   /**

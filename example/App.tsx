@@ -2,7 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { AppState, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { createBle } from './src/bluetooth';
 import { useLayoutEffect, useRef, useState } from 'react';
-import type { BLEDevice, AsyncSubscription } from 'react-native-ble-nitro';
+import { AndroidConnectionPriority, type BLEDevice, type AsyncSubscription } from 'react-native-ble-nitro';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const HEART_RATE_SERVICE_UUID = '0000180d-0000-1000-8000-00805f9b34fb'.toLowerCase();
@@ -273,6 +273,14 @@ export default function App() {
     }
     const mtu = ble.instance.requestMTU(connectedDeviceId, 517);
     logMessage('MTU', mtu);
+  };
+
+  const requestConnectionPriority = (priority: AndroidConnectionPriority) => {
+    if (!connectedDeviceId) {
+      throw new Error('No device connected');
+    }
+    const accepted = ble.instance.requestConnectionPriority(connectedDeviceId, priority);
+    logMessage(`Connection Priority (${priority})`, accepted ? 'accepted' : 'rejected');
   };
 
   const stringFromBytes = (bytes: number[]) => {
@@ -647,6 +655,15 @@ export default function App() {
                       ))}
                       <TouchableOpacity style={styles.button} onPress={requestMtu}>
                         <Text>Request MTU</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.button} onPress={() => requestConnectionPriority(AndroidConnectionPriority.High)}>
+                        <Text>Priority: High (Android)</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.button} onPress={() => requestConnectionPriority(AndroidConnectionPriority.Balanced)}>
+                        <Text>Priority: Balanced (Android)</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.button} onPress={() => requestConnectionPriority(AndroidConnectionPriority.LowPower)}>
+                        <Text>Priority: Low Power (Android)</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.button} onPress={readRSSI}>
                         <Text>Read RSSI</Text>
