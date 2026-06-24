@@ -170,12 +170,6 @@ const deviceId = await ble.connect(deviceId, (deviceId, interrupted, error) => {
 // Connect without disconnect callback
 const deviceId = await ble.connect(deviceId);
 
-// Request lower-latency connection parameters while connected (Android only)
-const priorityRequested = ble.requestConnectionPriority(
-  deviceId,
-  AndroidConnectionPriority.High
-);
-
 // You can also use findAndConnect to scan and connect in one step
 // This could be useful for reconnecting after app restart or when device was disconnected unexpectedly
 const deviceId = await ble.findAndConnect(deviceId, {
@@ -206,10 +200,17 @@ const mtu = await ble.requestMTU(deviceId, 256); // Request MTU size
 const newMTU = ble.requestMTU(deviceId, 247);
 console.log('MTU set to:', newMTU);
 
-// Request Android connection priority while connected
+// Request Android connection priority while connected (Android only).
 // Returns true if Android successfully initiated the request (the priority change
-// is applied asynchronously); returns false on iOS, an error, or a disconnected device
+// is applied asynchronously); returns false on iOS, an error, or a disconnected device.
 const priorityRequested = ble.requestConnectionPriority(deviceId, AndroidConnectionPriority.High);
+
+// AndroidConnectionPriority options:
+//   AndroidConnectionPriority.High      → lower latency, higher power usage
+//   AndroidConnectionPriority.Balanced  → default balanced connection interval
+//   AndroidConnectionPriority.LowPower  → higher latency, lower power usage
+ble.requestConnectionPriority(deviceId, AndroidConnectionPriority.Balanced);
+ble.requestConnectionPriority(deviceId, AndroidConnectionPriority.LowPower);
 
 // Read RSSI value
 const rssi = await ble.readRSSI(deviceId);
