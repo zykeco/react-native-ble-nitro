@@ -9,6 +9,7 @@ const createMockNativeModule = () => ({
   connect: jest.fn(),
   disconnect: jest.fn(),
   isConnected: jest.fn(),
+  requestConnectionPriority: jest.fn(),
   
   // Service discovery
   discoverServices: jest.fn(),

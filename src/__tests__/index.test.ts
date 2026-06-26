@@ -8,6 +8,7 @@ const mockNativeInstance = {
   disconnect: jest.fn(),
   isConnected: jest.fn(),
   requestMTU: jest.fn(),
+  requestConnectionPriority: jest.fn(),
   readRSSI: jest.fn(),
   discoverServices: jest.fn(),
   discoverServicesWithCharacteristics: jest.fn(),
@@ -44,6 +45,11 @@ jest.mock('../specs/NativeBleNitro', () => ({
     LowPower: 2,
     Opportunistic: 3
   },
+  AndroidConnectionPriority: {
+    Balanced: 0,
+    High: 1,
+    LowPower: 2,
+  },
 }));
 
 jest.mock('../specs/NativeBleNitroFactory', () => ({
@@ -53,7 +59,7 @@ jest.mock('../specs/NativeBleNitroFactory', () => ({
   },
 }));
 
-import { BleNitro } from '../index';
+import { AndroidConnectionPriority, BleNitro } from '../index';
 
 // Get reference to the mocked module
 const mockNative = mockNativeInstance;
@@ -85,6 +91,43 @@ describe('BleNitro', () => {
     );
   });
 
+  test('startScan exposes converted service data to the callback', async () => {
+    // Reset any scanning state left over from previous tests
+    mockNative.stopScan.mockImplementation(() => true);
+    BleManager.stopScan();
+
+    const nativeDevice = {
+      id: 'device-1',
+      name: 'Treadmill',
+      rssi: -50,
+      manufacturerData: { companyIdentifiers: [] },
+      serviceData: {
+        services: [
+          {
+            uuid: '1826',
+            data: new Uint8Array([0x01, 0x02, 0x03]).buffer,
+          },
+        ],
+      },
+      serviceUUIDs: ['1826'],
+      isConnectable: true,
+      isConnected: false,
+    };
+
+    mockNative.startScan.mockImplementation((filter, callback) => { // eslint-disable-line @typescript-eslint/no-unused-vars
+      callback(nativeDevice);
+    });
+
+    const scanCallback = jest.fn();
+    BleManager.startScan({}, scanCallback);
+
+    expect(scanCallback).toHaveBeenCalledTimes(1);
+    const device = scanCallback.mock.calls[0][0];
+    expect(device.serviceData.services).toHaveLength(1);
+    expect(device.serviceData.services[0].uuid).toBe('00001826-0000-1000-8000-00805f9b34fb');
+    expect(device.serviceData.services[0].data).toEqual([0x01, 0x02, 0x03]);
+  });
+
   test('stopScan calls native and resolves', async () => {
     // First start a scan to set _isScanning to true
     mockNative.startScan.mockImplementation((filter, callback) => { // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -112,6 +155,30 @@ describe('BleNitro', () => {
 
     expect(mockNative.connect).toHaveBeenCalledWith(deviceId, expect.any(Function), undefined, false);
     expect(result).toBe(deviceId);
+  });
+
+  test('connect keeps positional autoConnectAndroid compatibility', async () => {
+    const deviceId = 'test-device-autoconnect';
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void) => {
+      callback(true, id, '');
+    });
+
+    const result = await BleManager.connect(deviceId, undefined, true);
+
+    expect(mockNative.connect).toHaveBeenCalledWith(deviceId, expect.any(Function), undefined, true);
+    expect(result).toBe(deviceId);
+  });
+
+  test('requestConnectionPriority delegates to native with mapped priority', () => {
+    mockNative.requestConnectionPriority.mockReturnValueOnce(true);
+
+    const result = BleManager.requestConnectionPriority(
+      'test-device-priority',
+      AndroidConnectionPriority.High
+    );
+
+    expect(mockNative.requestConnectionPriority).toHaveBeenCalledWith('test-device-priority', 1);
+    expect(result).toBe(true);
   });
 
   test('connect rejects on error', async () => {

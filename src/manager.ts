@@ -5,6 +5,7 @@ import {
   BLEState as NativeBLEState,
   ScanCallback as NativeScanCallback,
   AndroidScanMode as NativeAndroidScanMode,
+  AndroidConnectionPriority as NativeAndroidConnectionPriority,
 } from './specs/NativeBleNitro';
 
 export class BleTimeoutError extends Error {
@@ -44,11 +45,21 @@ export interface ManufacturerData {
   companyIdentifiers: ManufacturerDataEntry[];
 }
 
+export interface ServiceDataEntry {
+  uuid: string;
+  data: ByteArray;
+}
+
+export interface ServiceData {
+  services: ServiceDataEntry[];
+}
+
 export interface BLEDevice {
   id: string;
   name: string;
   rssi: number;
   manufacturerData: ManufacturerData;
+  serviceData: ServiceData;
   serviceUUIDs: string[];
   isConnectable: boolean;
   isConnected: boolean;
@@ -96,6 +107,12 @@ export enum AndroidScanMode {
   Opportunistic = 'Opportunistic',
 }
 
+export enum AndroidConnectionPriority {
+  Balanced = 'Balanced',
+  High = 'High',
+  LowPower = 'LowPower',
+}
+
 export type BleNitroManagerOptions = {
   restoreIdentifier?: string;
   onRestoredState?: RestoreStateCallback;
@@ -123,6 +140,15 @@ export function mapAndroidScanModeToNativeAndroidScanMode(scanMode: AndroidScanM
   return map[scanMode];
 }
 
+export function mapAndroidConnectionPriorityToNativeAndroidConnectionPriority(priority: AndroidConnectionPriority): NativeAndroidConnectionPriority {
+  const map = {
+    Balanced: NativeAndroidConnectionPriority.Balanced,
+    High: NativeAndroidConnectionPriority.High,
+    LowPower: NativeAndroidConnectionPriority.LowPower,
+  }
+  return map[priority];
+}
+
 export function convertNativeBleDeviceToBleDevice(nativeBleDevice: NativeBLEDevice): BLEDevice {
   return {
     ...nativeBleDevice,
@@ -130,6 +156,12 @@ export function convertNativeBleDeviceToBleDevice(nativeBleDevice: NativeBLEDevi
     manufacturerData: {
       companyIdentifiers: nativeBleDevice.manufacturerData.companyIdentifiers.map(entry => ({
         id: entry.id,
+        data: arrayBufferToByteArray(entry.data)
+      }))
+    },
+    serviceData: {
+      services: nativeBleDevice.serviceData.services.map(entry => ({
+        uuid: BleNitroManager.normalizeGattUUID(entry.uuid),
         data: arrayBufferToByteArray(entry.data)
       }))
     }
@@ -404,6 +436,24 @@ export class BleNitroManager {
     mtu = parseInt(mtu.toString(), 10);
     const deviceMtu = this.Instance.requestMTU(deviceId, mtu);
     return deviceMtu;
+  }
+
+  /**
+   * Request an Android connection priority for an active connection.
+   * @param deviceId ID of the device
+   * @param priority Desired Android connection priority
+   * @returns On Android: true if the request was successfully initiated (the
+   *   priority change itself is applied asynchronously); on iOS, an error, or a
+   *   disconnected device: false
+   */
+  public requestConnectionPriority(
+    deviceId: string,
+    priority: AndroidConnectionPriority
+  ): boolean {
+    return this.Instance.requestConnectionPriority(
+      deviceId,
+      mapAndroidConnectionPriorityToNativeAndroidConnectionPriority(priority)
+    );
   }
 
   /**

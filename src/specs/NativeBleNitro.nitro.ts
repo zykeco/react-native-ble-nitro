@@ -22,11 +22,21 @@ export interface ManufacturerData {
   companyIdentifiers: ManufacturerDataEntry[];
 }
 
+export interface ServiceDataEntry {
+  uuid: string;
+  data: BLEValue;
+}
+
+export interface ServiceData {
+  services: ServiceDataEntry[];
+}
+
 export interface BLEDevice {
   id: string;
   name: string;
   rssi: number;
   manufacturerData: ManufacturerData;
+  serviceData: ServiceData;
   serviceUUIDs: string[];
   isConnectable: boolean;
   isConnected: boolean;
@@ -37,6 +47,12 @@ export enum AndroidScanMode {
   Balanced = 1,
   LowPower = 2,
   Opportunistic = 3,
+}
+
+export enum AndroidConnectionPriority {
+  Balanced = 0,
+  High = 1,
+  LowPower = 2,
 }
 
 export interface ScanFilter {
@@ -88,6 +104,7 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
   disconnect(deviceId: string, callback: OperationCallback): void;
   isConnected(deviceId: string): boolean;
   requestMTU(deviceId: string, mtu: number): number;
+  requestConnectionPriority(deviceId: string, androidConnectionPriority: AndroidConnectionPriority): boolean;
   readRSSI(deviceId: string, callback: ReadRSSICallback): void;
 
   // Service discovery

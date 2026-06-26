@@ -13,6 +13,7 @@ Originally developed for [Zyke Band](https://zykeband.com?utm_source=github&utm_
 - 📱 **iOS Support**: Complete iOS implementation with Swift and Core Bluetooth
 - 🤖 **Android Support**: Complete Android implementation with Kotlin and Android BLE APIs
 - 🎯 **Type-Safe**: Full TypeScript support with comprehensive type definitions
+- 📡 **Advertisement Data**: Extract advertised service data and manufacturer data from scan results
 - 🔧 **Expo Ready**: Built-in Expo config plugin for easy setup
 - 🏗️ **New Architecture**: Full support for React Native's new architecture
 - ⚡ **Zero Bridge**: Direct JSI communication eliminates bridge bottlenecks
@@ -69,7 +70,7 @@ npx pod-install # iOS only
 ### Basic Setup
 
 ```typescript
-import { BleNitro, BleNitroManager, BLEState, AndroidScanMode, type BLEDevice } from 'react-native-ble-nitro';
+import { BleNitro, BleNitroManager, BLEState, AndroidScanMode, AndroidConnectionPriority, type BLEDevice } from 'react-native-ble-nitro';
 
 // Get the singleton instance
 const ble = BleNitro.instance();
@@ -127,6 +128,16 @@ ble.startScan({
   androidScanMode: AndroidScanMode.Balanced // Optional: Android scan mode
 }, (device) => {
   console.log('Discovered device:', device);
+
+  // Advertised service data, keyed by service UUID (ArrayBuffer payloads)
+  device.serviceData.services.forEach(({ uuid, data }) => {
+    console.log(`Service data for ${uuid}:`, new Uint8Array(data));
+  });
+
+  // Advertised manufacturer data, keyed by company identifier
+  device.manufacturerData.companyIdentifiers.forEach(({ id, data }) => {
+    console.log(`Manufacturer data for ${id}:`, new Uint8Array(data));
+  });
 }, (error) => {
   // only called on Android
   console.error('Scan error:', error);
@@ -188,6 +199,18 @@ const mtu = await ble.requestMTU(deviceId, 256); // Request MTU size
 // iOS manages MTU automatically, this method returns current MTU size
 const newMTU = ble.requestMTU(deviceId, 247);
 console.log('MTU set to:', newMTU);
+
+// Request Android connection priority while connected (Android only).
+// Returns true if Android successfully initiated the request (the priority change
+// is applied asynchronously); returns false on iOS, an error, or a disconnected device.
+const priorityRequested = ble.requestConnectionPriority(deviceId, AndroidConnectionPriority.High);
+
+// AndroidConnectionPriority options:
+//   AndroidConnectionPriority.High      → lower latency, higher power usage
+//   AndroidConnectionPriority.Balanced  → default balanced connection interval
+//   AndroidConnectionPriority.LowPower  → higher latency, lower power usage
+ble.requestConnectionPriority(deviceId, AndroidConnectionPriority.Balanced);
+ble.requestConnectionPriority(deviceId, AndroidConnectionPriority.LowPower);
 
 // Read RSSI value
 const rssi = await ble.readRSSI(deviceId);
@@ -311,6 +334,7 @@ const deviceId = await ble.connect(
   },
   autoConnectOnAndroid,
 );
+ble.requestConnectionPriority(deviceId, AndroidConnectionPriority.High);
 await ble.discoverServices(deviceId);
 
 const subscription = await ble.subscribeToCharacteristic(
@@ -427,8 +451,30 @@ interface BLEDevice {
   name: string;
   rssi: number;
   manufacturerData: ManufacturerData;
+  serviceData: ServiceData;
   serviceUUIDs: string[];
   isConnectable: boolean;
+  isConnected: boolean;
+}
+
+// Advertised manufacturer-specific data, keyed by company identifier
+interface ManufacturerData {
+  companyIdentifiers: ManufacturerDataEntry[];
+}
+
+interface ManufacturerDataEntry {
+  id: string;        // company identifier (hex)
+  data: ArrayBuffer; // raw manufacturer payload
+}
+
+// Advertised service data, keyed by service UUID
+interface ServiceData {
+  services: ServiceDataEntry[];
+}
+
+interface ServiceDataEntry {
+  uuid: string;      // service UUID
+  data: ArrayBuffer; // raw service-data payload
 }
 
 interface ScanFilter {
@@ -460,6 +506,12 @@ enum AndroidScanMode {
   Balanced = 'Balanced',            // Balanced power/discovery (default)
   LowPower = 'LowPower',            // Lowest power, slower discovery  
   Opportunistic = 'Opportunistic',  // Only when other apps are scanning
+}
+
+enum AndroidConnectionPriority {
+  Balanced = 'Balanced', // Balanced connection interval
+  High = 'High',         // Lower latency, higher power
+  LowPower = 'LowPower', // Lower power, higher latency
 }
 
 // Callback types
