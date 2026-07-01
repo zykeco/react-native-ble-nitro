@@ -34,6 +34,9 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     var writeCallbacks: [CBUUID: (Bool, ArrayBuffer, String) -> Void] = [:]
     var subscriptionCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
     var unsubscriptionCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
+    // Descriptor discovery + write callback storage
+    var descriptorDiscoveryCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
+    var descriptorWriteCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
     
     // Store written data for comparison
     var writtenData: [CBUUID: Data] = [:]
@@ -212,7 +215,7 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         error: Error?
     ) {
         let characteristicUUID = characteristic.uuid
-        
+
         // Handle subscription callback using CBUUID
         if let subscriptionCallback = subscriptionCallbacks[characteristicUUID] {
             if let error = error {
@@ -222,7 +225,7 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
             }
             subscriptionCallbacks.removeValue(forKey: characteristicUUID)
         }
-        
+
         // Handle unsubscription callback using CBUUID
         if let unsubscriptionCallback = unsubscriptionCallbacks[characteristicUUID] {
             if let error = error {
@@ -231,6 +234,39 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
                 unsubscriptionCallback(!characteristic.isNotifying, "")
             }
             unsubscriptionCallbacks.removeValue(forKey: characteristicUUID)
+        }
+    }
+
+    // MARK: - CBPeripheralDelegate - Descriptor discovery + write
+    func peripheral(
+        _ peripheral: CBPeripheral,
+        didDiscoverDescriptorsFor characteristic: CBCharacteristic,
+        error: Error?
+    ) {
+        let characteristicUUID = characteristic.uuid
+        guard let callback = descriptorDiscoveryCallbacks.removeValue(forKey: characteristicUUID) else {
+            return
+        }
+        if let error = error {
+            callback(false, error.localizedDescription)
+        } else {
+            callback(true, "")
+        }
+    }
+
+    func peripheral(
+        _ peripheral: CBPeripheral,
+        didWriteValueFor descriptor: CBDescriptor,
+        error: Error?
+    ) {
+        let descriptorUUID = descriptor.uuid
+        guard let callback = descriptorWriteCallbacks.removeValue(forKey: descriptorUUID) else {
+            return
+        }
+        if let error = error {
+            callback(false, error.localizedDescription)
+        } else {
+            callback(true, "")
         }
     }
     

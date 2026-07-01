@@ -1,4 +1,6 @@
-import BleNitroNativeFactory, { NativeBleNitro } from './specs/NativeBleNitroFactory';
+import BleNitroNativeFactory, {
+  NativeBleNitro,
+} from './specs/NativeBleNitroFactory';
 import {
   ScanFilter as NativeScanFilter,
   BLEDevice as NativeBLEDevice,
@@ -18,7 +20,7 @@ export class BleTimeoutError extends Error {
 function withTimeout<T>(
   promise: Promise<T>,
   ms: number,
-  operation: string
+  operation: string,
 ): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
@@ -70,17 +72,17 @@ export type RestoreStateCallback = (connectedPeripherals: BLEDevice[]) => void;
 export type ConnectionCallback = (
   success: boolean,
   deviceId: string,
-  error: string
+  error: string,
 ) => void;
 export type DisconnectEventCallback = (
   deviceId: string,
   interrupted: boolean,
-  error: string
+  error: string,
 ) => void;
 export type OperationCallback = (success: boolean, error: string) => void;
 export type CharacteristicUpdateCallback = (
   characteristicId: string,
-  data: ByteArray
+  data: ByteArray,
 ) => void;
 
 export type Subscription = {
@@ -89,7 +91,7 @@ export type Subscription = {
 
 export type AsyncSubscription = {
   remove: () => Promise<void>;
-}
+};
 
 export enum BLEState {
   Unknown = 'Unknown',
@@ -98,7 +100,7 @@ export enum BLEState {
   Unauthorized = 'Unauthorized',
   PoweredOff = 'PoweredOff',
   PoweredOn = 'PoweredOn',
-};
+}
 
 export enum AndroidScanMode {
   LowLatency = 'LowLatency',
@@ -118,7 +120,9 @@ export type BleNitroManagerOptions = {
   onRestoredState?: RestoreStateCallback;
 };
 
-export function mapNativeBLEStateToBLEState(nativeState: NativeBLEState): BLEState {
+export function mapNativeBLEStateToBLEState(
+  nativeState: NativeBLEState,
+): BLEState {
   const map = {
     0: BLEState.Unknown,
     1: BLEState.Resetting,
@@ -130,42 +134,51 @@ export function mapNativeBLEStateToBLEState(nativeState: NativeBLEState): BLESta
   return map[nativeState];
 }
 
-export function mapAndroidScanModeToNativeAndroidScanMode(scanMode: AndroidScanMode): NativeAndroidScanMode {
+export function mapAndroidScanModeToNativeAndroidScanMode(
+  scanMode: AndroidScanMode,
+): NativeAndroidScanMode {
   const map = {
     LowLatency: NativeAndroidScanMode.LowLatency,
     Balanced: NativeAndroidScanMode.Balanced,
     LowPower: NativeAndroidScanMode.LowPower,
     Opportunistic: NativeAndroidScanMode.Opportunistic,
-  }
+  };
   return map[scanMode];
 }
 
-export function mapAndroidConnectionPriorityToNativeAndroidConnectionPriority(priority: AndroidConnectionPriority): NativeAndroidConnectionPriority {
+export function mapAndroidConnectionPriorityToNativeAndroidConnectionPriority(
+  priority: AndroidConnectionPriority,
+): NativeAndroidConnectionPriority {
   const map = {
     Balanced: NativeAndroidConnectionPriority.Balanced,
     High: NativeAndroidConnectionPriority.High,
     LowPower: NativeAndroidConnectionPriority.LowPower,
-  }
+  };
   return map[priority];
 }
 
-export function convertNativeBleDeviceToBleDevice(nativeBleDevice: NativeBLEDevice): BLEDevice {
+export function convertNativeBleDeviceToBleDevice(
+  nativeBleDevice: NativeBLEDevice,
+): BLEDevice {
   return {
     ...nativeBleDevice,
-    serviceUUIDs: BleNitroManager.normalizeGattUUIDs(nativeBleDevice.serviceUUIDs),
+    serviceUUIDs: BleNitroManager.normalizeGattUUIDs(
+      nativeBleDevice.serviceUUIDs,
+    ),
     manufacturerData: {
-      companyIdentifiers: nativeBleDevice.manufacturerData.companyIdentifiers.map(entry => ({
-        id: entry.id,
-        data: arrayBufferToByteArray(entry.data)
-      }))
+      companyIdentifiers:
+        nativeBleDevice.manufacturerData.companyIdentifiers.map(entry => ({
+          id: entry.id,
+          data: arrayBufferToByteArray(entry.data),
+        })),
     },
     serviceData: {
       services: nativeBleDevice.serviceData.services.map(entry => ({
         uuid: BleNitroManager.normalizeGattUUID(entry.uuid),
-        data: arrayBufferToByteArray(entry.data)
-      }))
-    }
-  }
+        data: arrayBufferToByteArray(entry.data),
+      })),
+    },
+  };
 }
 
 export function arrayBufferToByteArray(buffer: ArrayBuffer): ByteArray {
@@ -188,12 +201,18 @@ export class BleNitroManager {
   constructor(options?: BleNitroManagerOptions) {
     this._restoredStateCallback = options?.onRestoredState ?? null;
     this._restoreStateIdentifier = options?.restoreIdentifier ?? null;
-    this.Instance = BleNitroNativeFactory.create(options?.restoreIdentifier, (peripherals: NativeBLEDevice[]) => this.onNativeRestoreStateCallback(peripherals));
+    this.Instance = BleNitroNativeFactory.create(
+      options?.restoreIdentifier,
+      (peripherals: NativeBLEDevice[]) =>
+        this.onNativeRestoreStateCallback(peripherals),
+    );
   }
 
   private onNativeRestoreStateCallback(peripherals: NativeBLEDevice[]) {
     if (!this._restoreStateIdentifier) return;
-    const bleDevices = peripherals.map((peripheral) => convertNativeBleDeviceToBleDevice(peripheral));
+    const bleDevices = peripherals.map(peripheral =>
+      convertNativeBleDeviceToBleDevice(peripheral),
+    );
     if (this._restoredStateCallback) {
       this._restoredStateCallback(bleDevices);
     } else {
@@ -235,18 +254,18 @@ export class BleNitroManager {
     const cleanUuid = uuid.toLowerCase();
 
     // 128-Bit UUID → normalisieren
-    if (cleanUuid.length === 36 && cleanUuid.includes("-")) {
+    if (cleanUuid.length === 36 && cleanUuid.includes('-')) {
       return cleanUuid;
     }
 
     // GATT-Service UUIDs
     // 16- oder 32-Bit UUID → 128-Bit UUID
-    const padded = cleanUuid.padStart(8, "0");
+    const padded = cleanUuid.padStart(8, '0');
     return `${padded}-0000-1000-8000-00805f9b34fb`;
   }
 
   public static normalizeGattUUIDs(uuids: string[]): string[] {
-    return uuids.map((uuid) => BleNitroManager.normalizeGattUUID(uuid));
+    return uuids.map(uuid => BleNitroManager.normalizeGattUUID(uuid));
   }
 
   /**
@@ -269,11 +288,16 @@ export class BleNitroManager {
       serviceUUIDs: filter.serviceUUIDs || [],
       rssiThreshold: filter.rssiThreshold ?? -100,
       allowDuplicates: filter.allowDuplicates ?? false,
-      androidScanMode: mapAndroidScanModeToNativeAndroidScanMode(filter.androidScanMode ?? AndroidScanMode.Balanced),
+      androidScanMode: mapAndroidScanModeToNativeAndroidScanMode(
+        filter.androidScanMode ?? AndroidScanMode.Balanced,
+      ),
     };
 
     // Create callback wrapper
-    const scanCallback: NativeScanCallback = (device: NativeBLEDevice | null, error: string | null) => {
+    const scanCallback: NativeScanCallback = (
+      device: NativeBLEDevice | null,
+      error: string | null,
+    ) => {
       if (error && !device) {
         this._isScanning = false;
         onError?.(error);
@@ -281,7 +305,8 @@ export class BleNitroManager {
       }
       device = device!; // eslint-disable-line @typescript-eslint/no-non-null-assertion
       // Convert manufacturer data to Uint8Arrays
-      const convertedDevice: BLEDevice = convertNativeBleDeviceToBleDevice(device);
+      const convertedDevice: BLEDevice =
+        convertNativeBleDeviceToBleDevice(device);
       callback(convertedDevice);
     };
 
@@ -330,7 +355,7 @@ export class BleNitroManager {
    * @returns Promise resolving deviceId when connected
    */
   public connect(
-    deviceId: string, 
+    deviceId: string,
     onDisconnect?: DisconnectEventCallback,
     autoConnectAndroid?: boolean,
   ): Promise<string> {
@@ -350,9 +375,11 @@ export class BleNitroManager {
             reject(new Error(error));
           }
         },
-        onDisconnect ? (deviceId: string, interrupted: boolean, error: string) => {
-          onDisconnect(deviceId, interrupted, error);
-        } : undefined,
+        onDisconnect
+          ? (deviceId: string, interrupted: boolean, error: string) => {
+              onDisconnect(deviceId, interrupted, error);
+            }
+          : undefined,
         autoConnectAndroid ?? false,
       );
     });
@@ -364,7 +391,15 @@ export class BleNitroManager {
    * @param scanTimeout Optional timeout for the scan in milliseconds (default: 5000ms)
    * @returns Promise resolving deviceId when connected
    */
-  public findAndConnect(deviceId: string, options?: { scanTimeout?: number, autoConnectAndroid?: boolean, onDisconnect?: DisconnectEventCallback, onFound?: (device: BLEDevice) => void }): Promise<string> {
+  public findAndConnect(
+    deviceId: string,
+    options?: {
+      scanTimeout?: number;
+      autoConnectAndroid?: boolean;
+      onDisconnect?: DisconnectEventCallback;
+      onFound?: (device: BLEDevice) => void;
+    },
+  ): Promise<string> {
     if (this.isConnected(deviceId)) {
       return Promise.resolve(deviceId);
     }
@@ -376,16 +411,22 @@ export class BleNitroManager {
         this.stopScan();
         reject(new Error('Scan timed out'));
       }, options?.scanTimeout ?? 5000);
-      this.startScan(undefined, (device) => {
+      this.startScan(undefined, device => {
         if (device.id === deviceId) {
           this.stopScan();
           clearTimeout(timeoutScan);
           options?.onFound?.(device);
-          this.connect(deviceId, options?.onDisconnect, options?.autoConnectAndroid).then(async (connectedDeviceId) => {
-            resolve(connectedDeviceId);
-          }).catch((error) => {
-            reject(error);
-          });
+          this.connect(
+            deviceId,
+            options?.onDisconnect,
+            options?.autoConnectAndroid,
+          )
+            .then(async connectedDeviceId => {
+              resolve(connectedDeviceId);
+            })
+            .catch(error => {
+              reject(error);
+            });
         }
       });
     });
@@ -404,16 +445,13 @@ export class BleNitroManager {
         return;
       }
 
-      this.Instance.disconnect(
-        deviceId,
-        (success: boolean, error: string) => {
-          if (success) {
-            resolve(deviceId);
-          } else {
-            reject(new Error(error));
-          }
+      this.Instance.disconnect(deviceId, (success: boolean, error: string) => {
+        if (success) {
+          resolve(deviceId);
+        } else {
+          reject(new Error(error));
         }
-      );
+      });
     });
   }
 
@@ -448,11 +486,11 @@ export class BleNitroManager {
    */
   public requestConnectionPriority(
     deviceId: string,
-    priority: AndroidConnectionPriority
+    priority: AndroidConnectionPriority,
   ): boolean {
     return this.Instance.requestConnectionPriority(
       deviceId,
-      mapAndroidConnectionPriorityToNativeAndroidConnectionPriority(priority)
+      mapAndroidConnectionPriorityToNativeAndroidConnectionPriority(priority),
     );
   }
 
@@ -477,7 +515,7 @@ export class BleNitroManager {
           } else {
             reject(new Error(error));
           }
-        }
+        },
       );
     });
   }
@@ -503,7 +541,7 @@ export class BleNitroManager {
           } else {
             reject(new Error(error));
           }
-        }
+        },
       );
     });
   }
@@ -537,10 +575,7 @@ export class BleNitroManager {
    * @param serviceId ID of the service
    * @returns array of characteristic UUIDs
    */
-  public getCharacteristics(
-    deviceId: string,
-    serviceId: string
-  ): string[] {
+  public getCharacteristics(deviceId: string, serviceId: string): string[] {
     if (!this.isConnected(deviceId)) {
       throw new Error('Device not connected');
     }
@@ -563,21 +598,97 @@ export class BleNitroManager {
    * @see getCharacteristics
    */
   public async getServicesWithCharacteristics(
-    deviceId: string
+    deviceId: string,
   ): Promise<{ uuid: string; characteristics: string[] }[]> {
     await this._discoverServicesWithCharacteristics(deviceId);
 
     const services = this.Instance.getServices(deviceId);
-    return BleNitroManager.normalizeGattUUIDs(services).map((service) => ({
+    return BleNitroManager.normalizeGattUUIDs(services).map(service => ({
       uuid: service,
       characteristics: this.getCharacteristics(deviceId, service),
     }));
   }
 
+  /**
+   * Discover all descriptors for a characteristic.
+   * iOS Core Bluetooth requires explicit `discoverDescriptors` before
+   * `setNotifyValue` can find the CCCD (0x2902) descriptor handle.
+   * @param deviceId ID of the device
+   * @param serviceId ID of the service
+   * @param characteristicId ID of the characteristic
+   * @returns Promise resolving when descriptor discovery completes
+   */
+  public discoverDescriptors(
+    deviceId: string,
+    serviceId: string,
+    characteristicId: string,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.isConnected(deviceId)) {
+        reject(new Error('Device not connected'));
+        return;
+      }
+
+      this.Instance.discoverDescriptors(
+        deviceId,
+        BleNitroManager.normalizeGattUUID(serviceId),
+        BleNitroManager.normalizeGattUUID(characteristicId),
+        (success: boolean, error: string) => {
+          if (success) {
+            resolve();
+          } else {
+            reject(new Error(error));
+          }
+        },
+      );
+    });
+  }
+
+  /**
+   * Write a value to a characteristic's descriptor.
+   * Used to enable BLE notifications by writing 0x01 0x00 to the CCCD
+   * (UUID 0x2902) descriptor after descriptor discovery.
+   * @param deviceId ID of the device
+   * @param serviceId ID of the service
+   * @param characteristicId ID of the characteristic
+   * @param descriptorId ID of the descriptor (e.g. 0x2902 for CCCD)
+   * @param data Data to write as ByteArray
+   * @returns Promise resolving when descriptor write completes
+   */
+  public writeDescriptor(
+    deviceId: string,
+    serviceId: string,
+    characteristicId: string,
+    descriptorId: string,
+    data: ByteArray,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.isConnected(deviceId)) {
+        reject(new Error('Device not connected'));
+        return;
+      }
+
+      this.Instance.writeDescriptor(
+        deviceId,
+        BleNitroManager.normalizeGattUUID(serviceId),
+        BleNitroManager.normalizeGattUUID(characteristicId),
+        BleNitroManager.normalizeGattUUID(descriptorId),
+        byteArrayToArrayBuffer(data),
+        (success: boolean, error: string) => {
+          if (success) {
+            resolve();
+          } else {
+            reject(new Error(error));
+          }
+        },
+      );
+    });
+  }
+
   private static readonly DISCOVERY_TIMEOUT_MS = 30_000;
 
   private _discoverServicesWithCharacteristics(
-    deviceId: string
+    deviceId: string,
   ): Promise<void> {
     const inner = new Promise<void>((resolve, reject) => {
       if (!this.isConnected(deviceId)) {
@@ -592,13 +703,13 @@ export class BleNitroManager {
           } else {
             reject(new Error(error));
           }
-        }
+        },
       );
     });
     return withTimeout(
       inner,
       BleNitroManager.DISCOVERY_TIMEOUT_MS,
-      'discoverServicesWithCharacteristics'
+      'discoverServicesWithCharacteristics',
     );
   }
 
@@ -612,7 +723,7 @@ export class BleNitroManager {
   public readCharacteristic(
     deviceId: string,
     serviceId: string,
-    characteristicId: string
+    characteristicId: string,
   ): Promise<ByteArray> {
     return new Promise((resolve, reject) => {
       // Check if connected first
@@ -631,7 +742,7 @@ export class BleNitroManager {
           } else {
             reject(new Error(error));
           }
-        }
+        },
       );
     });
   }
@@ -650,7 +761,7 @@ export class BleNitroManager {
     serviceId: string,
     characteristicId: string,
     data: ByteArray,
-    withResponse: boolean = true
+    withResponse: boolean = true,
   ): Promise<ByteArray> {
     return new Promise((resolve, reject) => {
       // Check if connected first
@@ -673,7 +784,7 @@ export class BleNitroManager {
           } else {
             reject(new Error(error));
           }
-        }
+        },
       );
     });
   }
@@ -690,7 +801,7 @@ export class BleNitroManager {
     deviceId: string,
     serviceId: string,
     characteristicId: string,
-    callback: CharacteristicUpdateCallback
+    callback: CharacteristicUpdateCallback,
   ): Promise<AsyncSubscription> {
     return new Promise((resolve, reject) => {
       // Check if connected first
@@ -717,13 +828,89 @@ export class BleNitroManager {
               await this.unsubscribeFromCharacteristic(
                 deviceId,
                 serviceId,
-                characteristicId
+                characteristicId,
               ).catch(() => {});
-            }
+            },
           };
 
           resolve(sub);
-        }
+        },
+      );
+    });
+  }
+
+  /**
+   * Discover all descriptors for a characteristic.
+   * iOS Core Bluetooth requires explicit `discoverDescriptors` before
+   * `setNotifyValue` can find the CCCD (0x2902) descriptor handle.
+   * @param deviceId ID of the device
+   * @param serviceId ID of the service
+   * @param characteristicId ID of the characteristic
+   * @returns Promise resolving when descriptor discovery completes
+   */
+  public discoverDescriptors(
+    deviceId: string,
+    serviceId: string,
+    characteristicId: string,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.isConnected(deviceId)) {
+        reject(new Error('Device not connected'));
+        return;
+      }
+
+      this.Instance.discoverDescriptors(
+        deviceId,
+        BleNitroManager.normalizeGattUUID(serviceId),
+        BleNitroManager.normalizeGattUUID(characteristicId),
+        (success: boolean, error: string) => {
+          if (success) {
+            resolve();
+          } else {
+            reject(new Error(error));
+          }
+        },
+      );
+    });
+  }
+
+  /**
+   * Write a value to a characteristic's descriptor.
+   * Used to enable BLE notifications by writing 0x01 0x00 to the CCCD
+   * (UUID 0x2902) descriptor after descriptor discovery.
+   * @param deviceId ID of the device
+   * @param serviceId ID of the service
+   * @param characteristicId ID of the characteristic
+   * @param descriptorId ID of the descriptor (e.g. 0x2902 for CCCD)
+   * @param data Data to write as ByteArray
+   * @returns Promise resolving when descriptor write completes
+   */
+  public writeDescriptor(
+    deviceId: string,
+    serviceId: string,
+    characteristicId: string,
+    descriptorId: string,
+    data: ByteArray,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.isConnected(deviceId)) {
+        reject(new Error('Device not connected'));
+        return;
+      }
+
+      this.Instance.writeDescriptor(
+        deviceId,
+        BleNitroManager.normalizeGattUUID(serviceId),
+        BleNitroManager.normalizeGattUUID(characteristicId),
+        BleNitroManager.normalizeGattUUID(descriptorId),
+        byteArrayToArrayBuffer(data),
+        (success: boolean, error: string) => {
+          if (success) {
+            resolve();
+          } else {
+            reject(new Error(error));
+          }
+        },
       );
     });
   }
@@ -738,7 +925,7 @@ export class BleNitroManager {
   public unsubscribeFromCharacteristic(
     deviceId: string,
     serviceId: string,
-    characteristicId: string
+    characteristicId: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       // Check if connected first
@@ -757,7 +944,7 @@ export class BleNitroManager {
           } else {
             reject(new Error(error));
           }
-        }
+        },
       );
     });
   }
@@ -772,14 +959,14 @@ export class BleNitroManager {
   public isSubscribedToCharacteristic(
     deviceId: string,
     serviceId: string,
-    characteristicId: string
+    characteristicId: string,
   ): boolean {
     // No isConnected guard — both native implementations already return false
     // for disconnected devices, and an extra check would introduce a TOCTOU race.
     return this.Instance.isSubscribedToCharacteristic(
       deviceId,
       BleNitroManager.normalizeGattUUID(serviceId),
-      BleNitroManager.normalizeGattUUID(characteristicId)
+      BleNitroManager.normalizeGattUUID(characteristicId),
     );
   }
 
@@ -804,7 +991,7 @@ export class BleNitroManager {
           } else {
             reject(new Error(error));
           }
-        }
+        },
       );
     });
   }
@@ -825,21 +1012,24 @@ export class BleNitroManager {
    * @returns Subscription
    * @see BLEState
    */
-  public subscribeToStateChange(callback: (state: BLEState) => void, emitInitial = false): Subscription {
-      if (emitInitial) {
-        const state = this.state();
-        callback(state);
-      }
+  public subscribeToStateChange(
+    callback: (state: BLEState) => void,
+    emitInitial = false,
+  ): Subscription {
+    if (emitInitial) {
+      const state = this.state();
+      callback(state);
+    }
 
-      this.Instance.subscribeToStateChange((nativeState: NativeBLEState) => {
-        callback(mapNativeBLEStateToBLEState(nativeState));
-      });
+    this.Instance.subscribeToStateChange((nativeState: NativeBLEState) => {
+      callback(mapNativeBLEStateToBLEState(nativeState));
+    });
 
-      return {
-        remove: () => {
-          this.Instance.unsubscribeFromStateChange();
-        },
-      };
+    return {
+      remove: () => {
+        this.Instance.unsubscribeFromStateChange();
+      },
+    };
   }
 
   /**
