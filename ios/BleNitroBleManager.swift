@@ -808,6 +808,43 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
             }
         }
     }
+
+    // MARK: - Descriptor operations
+    // iOS Core Bluetooth requires explicit discoverDescriptors before
+    // setNotifyValue can find the CCCD (0x2902) descriptor handle.
+    // Without this, the BLE subscription is a silent no-op.
+
+    public func discoverDescriptors(deviceId: String, serviceId: String, characteristicId: String, callback: @escaping (Bool, String) -> Void) throws {
+        guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
+            callback(false, "Characteristic not found")
+            return
+        }
+        guard let delegate = peripheralDelegates[deviceId] else {
+            callback(false, "Device not properly connected or delegate not found")
+            return
+        }
+        delegate.descriptorDiscoveryCallbacks[characteristic.uuid] = callback
+        characteristic.service?.peripheral?.discoverDescriptors(for: characteristic)
+    }
+
+    public func writeDescriptor(deviceId: String, serviceId: String, characteristicId: String, descriptorId: String, data: ArrayBuffer, callback: @escaping (Bool, String) -> Void) throws {
+        guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
+            callback(false, "Characteristic not found")
+            return
+        }
+        let targetDescriptorUUID = CBUUID(string: descriptorId.lowercased())
+        guard let descriptor = characteristic.descriptors?.first(where: { $0.uuid == targetDescriptorUUID }) else {
+            callback(false, "Descriptor not found")
+            return
+        }
+        guard let delegate = peripheralDelegates[deviceId] else {
+            callback(false, "Device not properly connected or delegate not found")
+            return
+        }
+        let dataBytes = data.toData(copyIfNeeded: true)
+        delegate.descriptorWriteCallbacks[descriptor.uuid] = callback
+        characteristic.service?.peripheral?.writeValue(dataBytes, for: descriptor)
+    }
 }
 
 // MARK: - CBCentralManagerDelegate Implementation

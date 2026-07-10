@@ -1138,6 +1138,101 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         }
     }
 
+    // Descriptor operations — Android already has them as part of
+    // subscribe/unsubscribe internal logic. These methods expose the same
+    // primitives so cross-platform callers can use a uniform API. On Android,
+    // descriptors are already discovered as part of characteristic discovery,
+    // so discoverDescriptors is a fast no-op that resolves once the cached
+    // descriptors are available.
+
+    override fun discoverDescriptors(
+        deviceId: String,
+        serviceId: String,
+        characteristicId: String,
+        callback: (success: Boolean, error: String) -> Unit
+    ) {
+        try {
+            val gatt = connectedDevices[deviceId]
+            if (gatt == null) {
+                callback(false, "Device not connected")
+                return
+            }
+
+            val service = gatt.getService(UUID.fromString(serviceId))
+            if (service == null) {
+                callback(false, "Service not found")
+                return
+            }
+
+            val characteristic = service.getCharacteristic(UUID.fromString(characteristicId))
+            if (characteristic == null) {
+                callback(false, "Characteristic not found")
+                return
+            }
+
+            // Android discovers descriptors as part of characteristic discovery,
+            // so descriptors are already cached on the characteristic. The result
+            // is the cached descriptors list; we don't trigger a new gatt operation.
+            if (characteristic.descriptors != null && characteristic.descriptors!!.isNotEmpty()) {
+                callback(true, "")
+            } else {
+                // Descriptors haven't been discovered yet (shouldn't happen on
+                // Android given the standard discovery flow, but handle defensively).
+                callback(false, "No descriptors cached")
+            }
+        } catch (e: Exception) {
+            callback(false, "discoverDescriptors error: ${e.message}")
+        }
+    }
+
+    override fun writeDescriptor(
+        deviceId: String,
+        serviceId: String,
+        characteristicId: String,
+        descriptorId: String,
+        data: ArrayBuffer,
+        callback: (success: Boolean, error: String) -> Unit
+    ) {
+        try {
+            val gatt = connectedDevices[deviceId]
+            if (gatt == null) {
+                callback(false, "Device not connected")
+                return
+            }
+
+            val service = gatt.getService(UUID.fromString(serviceId))
+            if (service == null) {
+                callback(false, "Service not found")
+                return
+            }
+
+            val characteristic = service.getCharacteristic(UUID.fromString(characteristicId))
+            if (characteristic == null) {
+                callback(false, "Characteristic not found")
+                return
+            }
+
+            val descriptor = characteristic.getDescriptor(UUID.fromString(descriptorId))
+            if (descriptor == null) {
+                callback(false, "Descriptor not found")
+                return
+            }
+
+            val dataBytes = data.toByteArray()
+            enqueueGattOperation(
+                GattOperation.WriteDescriptor(
+                    gatt = gatt,
+                    descriptor = descriptor,
+                    value = dataBytes,
+                    deviceId = deviceId,
+                    callback = { success, error -> callback(success, error) }
+                )
+            )
+        } catch (e: Exception) {
+            callback(false, "writeDescriptor error: ${e.message}")
+        }
+    }
+
     override fun isSubscribedToCharacteristic(
         deviceId: String,
         serviceId: String,

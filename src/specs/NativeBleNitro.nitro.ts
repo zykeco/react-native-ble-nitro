@@ -121,6 +121,9 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
   unsubscribeFromCharacteristic(deviceId: string, serviceId: string, characteristicId: string, callback: OperationCallback): void;
   isSubscribedToCharacteristic(deviceId: string, serviceId: string, characteristicId: string): boolean;
 
+  discoverDescriptors(deviceId: string, serviceId: string, characteristicId: string, callback: OperationCallback): void;
+  writeDescriptor(deviceId: string, serviceId: string, characteristicId: string, descriptorId: string, data: BLEValue, callback: OperationCallback): void;
+
   // Bluetooth state management
   requestBluetoothEnable(callback: OperationCallback): void;
   state(): BLEState;
