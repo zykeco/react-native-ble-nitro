@@ -693,6 +693,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                     name = device.name ?: "",
                     rssi = 0.0, // RSSI not available for already connected devices
                     manufacturerData = ManufacturerData(companyIdentifiers = emptyArray()),
+                    serviceData = ServiceData(services = emptyArray()),
                     serviceUUIDs = emptyArray(), // Service UUIDs not available without service discovery
                     isConnectable = true,
                     isConnected = true
