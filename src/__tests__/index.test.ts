@@ -1,6 +1,7 @@
 // Mock the native module import
 const mockNativeInstance = {
   setRestoreStateCallback: jest.fn(),
+  iosLazyInit: jest.fn(),
   startScan: jest.fn(),
   stopScan: jest.fn(),
   isScanning: jest.fn(),
@@ -27,6 +28,31 @@ const mockNativeInstance = {
   openSettings: jest.fn(),
   restoreStateIdentifier: null,
 };
+
+const mockPlatform = {
+  OS: 'android',
+  Version: 35,
+};
+
+const mockPermissionsAndroid = {
+  PERMISSIONS: {
+    ACCESS_FINE_LOCATION: 'android.permission.ACCESS_FINE_LOCATION',
+    BLUETOOTH_ADVERTISE: 'android.permission.BLUETOOTH_ADVERTISE',
+    BLUETOOTH_CONNECT: 'android.permission.BLUETOOTH_CONNECT',
+    BLUETOOTH_SCAN: 'android.permission.BLUETOOTH_SCAN',
+  },
+  RESULTS: {
+    GRANTED: 'granted',
+    DENIED: 'denied',
+  },
+  check: jest.fn(),
+  requestMultiple: jest.fn(),
+};
+
+jest.mock('react-native', () => ({
+  Platform: mockPlatform,
+  PermissionsAndroid: mockPermissionsAndroid,
+}));
 
 jest.mock('../specs/NativeBleNitro', () => ({
   __esModule: true,
@@ -59,7 +85,10 @@ jest.mock('../specs/NativeBleNitroFactory', () => ({
   },
 }));
 
-import { AndroidConnectionPriority, BleNitro } from '../index';
+import {
+  AndroidConnectionPriority,
+  BleNitro,
+} from '../index';
 
 // Get reference to the mocked module
 const mockNative = mockNativeInstance;
@@ -70,6 +99,94 @@ const BleManager = BleNitro.instance();
 describe('BleNitro', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPlatform.OS = 'android';
+    mockPlatform.Version = 35;
+    mockNative.state.mockReturnValue(5);
+    mockPermissionsAndroid.check.mockResolvedValue(true);
+    mockPermissionsAndroid.requestMultiple.mockImplementation((permissions: string[]) =>
+      Promise.resolve(
+        Object.fromEntries(
+          permissions.map((permission) => [
+            permission,
+            mockPermissionsAndroid.RESULTS.GRANTED,
+          ])
+        )
+      )
+    );
+  });
+
+  test('checkPermissions reports default Android scan/connect permissions', async () => {
+    const status = await BleManager.checkPermissions();
+
+    expect(status).toEqual({
+      platform: 'android',
+      granted: true,
+      permissions: [
+        'android.permission.BLUETOOTH_SCAN',
+        'android.permission.BLUETOOTH_CONNECT',
+      ],
+      missing: [],
+    });
+  });
+
+  test(
+    'requestPermissions can request GATT server advertising permissions',
+    async () => {
+      mockPermissionsAndroid.check.mockResolvedValue(false);
+
+      const status = await BleManager.requestPermissions({
+        scan: false,
+        advertise: true,
+        fineLocation: false,
+      });
+
+      expect(mockPermissionsAndroid.requestMultiple).toHaveBeenCalledWith([
+        'android.permission.BLUETOOTH_CONNECT',
+        'android.permission.BLUETOOTH_ADVERTISE',
+      ]);
+      expect(status).toEqual({
+        platform: 'android',
+        granted: true,
+        permissions: [
+          'android.permission.BLUETOOTH_CONNECT',
+          'android.permission.BLUETOOTH_ADVERTISE',
+        ],
+        missing: [],
+      });
+    }
+  );
+
+  test('checkPermissions does not treat an unknown iOS state as granted', async () => {
+    mockPlatform.OS = 'ios';
+    mockNative.state.mockReturnValue(0);
+
+    await expect(BleManager.checkPermissions()).resolves.toEqual({
+      platform: 'ios',
+      granted: false,
+      permissions: [],
+      missing: ['bluetooth'],
+    });
+  });
+
+  test('requestPermissions waits for a resolved iOS Bluetooth state', async () => {
+    jest.useFakeTimers();
+    mockPlatform.OS = 'ios';
+    mockNative.state.mockReturnValueOnce(0).mockReturnValue(5);
+
+    try {
+      const status = BleManager.requestPermissions();
+      await jest.advanceTimersByTimeAsync(50);
+
+      await expect(status).resolves.toEqual({
+        platform: 'ios',
+        granted: true,
+        permissions: [],
+        missing: [],
+      });
+      expect(mockNative.iosLazyInit).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test('startScan calls native with correct parameters', async () => {
@@ -167,6 +284,15 @@ describe('BleNitro', () => {
 
     expect(mockNative.connect).toHaveBeenCalledWith(deviceId, expect.any(Function), undefined, true);
     expect(result).toBe(deviceId);
+  });
+
+  test('requestMTU preserves its synchronous API', () => {
+    mockNative.requestMTU.mockReturnValueOnce(517);
+
+    const mtu = BleManager.requestMTU('test-device-mtu', 517);
+
+    expect(mockNative.requestMTU).toHaveBeenCalledWith('test-device-mtu', 517);
+    expect(mtu).toBe(517);
   });
 
   test('requestConnectionPriority delegates to native with mapped priority', () => {

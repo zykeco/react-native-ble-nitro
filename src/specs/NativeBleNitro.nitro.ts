@@ -55,11 +55,99 @@ export enum AndroidConnectionPriority {
   LowPower = 2,
 }
 
+export enum NativeGattCharacteristicProperty {
+  Broadcast = 1,
+  Read = 2,
+  WriteWithoutResponse = 4,
+  Write = 8,
+  Notify = 16,
+  Indicate = 32,
+  AuthenticatedSignedWrites = 64,
+}
+
+export enum NativeGattCharacteristicPermission {
+  Read = 1,
+  Write = 2,
+  ReadEncrypted = 4,
+  ReadEncryptedMITM = 8,
+  WriteEncrypted = 16,
+  WriteEncryptedMITM = 32,
+  WriteSigned = 64,
+  WriteSignedMITM = 128,
+}
+
+export enum NativeGattServerEventType {
+  AdvertisingStarted = 0,
+  AdvertisingStopped = 1,
+  DeviceConnected = 2,
+  DeviceDisconnected = 3,
+  CharacteristicRead = 4,
+  CharacteristicWrite = 5,
+  NotificationSubscribed = 6,
+  NotificationUnsubscribed = 7,
+  Error = 8,
+  MtuChanged = 9,
+}
+
+export enum AndroidGattServerAdvertiseMode {
+  LowPower = 0,
+  Balanced = 1,
+  LowLatency = 2,
+}
+
+export enum AndroidGattServerAdvertiseTxPowerLevel {
+  UltraLow = 0,
+  Low = 1,
+  Medium = 2,
+  High = 3,
+}
+
 export interface ScanFilter {
   serviceUUIDs: string[];
   rssiThreshold: number;
   allowDuplicates: boolean;
   androidScanMode: AndroidScanMode;
+}
+
+export interface GattServerCharacteristic {
+  uuid: string;
+  properties: number;
+  permissions: number;
+  value: BLEValue;
+}
+
+export interface GattServerService {
+  uuid: string;
+  primary: boolean;
+  characteristics: GattServerCharacteristic[];
+}
+
+export interface GattServerAdvertisingOptions {
+  enabled: boolean;
+  serviceUUIDs: string[];
+  localName: string;
+  includeDeviceName: boolean;
+  includeTxPowerLevel: boolean;
+  androidAdvertiseMode: AndroidGattServerAdvertiseMode;
+  androidTxPowerLevel: AndroidGattServerAdvertiseTxPowerLevel;
+  androidConnectable: boolean;
+}
+
+export interface GattServerOptions {
+  services: GattServerService[];
+  advertising: GattServerAdvertisingOptions;
+}
+
+export interface GattServerEvent {
+  type: NativeGattServerEventType;
+  deviceId: string;
+  serviceId: string;
+  characteristicId: string;
+  descriptorId: string;
+  data: BLEValue;
+  isSubscribed: boolean;
+  mtu: number;
+  error: string;
 }
 
 export type ScanCallback = (device: BLEDevice | null, error: string | null) => void;
@@ -74,7 +162,13 @@ export type StringArrayCallback = (result: string[]) => void;
 export type ReadCharacteristicCallback = (success: boolean, data: BLEValue, error: string) => void;
 export type WriteCharacteristicCallback = (success: boolean, responseData: BLEValue, error: string) => void;
 export type ReadRSSICallback = (success: boolean, rssi: number, error: string) => void;
+export type GattServerNotificationCallback = (
+  success: boolean,
+  queuedDeviceIds: string[],
+  error: string
+) => void;
 export type RestoreCallback = (restoredPeripherals: BLEDevice[]) => void;
+export type GattServerEventCallback = (event: GattServerEvent) => void;
 
 export type OperationResult = {
   success: boolean;
@@ -120,6 +214,17 @@ export interface NativeBleNitro extends HybridObject<{ ios: 'swift'; android: 'k
   subscribeToCharacteristic(deviceId: string, serviceId: string, characteristicId: string, updateCallback: CharacteristicCallback, completionCallback: OperationCallback): void;
   unsubscribeFromCharacteristic(deviceId: string, serviceId: string, characteristicId: string, callback: OperationCallback): void;
   isSubscribedToCharacteristic(deviceId: string, serviceId: string, characteristicId: string): boolean;
+
+  // GATT server operations
+  startGattServer(options: GattServerOptions, eventCallback: GattServerEventCallback, callback: OperationCallback): void;
+  stopGattServer(callback: OperationCallback): void;
+  isGattServerRunning(): boolean;
+  isGattServerAdvertising(): boolean;
+  getGattServerConnectedDevices(): string[];
+  getGattServerDeviceMTU(deviceId: string): number;
+  setGattServerCharacteristicValue(serviceId: string, characteristicId: string, data: BLEValue, callback: OperationCallback): void;
+  notifyGattServerCharacteristicChanged(deviceId: string, serviceId: string, characteristicId: string, data: BLEValue, callback: GattServerNotificationCallback): void;
+  disconnectGattServerDevice(deviceId: string, callback: OperationCallback): void;
 
   // Bluetooth state management
   requestBluetoothEnable(callback: OperationCallback): void;

@@ -1,13 +1,18 @@
 import { StatusBar } from 'expo-status-bar';
-import { AppState, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { AppState, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { createBle } from './src/bluetooth';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { AndroidConnectionPriority, type BLEDevice, type AsyncSubscription } from 'react-native-ble-nitro';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { CentralCharacteristicTester } from './src/CentralCharacteristicTester';
+import { GattServerExample } from './src/GattServerExample';
+import { GATT_SERVER_UUIDS } from './src/gatt-server-config';
+import { UuidComboBox } from './src/UuidComboBox';
 
 const HEART_RATE_SERVICE_UUID = '0000180d-0000-1000-8000-00805f9b34fb'.toLowerCase();
 const HEART_RATE_MEASUREMENT_UUID = '00002A37-0000-1000-8000-00805f9b34fb'.toLowerCase();
 const BODY_SENSOR_LOCATION_UUID = '00002A38-0000-1000-8000-00805f9b34fb'.toLowerCase();
+const HEART_RATE_CONTROL_POINT_UUID = '00002A39-0000-1000-8000-00805f9b34fb'.toLowerCase();
 
 const BATTERY_SERVICE_UUID = '0000180f-0000-1000-8000-00805f9b34fb'.toLowerCase();
 const BATTERY_CHARACTERISTIC_LEVEL_UUID = '00002a19-0000-1000-8000-00805f9b34fb'.toLowerCase();
@@ -28,7 +33,10 @@ const PROFILE_SYSTEMID_UUID = '00002A23-0000-1000-8000-00805f9b34fb'.toLowerCase
 let unsubscribeRx: AsyncSubscription['remove'] | null = null;
 let unsubscribeHr: AsyncSubscription['remove'] | null = null;
 
+type AppTab = 'central' | 'peripheral';
+
 export default function App() {
+  const [activeTab, setActiveTab] = useState<AppTab>('central');
   const [isEnabled, setIsEnabled] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanServiceUUIDs, setScanServiceUUIDs] = useState<string>(`${HEART_RATE_SERVICE_UUID}`);
@@ -44,12 +52,17 @@ export default function App() {
     onEnabledChange: (enabled) => setIsEnabled(enabled),
   }));
   const ble = bleModule.current;
+  const logSequence = useRef(0);
 
   useLayoutEffect(() => {
-    requestPermissionsAndroid().then(async () => {
+    void (async () => {
+      const permissionsGranted = await requestPermissionsAndroid();
+      if (!permissionsGranted) {
+        return;
+      }
       await requestBluetoothEnable();
       ble.mount();
-    });
+    })();
     const unsub = AppState.addEventListener('change', async (state) => {
       if (state === 'active' && isEnabled === false) {
         const isEnabled = await ble.instance.isBluetoothEnabled();
@@ -82,39 +95,30 @@ export default function App() {
 
   const requestPermissionsAndroid = async () => {
     if (Platform.OS !== 'android') {
-      return true
+      return true;
     }
-    if (Platform.OS === 'android' && PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION) {
-      const apiLevel = parseInt(Platform.Version.toString(), 10);
-      logMessage(`API level: ${apiLevel}`);
-      if (apiLevel < 31) {
-        const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
-        return (
-          result === PermissionsAndroid.RESULTS.GRANTED
-        );
-      }
-      if (PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN && PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT) {
-        const result = await PermissionsAndroid.requestMultiple([
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-        ])
-
-        return (
-          result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED &&
-          result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
-          result['android.permission.ACCESS_FINE_LOCATION'] === PermissionsAndroid.RESULTS.GRANTED
-        )
-      }
-
-      logMessage('Request permissions failed');
-      throw new Error('Request permissions failed');
+    const apiLevel = Number.parseInt(String(Platform.Version), 10);
+    logMessage(`API level: ${apiLevel}`);
+    const status = await ble.instance.requestPermissions({
+      scan: true,
+      connect: true,
+      advertise: true,
+      fineLocation: apiLevel < 31,
+    });
+    if (!status.granted) {
+      logMessage('Missing Bluetooth permissions', status.missing.join(', '));
+      return false;
     }
+    return true;
   };
 
   const startScan = async () => {
+    const serviceUUIDs = scanServiceUUIDs
+      .split(',')
+      .map((uuid) => uuid.trim())
+      .filter(Boolean);
     ble.instance.startScan({
-      serviceUUIDs: scanServiceUUIDs.replaceAll(' ', '').split(',') ?? [],
+      serviceUUIDs,
       rssiThreshold: -100,
       allowDuplicates: false,
     }, (device) => {
@@ -124,8 +128,9 @@ export default function App() {
         if (index === -1) {
           return [...prev, device];
         }
-        prev[index] = device;
-        return prev;
+        return prev.map((candidate, candidateIndex) =>
+          candidateIndex === index ? device : candidate,
+        );
       });
     }, (error) => {
       console.error(error);
@@ -181,12 +186,14 @@ export default function App() {
       logMessage(`4 Got ${servicesWithCharacteristics.length} services for ${connectedId}`);
       setConnectedDeviceServiceUUIDs(servicesWithCharacteristics.map((s) => s.uuid));
       resetScannedDevices();
-      servicesWithCharacteristics.map(async (s) => {
-        setConnectedDeviceCharacteristics((prev) => {
-          prev[s.uuid] = s.characteristics;
-          return prev;
-        });
-      });
+      setConnectedDeviceCharacteristics(
+        Object.fromEntries(
+          servicesWithCharacteristics.map((service) => [
+            service.uuid,
+            service.characteristics,
+          ]),
+        ),
+      );
       logMessage('Device is connected');
     } catch (e) {
       console.error(e);
@@ -210,12 +217,14 @@ export default function App() {
       logMessage(JSON.stringify(servicesWithCharacteristics));
       setConnectedDeviceServiceUUIDs(servicesWithCharacteristics.map((s) => s.uuid));
       resetScannedDevices();
-      servicesWithCharacteristics.map(async (s) => {
-        setConnectedDeviceCharacteristics((prev) => {
-          prev[s.uuid] = s.characteristics;
-          return prev;
-        });
-      });
+      setConnectedDeviceCharacteristics(
+        Object.fromEntries(
+          servicesWithCharacteristics.map((service) => [
+            service.uuid,
+            service.characteristics,
+          ]),
+        ),
+      );
       logMessage('Device is connected');
     } catch (e) {
       console.error(e);
@@ -272,7 +281,7 @@ export default function App() {
       throw new Error('No device connected');
     }
     const mtu = ble.instance.requestMTU(connectedDeviceId, 517);
-    logMessage('MTU', mtu);
+    logMessage('MTU request', mtu);
   };
 
   const requestConnectionPriority = (priority: AndroidConnectionPriority) => {
@@ -340,8 +349,11 @@ export default function App() {
   }
 
   const logMessage = (...message: (string | number)[]) => {
-    const date = new Date().toLocaleTimeString('de-DE');
-    setLogs((prev) => [...prev, `${date} - ${message.join(' ')}`]);
+    const now = new Date();
+    const sequence = logSequence.current + 1;
+    logSequence.current = sequence;
+    const timestamp = `${now.toLocaleTimeString('de-DE')}.${String(now.getMilliseconds()).padStart(3, '0')}`;
+    setLogs((prev) => [...prev, `${timestamp} #${sequence} - ${message.join(' ')}`]);
   }
 
   const clearLogs = () => {
@@ -504,10 +516,50 @@ export default function App() {
             )}
             {isEnabled && (
               <>
+                <View style={styles.tabBar}>
+                  <TabButton
+                    label="Central"
+                    selected={activeTab === 'central'}
+                    onPress={() => setActiveTab('central')}
+                  />
+                  <TabButton
+                    label="Peripheral"
+                    selected={activeTab === 'peripheral'}
+                    onPress={() => setActiveTab('peripheral')}
+                  />
+                </View>
+
+                <View
+                  style={activeTab === 'central' ? styles.tabContent : styles.hiddenTab}
+                >
+                <Text style={styles.roleTitle}>Central client</Text>
+                <Text style={styles.roleSubtitle}>
+                  Scan, connect, and exercise characteristics on another BLE peripheral.
+                </Text>
                 {!connectedDeviceId && (
                   <>
-                  <Text>Scan Service UUIDs:</Text>
-                  <TextInput style={{ borderWidth: 1, padding: 3 }} value={scanServiceUUIDs} onChangeText={setScanServiceUUIDs}></TextInput>
+                  <UuidComboBox
+                    label="Scan service UUID"
+                    value={scanServiceUUIDs}
+                    onChange={setScanServiceUUIDs}
+                    options={[
+                      {
+                        label: 'Heart rate service (default)',
+                        value: HEART_RATE_SERVICE_UUID,
+                      },
+                      {
+                        label: 'BLE Nitro Peripheral service',
+                        value: GATT_SERVER_UUIDS.service,
+                        description:
+                          'Use with another phone running the Peripheral tab. If an iOS peripheral is not listed, scan without a service filter.',
+                      },
+                      {
+                        label: 'No service filter',
+                        value: '',
+                        description: 'Discover every advertising BLE device.',
+                      },
+                    ]}
+                  />
                   {isScanning ? (
                     <TouchableOpacity style={styles.button} onPress={stopScan}>
                       <Text>Stop Scan</Text>
@@ -550,6 +602,19 @@ export default function App() {
                     <View style={{ padding: 8, marginTop: 8, backgroundColor: '#f4f4f4ff', borderRadius: 4, }}>
                       <Text selectable>ID: {connectedDeviceId}</Text>
                       <Text>Is connected: {deviceIsConnected.toString()}</Text>
+                      <CentralCharacteristicTester
+                        ble={ble.instance}
+                        deviceId={connectedDeviceId}
+                        defaultServiceUuid={CUSTOM_SERVICE_UUID}
+                        defaultReadUuid={RX_CHAR_UUID}
+                        defaultWriteUuid={TX_CHAR_UUID}
+                        heartRateServiceUuid={HEART_RATE_SERVICE_UUID}
+                        heartRateMeasurementUuid={HEART_RATE_MEASUREMENT_UUID}
+                        heartRateBodySensorLocationUuid={BODY_SENSOR_LOCATION_UUID}
+                        heartRateControlPointUuid={HEART_RATE_CONTROL_POINT_UUID}
+                        discoveredCharacteristics={connectedDeviceCharacteristics}
+                        logMessage={logMessage}
+                      />
                       <Text style={{ borderTopWidth: 1 }}>Services:</Text>
                       {connectedDeviceServiceUUIDs.map((s) => (
                         <View key={s} style={{ paddingTop: 2, borderBottomWidth: 1 }}>
@@ -686,16 +751,26 @@ export default function App() {
                     </View>
                   </>
                 )}
+                <TouchableOpacity style={styles.button} onPress={() => checkConnection()}>
+                  <Text>Check Connection</Text>
+                </TouchableOpacity>
+                </View>
+
+                <View
+                  style={activeTab === 'peripheral' ? styles.tabContent : styles.hiddenTab}
+                >
+                <GattServerExample
+                  ble={ble.instance}
+                  logMessage={logMessage}
+                />
+                </View>
               </>
             )}
-            <TouchableOpacity style={styles.button} onPress={() => checkConnection()}>
-              <Text>Check Connection</Text>
-            </TouchableOpacity>
             {(logs.length > 0) && (
               <View>
                 <Text style={{ marginTop: 16 }}>Logs:</Text>
                 <ScrollView style={{ marginTop: 8, backgroundColor: '#f4f4f4ff', borderRadius: 4, padding: 8, maxHeight: 200 }} nestedScrollEnabled>
-                  {logs.sort((a, b) => {
+                  {[...logs].sort((a, b) => {
                     return b.toLocaleLowerCase().localeCompare(a.toLocaleLowerCase());
                   }).map((log, i) => (
                     <Text key={i} style={{ fontSize: 11, fontFamily: 'monospace', color: '#444', borderBottomWidth: i === logs.length - 1 ? 0 : 1, padding: 6 }} selectable>{log}</Text>
@@ -713,6 +788,27 @@ export default function App() {
   );
 }
 
+interface TabButtonProps {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}
+
+function TabButton({ label, selected, onPress }: TabButtonProps) {
+  return (
+    <TouchableOpacity
+      style={[styles.tabButton, selected && styles.selectedTabButton]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+    >
+      <Text style={[styles.tabButtonText, selected && styles.selectedTabButtonText]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -725,5 +821,46 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     alignItems: 'center',
     marginVertical: 8,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    padding: 4,
+    marginTop: 12,
+    marginBottom: 8,
+    borderRadius: 10,
+    backgroundColor: '#e8ebef',
+  },
+  tabButton: {
+    flex: 1,
+    alignItems: 'center',
+    borderRadius: 8,
+    paddingVertical: 10,
+  },
+  selectedTabButton: {
+    backgroundColor: '#2457c5',
+  },
+  tabButtonText: {
+    color: '#4f5964',
+    fontWeight: '700',
+  },
+  selectedTabButtonText: {
+    color: '#fff',
+  },
+  tabContent: {
+    display: 'flex',
+  },
+  hiddenTab: {
+    display: 'none',
+  },
+  roleTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  roleSubtitle: {
+    color: '#59636e',
+    lineHeight: 19,
+    marginTop: 4,
+    marginBottom: 8,
   },
 });

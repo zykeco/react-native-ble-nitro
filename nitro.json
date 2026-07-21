@@ -10,15 +10,26 @@
   },
   "autolinking": {
     "NativeBleNitro": {
-      "swift": "BleNitroBleManager",
-      "kotlin": "BleNitroBleManager"
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "BleNitroBleManager"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "BleNitroBleManager"
+      }
     },
     "NativeBleNitroFactory": {
-      "swift": "BleNitroBleManagerFactory",
-      "kotlin": "BleNitroBleManagerFactory"
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "BleNitroBleManagerFactory"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "BleNitroBleManagerFactory"
+      }
     }
   },
-  "ignorePaths": [
-    "**/node_modules"
-  ]
+  "ignorePaths": ["**/node_modules", "**/android/build"],
+  "gitAttributesGeneratedFlag": true
 }

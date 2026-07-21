@@ -41,6 +41,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     private var stateCallback: ((state: BLEState) -> Unit)? = null
     private var bluetoothStateReceiver: BroadcastReceiver? = null
     private var restoreStateCallback: ((devices: List<BLEDevice>) -> Unit)? = null
+    private var gattServer: BleNitroGattServer? = null
     
     // BLE Scanning
     private var bleScanner: BluetoothLeScanner? = null
@@ -1146,6 +1147,131 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         val callbacks = deviceCallbacks[deviceId] ?: return false
         val subscriptionKey = "$serviceId:$characteristicId"
         return callbacks.characteristicSubscriptions.containsKey(subscriptionKey)
+    }
+
+    override fun startGattServer(
+        options: GattServerOptions,
+        eventCallback: (event: GattServerEvent) -> Unit,
+        callback: (success: Boolean, error: String) -> Unit
+    ) {
+        try {
+            val context = appContext
+            if (context == null) {
+                callback(false, "Context not available")
+                return
+            }
+
+            gattServer?.stop()
+            val server = BleNitroGattServer(context, eventCallback)
+            gattServer = server
+            server.start(options) { success, error ->
+                if (!success) {
+                    server.stop()
+                    if (gattServer === server) {
+                        gattServer = null
+                    }
+                }
+                callback(success, error)
+            }
+        } catch (e: Exception) {
+            gattServer?.stop()
+            gattServer = null
+            callback(false, "GATT server start error: ${e.message}")
+        }
+    }
+
+    override fun stopGattServer(callback: (success: Boolean, error: String) -> Unit) {
+        try {
+            gattServer?.stop()
+            gattServer = null
+            callback(true, "")
+        } catch (e: Exception) {
+            callback(false, "GATT server stop error: ${e.message}")
+        }
+    }
+
+    override fun isGattServerRunning(): Boolean {
+        return gattServer?.isRunning() ?: false
+    }
+
+    override fun isGattServerAdvertising(): Boolean {
+        return gattServer?.isAdvertising() ?: false
+    }
+
+    override fun getGattServerConnectedDevices(): Array<String> {
+        return gattServer?.getConnectedDevices() ?: emptyArray()
+    }
+
+    override fun getGattServerDeviceMTU(deviceId: String): Double {
+        return gattServer?.getDeviceMtu(deviceId) ?: 0.0
+    }
+
+    override fun setGattServerCharacteristicValue(
+        serviceId: String,
+        characteristicId: String,
+        data: ArrayBuffer,
+        callback: (success: Boolean, error: String) -> Unit
+    ) {
+        try {
+            val server = gattServer
+            if (server == null) {
+                callback(false, "GATT server is not running")
+                return
+            }
+
+            val success = server.setCharacteristicValue(
+                serviceId,
+                characteristicId,
+                data.toByteArray()
+            )
+            callback(success, if (success) "" else "Characteristic not found")
+        } catch (e: Exception) {
+            callback(false, "Set GATT characteristic value error: ${e.message}")
+        }
+    }
+
+    override fun notifyGattServerCharacteristicChanged(
+        deviceId: String,
+        serviceId: String,
+        characteristicId: String,
+        data: ArrayBuffer,
+        callback: (success: Boolean, queuedDeviceIds: Array<String>, error: String) -> Unit
+    ) {
+        try {
+            val server = gattServer
+            if (server == null) {
+                callback(false, emptyArray(), "GATT server is not running")
+                return
+            }
+
+            server.notifyCharacteristicChanged(
+                deviceId,
+                serviceId,
+                characteristicId,
+                data.toByteArray(),
+                callback
+            )
+        } catch (e: Exception) {
+            callback(false, emptyArray(), "Notify GATT characteristic error: ${e.message}")
+        }
+    }
+
+    override fun disconnectGattServerDevice(
+        deviceId: String,
+        callback: (success: Boolean, error: String) -> Unit
+    ) {
+        try {
+            val server = gattServer
+            if (server == null) {
+                callback(false, "GATT server is not running")
+                return
+            }
+
+            val success = server.disconnectDevice(deviceId)
+            callback(success, if (success) "" else "Device $deviceId is not connected")
+        } catch (e: Exception) {
+            callback(false, "Disconnect GATT server device error: ${e.message}")
+        }
     }
 
     // Bluetooth state management

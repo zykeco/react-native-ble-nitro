@@ -30,11 +30,12 @@
         {
           "isBackgroundEnabled": true,
           "modes": [
-            "central"
+            "central",
+            "peripheral"
           ],
           "bluetoothAlwaysPermission": "Allow $(PRODUCT_NAME) to connect to bluetooth devices",
           "neverForLocation": true,
-          "androidAdvertisingEnabled": false
+          "androidAdvertisingEnabled": true
         }
       ]
     ],

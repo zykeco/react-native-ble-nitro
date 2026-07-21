@@ -14,6 +14,7 @@ Originally developed for [Zyke Band](https://zykeband.com?utm_source=github&utm_
 - 🤖 **Android Support**: Complete Android implementation with Kotlin and Android BLE APIs
 - 🎯 **Type-Safe**: Full TypeScript support with comprehensive type definitions
 - 📡 **Advertisement Data**: Extract advertised service data and manufacturer data from scan results
+- 📲 **GATT Server**: Advertise services and handle reads, writes, notifications, and indications
 - 🔧 **Expo Ready**: Built-in Expo config plugin for easy setup
 - 🏗️ **New Architecture**: Full support for React Native's new architecture
 - ⚡ **Zero Bridge**: Direct JSI communication eliminates bridge bottlenecks
@@ -75,9 +76,9 @@ import { BleNitro, BleNitroManager, BLEState, AndroidScanMode, AndroidConnection
 // Get the singleton instance
 const ble = BleNitro.instance();
 
-// Use custom manager instance (e.g. for iOS state restoration)
-// It is recommended to create this instance in an extra file seperated from other BLE business logic for better fast-refresh support
-const ble = new BleNitroManager({
+// Use a custom manager instance (for example, for iOS state restoration).
+// Keep it in a separate module from UI code so Fast Refresh does not recreate it.
+const customBle = new BleNitroManager({
   restoreIdentifier: 'my-unique-identifier',
   onRestoredState: (peripherals) => {
     console.log('Restored peripherals:', peripherals);
@@ -129,12 +130,12 @@ ble.startScan({
 }, (device) => {
   console.log('Discovered device:', device);
 
-  // Advertised service data, keyed by service UUID (ArrayBuffer payloads)
+  // Advertised service-data entries with byte-array payloads.
   device.serviceData.services.forEach(({ uuid, data }) => {
     console.log(`Service data for ${uuid}:`, new Uint8Array(data));
   });
 
-  // Advertised manufacturer data, keyed by company identifier
+  // Advertised manufacturer-data entries with byte-array payloads.
   device.manufacturerData.companyIdentifiers.forEach(({ id, data }) => {
     console.log(`Manufacturer data for ${id}:`, new Uint8Array(data));
   });
@@ -154,6 +155,10 @@ const connectedDevices = ble.getConnectedDevices(['180d']); // Optional: filter 
 ```
 
 #### 🔗 Device Connection
+
+These are central/client APIs. Central-only applications can request ATT MTU
+negotiation on Android with `requestMTU`; the GATT server MTU APIs documented
+below are separate peripheral/server APIs.
 
 ```typescript
 // Connect to a device with disconnect event handling
@@ -191,14 +196,12 @@ await ble.disconnect(deviceId);
 // Check connection status
 const isConnected = ble.isConnected(deviceId);
 
-// MTU negotiation (Android only, as iOS manages MTU automatically)
-// iOS returns current MTU size
-const mtu = await ble.requestMTU(deviceId, 256); // Request MTU size
-
-// MTU negotiation (Android only)
-// iOS manages MTU automatically, this method returns current MTU size
-const newMTU = ble.requestMTU(deviceId, 247);
-console.log('MTU set to:', newMTU);
+// Central role: request ATT MTU negotiation with the connected peripheral.
+// Android returns the requested size when the native request is initiated, or 0
+// if it could not be started. This is not the final negotiated MTU.
+// iOS negotiates automatically and returns its current maximum write length.
+const mtuRequest = ble.requestMTU(deviceId, 247);
+console.log('MTU request result:', mtuRequest);
 
 // Request Android connection priority while connected (Android only).
 // Returns true if Android successfully initiated the request (the priority change
@@ -314,6 +317,119 @@ const isSubscribed = ble.isSubscribedToCharacteristic(deviceId, serviceUUID, cha
 // Returns: boolean — synchronous, no async overhead
 // Returns false for disconnected or unknown devices without throwing
 ```
+
+#### GATT Server (Peripheral Mode)
+
+```typescript
+import {
+  GattCharacteristicPermission,
+  GattCharacteristicProperty,
+} from 'react-native-ble-nitro';
+
+const SERVICE_UUID = '7f7d0000-9d8f-4f66-9f11-6aa559d8a56b';
+const READ_UUID = '7f7d0001-9d8f-4f66-9f11-6aa559d8a56b';
+const WRITE_UUID = '7f7d0002-9d8f-4f66-9f11-6aa559d8a56b';
+
+await ble.startGattServer({
+  advertising: {
+    // Android temporarily applies this to the Bluetooth adapter while the
+    // server is running, then restores the previous name on stop.
+    localName: 'BLE Nitro',
+    // Only UUIDs listed here are advertised. Services are not advertised by default.
+    serviceUUIDs: [SERVICE_UUID],
+  },
+  services: [
+    {
+      uuid: SERVICE_UUID,
+      primary: true,
+      characteristics: [
+        {
+          uuid: READ_UUID,
+          properties: [GattCharacteristicProperty.Read, GattCharacteristicProperty.Notify],
+          permissions: [GattCharacteristicPermission.Read],
+          value: [50],
+          onRead: ({ deviceId, mtu }) => {
+            console.log('Read characteristic requested by:', deviceId, mtu);
+          },
+          onSubscribe: ({ deviceId, mtu }) => {
+            console.log('Read characteristic subscribed by:', deviceId, mtu);
+          },
+        },
+        {
+          uuid: WRITE_UUID,
+          properties: [GattCharacteristicProperty.Write, GattCharacteristicProperty.WriteWithoutResponse],
+          permissions: [GattCharacteristicPermission.Write],
+          onWrite: ({ deviceId, data, mtu }) => {
+            console.log('Write characteristic updated by:', deviceId, data, mtu);
+          },
+        },
+      ],
+    },
+  ],
+  onAdvertisingStarted: () => {
+    console.log('GATT server advertising');
+  },
+  onDeviceConnected: ({ deviceId, mtu }) => {
+    console.log('Central connected:', deviceId, mtu);
+  },
+  onDeviceDisconnected: ({ deviceId }) => {
+    console.log('Central disconnected:', deviceId);
+  },
+  onMtuChanged: ({ deviceId, mtu }) => {
+    console.log('Central MTU changed:', deviceId, mtu);
+  },
+  onError: ({ message }) => {
+    console.error('GATT server error:', message);
+  },
+});
+
+await ble.setGattServerCharacteristicValue(SERVICE_UUID, READ_UUID, [75]);
+const notification = await ble.notifyGattServerCharacteristicChanged(
+  SERVICE_UUID,
+  READ_UUID,
+  [75]
+);
+console.log('Queued for centrals:', notification.queuedDeviceIds);
+
+const connectedCentrals = ble.getGattServerConnectedDevices();
+const firstCentral = connectedCentrals[0];
+if (firstCentral) {
+  console.log('Central MTU:', ble.getGattServerDeviceMTU(firstCentral));
+}
+await ble.stopGattServer();
+```
+
+Set `advertising: false` to register the local GATT database without starting BLE advertising.
+`advertising.serviceUUIDs` defaults to `[]`, so adding a GATT service does not automatically advertise it. Android callers can use `advertising.android` for advertise mode, TX power, TX-power inclusion, and connectable state.
+
+`advertising.localName` is opt-in. When provided, it is included by default;
+omit it to advertise without a local name. On Android, including an explicit
+local name temporarily changes the system Bluetooth adapter name while
+advertising and restores the previous name when the GATT server stops. Because
+that is a system setting, restoration cannot be guaranteed if the app process
+terminates unexpectedly.
+
+iOS advertises on a best-effort basis. Service UUIDs that do not fit in the
+advertising payload, and all service UUIDs advertised while the app is in the
+background, are placed in an overflow area that only iOS scanners can discover.
+An Android central may therefore need to scan without a service UUID filter and
+discover services after connecting.
+
+Use `GattCharacteristicPermission.ReadEncrypted` and `GattCharacteristicPermission.WriteEncrypted` for characteristics that require an encrypted link. Android also supports `ReadEncryptedMITM`, `WriteEncryptedMITM`, `WriteSigned`, and `WriteSignedMITM`; use `GattCharacteristicProperty.AuthenticatedSignedWrites` with signed-write permissions. On iOS, CoreBluetooth exposes encryption-required permissions but not separate MITM or signed-write permission flags, so those stricter variants map to encryption-required behavior.
+
+GATT server callbacks include `mtu` when the platform exposes it. Android reports the negotiated ATT MTU and emits `onMtuChanged` when a central changes it. iOS exposes CoreBluetooth's maximum update/write payload length instead of a raw ATT MTU.
+
+On Android, connected-central getters and lifecycle callbacks reflect physical
+connections. CoreBluetooth does not expose equivalent peripheral-mode
+connection callbacks on iOS: a central is reported when it first reads, writes,
+or subscribes, and it is removed only after its final notification subscription
+ends. Read/write-only centrals can therefore remain in the observed-central list
+until the GATT server stops.
+
+The example keeps the reusable GATT schema in
+[`example/src/gatt-server-config.ts`](./example/src/gatt-server-config.ts) and
+the demo state and controls in
+[`example/src/GattServerExample.tsx`](./example/src/GattServerExample.tsx).
 
 ### Real-World Examples
 
@@ -607,43 +723,18 @@ Automatically adds required permissions and also handling neverForLocation and a
 ## Android Flow with Permission Handling
 
 ```ts
-import { PermissionsAndroid, Platform } from 'react-native';
+const permissions = await ble.requestPermissions({
+  scan: true,
+  connect: true,
+  advertise: true,
+});
 
-const requestPermissionsAndroid = async () => {
-  if (Platform.OS !== 'android') {
-    return true
-  }
-  if (Platform.OS === 'android' && PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION) {
-    const apiLevel = parseInt(Platform.Version.toString(), 10);
-    if (apiLevel < 31) {
-      const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
-      return (
-        result === PermissionsAndroid.RESULTS.GRANTED
-      );
-    }
-    if (PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN && PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT) {
-      const result = await PermissionsAndroid.requestMultiple([
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-      ])
-
-      return (
-        result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED &&
-        result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
-        result['android.permission.ACCESS_FINE_LOCATION'] === PermissionsAndroid.RESULTS.GRANTED
-      )
-    }
-
-    logMessage('Request permissions failed');
-    throw new Error('Request permissions failed');
-  }
-};
-
-const hasPermissions = await requestPermissionsAndroid();
-
-// Then start scanning or other operations
+if (!permissions.granted) {
+  console.warn('Missing BLE permissions:', permissions.missing);
+}
 ```
+
+Scanning automatically includes location permission on Android 11 and lower. On Android 12+, request `fineLocation: true` only when the app derives location from BLE scans.
 
 ## 🔧 Development
 

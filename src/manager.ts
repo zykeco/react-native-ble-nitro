@@ -1,4 +1,5 @@
 import BleNitroNativeFactory, { NativeBleNitro } from './specs/NativeBleNitroFactory';
+import { PermissionsAndroid, Platform } from 'react-native';
 import {
   ScanFilter as NativeScanFilter,
   BLEDevice as NativeBLEDevice,
@@ -6,7 +7,55 @@ import {
   ScanCallback as NativeScanCallback,
   AndroidScanMode as NativeAndroidScanMode,
   AndroidConnectionPriority as NativeAndroidConnectionPriority,
+  GattServerEvent as NativeGattServerEvent,
 } from './specs/NativeBleNitro';
+import {
+  createNativeGattServerOptions,
+  convertNativeGattServerEvent,
+  dispatchGattServerEvent,
+  type GattServerNotificationOptions,
+  type GattServerNotificationResult,
+  type GattServerOptions,
+} from './gatt-server';
+import {
+  arrayBufferToByteArray,
+  byteArrayToArrayBuffer,
+  type ByteArray,
+} from './types';
+
+export {
+  arrayBufferToByteArray,
+  byteArrayToArrayBuffer,
+  type ByteArray,
+} from './types';
+export {
+  GattCharacteristicPermission,
+  GattCharacteristicProperty,
+  GattServerAdvertiseMode,
+  GattServerAdvertiseTxPowerLevel,
+} from './gatt-server';
+export type {
+  GattServerAdvertisingCallback,
+  GattServerAdvertisingOptions,
+  GattServerAndroidAdvertisingOptions,
+  GattServerCharacteristic,
+  GattServerCharacteristicReadCallback,
+  GattServerCharacteristicReadEvent,
+  GattServerCharacteristicWriteCallback,
+  GattServerCharacteristicWriteEvent,
+  GattServerDeviceCallback,
+  GattServerDeviceEvent,
+  GattServerErrorCallback,
+  GattServerErrorEvent,
+  GattServerMtuCallback,
+  GattServerMtuEvent,
+  GattServerNotificationOptions,
+  GattServerNotificationResult,
+  GattServerOptions,
+  GattServerService,
+  GattServerSubscriptionCallback,
+  GattServerSubscriptionEvent,
+} from './gatt-server';
 
 export class BleTimeoutError extends Error {
   constructor(operation: string, ms: number) {
@@ -27,7 +76,7 @@ function withTimeout<T>(
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-export type ByteArray = number[];
+type AndroidPermission = Parameters<typeof PermissionsAndroid.check>[0];
 
 export interface ScanFilter {
   serviceUUIDs?: string[];
@@ -118,6 +167,36 @@ export type BleNitroManagerOptions = {
   onRestoredState?: RestoreStateCallback;
 };
 
+export interface BlePermissionOptions {
+  /**
+   * Include permissions needed for scanning/discovery.
+   * Defaults to true when no operation is selected.
+   */
+  scan?: boolean;
+  /**
+   * Include permissions needed to connect/read/write.
+   * Defaults to true when no operation is selected.
+   */
+  connect?: boolean;
+  /**
+   * Include permissions needed for local GATT server advertising. This also
+   * includes connect permission because Android requires it for the server.
+   */
+  advertise?: boolean;
+  /**
+   * Include ACCESS_FINE_LOCATION on Android 12 and newer. Android 11 and lower
+   * always require it for scanning.
+   */
+  fineLocation?: boolean;
+}
+
+export interface BlePermissionStatus {
+  platform: string;
+  granted: boolean;
+  permissions: string[];
+  missing: string[];
+}
+
 export function mapNativeBLEStateToBLEState(nativeState: NativeBLEState): BLEState {
   const map = {
     0: BLEState.Unknown,
@@ -168,12 +247,100 @@ export function convertNativeBleDeviceToBleDevice(nativeBleDevice: NativeBLEDevi
   }
 }
 
-export function arrayBufferToByteArray(buffer: ArrayBuffer): ByteArray {
-  return Array.from(new Uint8Array(buffer));
+function normalizeBlePermissionOptions(
+  options: BlePermissionOptions = {}
+): Required<BlePermissionOptions> {
+  const hasSelectedOperation = Boolean(
+    options.scan || options.connect || options.advertise
+  );
+  const scan = options.scan ?? !hasSelectedOperation;
+  const advertise = options.advertise ?? false;
+  // A local GATT server needs BLUETOOTH_CONNECT in addition to
+  // BLUETOOTH_ADVERTISE, even when connect was not selected separately.
+  const connect = (options.connect ?? !hasSelectedOperation) || advertise;
+
+  return {
+    scan,
+    connect,
+    advertise,
+    fineLocation: options.fineLocation ?? false,
+  };
 }
 
-export function byteArrayToArrayBuffer(data: ByteArray): ArrayBuffer {
-  return new Uint8Array(data).buffer;
+function addAndroidPermission(
+  permissions: Set<AndroidPermission>,
+  permission: string | undefined
+): void {
+  if (permission) {
+    permissions.add(permission as AndroidPermission);
+  }
+}
+
+function getRequiredAndroidPermissions(
+  options: BlePermissionOptions = {}
+): AndroidPermission[] {
+  const resolved = normalizeBlePermissionOptions(options);
+  const permissions = new Set<AndroidPermission>();
+  const androidVersion = Number.parseInt(String(Platform.Version), 10);
+
+  if (androidVersion >= 31) {
+    if (resolved.scan) {
+      addAndroidPermission(
+        permissions,
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN
+      );
+    }
+    if (resolved.connect) {
+      addAndroidPermission(
+        permissions,
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT
+      );
+    }
+    if (resolved.advertise) {
+      addAndroidPermission(
+        permissions,
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_ADVERTISE
+      );
+    }
+  } else if (resolved.scan || resolved.connect || resolved.advertise) {
+    addAndroidPermission(permissions, 'android.permission.BLUETOOTH');
+    addAndroidPermission(permissions, 'android.permission.BLUETOOTH_ADMIN');
+  }
+
+  if (resolved.fineLocation || (androidVersion < 31 && resolved.scan)) {
+    addAndroidPermission(
+      permissions,
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+    );
+  }
+
+  return Array.from(permissions);
+}
+
+function createPermissionStatus(
+  permissions: AndroidPermission[],
+  missing: AndroidPermission[]
+): BlePermissionStatus {
+  return {
+    platform: Platform.OS,
+    granted: missing.length === 0,
+    permissions,
+    missing,
+  };
+}
+
+function createBluetoothPermissionStatus(state: BLEState): BlePermissionStatus {
+  const granted = state === BLEState.PoweredOn || state === BLEState.PoweredOff;
+  return {
+    platform: Platform.OS,
+    granted,
+    permissions: [],
+    missing: granted ? [] : ['bluetooth'],
+  };
+}
+
+function isResolvedBluetoothPermissionState(state: BLEState): boolean {
+  return state !== BLEState.Unknown && state !== BLEState.Resetting;
 }
 
 export class BleNitroManager {
@@ -182,6 +349,11 @@ export class BleNitroManager {
   private _restoredStateCallback: RestoreStateCallback | null;
   private _restoredState: BLEDevice[] | null = null;
   private _restoreStateIdentifier: string | null = null;
+  private _gattServerSessionId = 0;
+  private _pendingGattServerStart: {
+    sessionId: number;
+    reject: (error: Error) => void;
+  } | null = null;
 
   private Instance: NativeBleNitro;
 
@@ -427,15 +599,16 @@ export class BleNitroManager {
   }
 
   /**
-   * Request a new MTU size
+   * Request a new MTU size.
    * @param deviceId ID of the device
-   * @param mtu New MTU size, min is 23, max is 517
-   * @returns On Android: new MTU size; on iOS: current MTU size as it is handled by iOS itself; on error: -1
+   * @param mtu Requested MTU size, min is 23, max is 517
+   * @returns On Android, the requested MTU when the request was initiated or 0
+   *   when it was not. On iOS, CoreBluetooth's current maximum write length or
+   *   -1 when the device is not connected.
    */
   public requestMTU(deviceId: string, mtu: number): number {
-    mtu = parseInt(mtu.toString(), 10);
-    const deviceMtu = this.Instance.requestMTU(deviceId, mtu);
-    return deviceMtu;
+    const requestedMtu = Number.parseInt(String(mtu), 10);
+    return this.Instance.requestMTU(deviceId, requestedMtu);
   }
 
   /**
@@ -781,6 +954,247 @@ export class BleNitroManager {
       BleNitroManager.normalizeGattUUID(serviceId),
       BleNitroManager.normalizeGattUUID(characteristicId)
     );
+  }
+
+  private cancelPendingGattServerStart(message: string): void {
+    const pendingStart = this._pendingGattServerStart;
+    this._pendingGattServerStart = null;
+    pendingStart?.reject(new Error(message));
+  }
+
+  /**
+   * Start the local GATT server and begin advertising with the configured
+   * advertising payload. Services are not advertised unless their UUIDs are
+   * included in advertising.serviceUUIDs.
+   * Characteristic reads are answered from the latest value set for that
+   * characteristic. Writes, reads, connections, and subscriptions are routed
+   * to the corresponding callbacks in the provided options.
+   */
+  public startGattServer(options: GattServerOptions): Promise<void> {
+    let nativeOptions: ReturnType<typeof createNativeGattServerOptions>;
+    try {
+      nativeOptions = createNativeGattServerOptions(
+        options,
+        BleNitroManager.normalizeGattUUID
+      );
+    } catch (error) {
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+    }
+    this.cancelPendingGattServerStart(
+      'GATT server start was superseded by a new start request'
+    );
+    const sessionId = ++this._gattServerSessionId;
+    return new Promise((resolve, reject) => {
+      this._pendingGattServerStart = { sessionId, reject };
+      try {
+        this.Instance.startGattServer(
+          nativeOptions,
+          (event: NativeGattServerEvent) => {
+            if (sessionId !== this._gattServerSessionId) {
+              return;
+            }
+            dispatchGattServerEvent(
+              options,
+              convertNativeGattServerEvent(
+                event,
+                BleNitroManager.normalizeGattUUID
+              ),
+              BleNitroManager.normalizeGattUUID
+            );
+          },
+          (success: boolean, error: string) => {
+            if (sessionId !== this._gattServerSessionId) {
+              return;
+            }
+            if (this._pendingGattServerStart?.sessionId === sessionId) {
+              this._pendingGattServerStart = null;
+            }
+            if (success) {
+              resolve();
+            } else {
+              reject(new Error(error || 'Failed to start GATT server'));
+            }
+          }
+        );
+      } catch (error) {
+        if (this._pendingGattServerStart?.sessionId === sessionId) {
+          this._pendingGattServerStart = null;
+        }
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+  }
+
+  /**
+   * Stop advertising, remove local GATT services, and disconnect server state.
+   */
+  public stopGattServer(): Promise<void> {
+    this.cancelPendingGattServerStart('GATT server start was stopped');
+    const sessionId = this._gattServerSessionId;
+    return new Promise((resolve, reject) => {
+      this.Instance.stopGattServer((success: boolean, error: string) => {
+        if (success) {
+          if (sessionId === this._gattServerSessionId) {
+            // Native stop emits advertisingStopped synchronously. Ignore any
+            // trailing callbacks only after that lifecycle event is delivered.
+            this._gattServerSessionId += 1;
+          }
+          resolve();
+        } else {
+          reject(new Error(error || 'Failed to stop GATT server'));
+        }
+      });
+    });
+  }
+
+  public isGattServerRunning(): boolean {
+    return this.Instance.isGattServerRunning();
+  }
+
+  public isGattServerAdvertising(): boolean {
+    return this.Instance.isGattServerAdvertising();
+  }
+
+  /**
+   * Return connected centrals on Android and centrals observed through a read,
+   * write, or subscription request on iOS. CoreBluetooth does not expose a
+   * complete peripheral-mode connection list.
+   */
+  public getGattServerConnectedDevices(): string[] {
+    return this.Instance.getGattServerConnectedDevices();
+  }
+
+  public getGattServerDeviceMTU(deviceId: string): number {
+    return this.Instance.getGattServerDeviceMTU(deviceId);
+  }
+
+  public setGattServerCharacteristicValue(
+    serviceId: string,
+    characteristicId: string,
+    data: ByteArray
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.Instance.setGattServerCharacteristicValue(
+        BleNitroManager.normalizeGattUUID(serviceId),
+        BleNitroManager.normalizeGattUUID(characteristicId),
+        byteArrayToArrayBuffer(data),
+        (success: boolean, error: string) => {
+          if (success) {
+            resolve();
+          } else {
+            reject(new Error(error || 'Failed to set GATT characteristic value'));
+          }
+        }
+      );
+    });
+  }
+
+  public notifyGattServerCharacteristicChanged(
+    serviceId: string,
+    characteristicId: string,
+    data: ByteArray,
+    options: GattServerNotificationOptions = {}
+  ): Promise<GattServerNotificationResult> {
+    return new Promise((resolve, reject) => {
+      this.Instance.notifyGattServerCharacteristicChanged(
+        options.deviceId ?? '',
+        BleNitroManager.normalizeGattUUID(serviceId),
+        BleNitroManager.normalizeGattUUID(characteristicId),
+        byteArrayToArrayBuffer(data),
+        (success: boolean, queuedDeviceIds: string[], error: string) => {
+          if (success) {
+            resolve({ queuedDeviceIds });
+          } else {
+            reject(new Error(error || 'Failed to notify GATT characteristic change'));
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Disconnect a connected central from the local server. Android only;
+   * CoreBluetooth does not expose an equivalent peripheral-mode operation.
+   */
+  public disconnectGattServerDevice(deviceId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.Instance.disconnectGattServerDevice(
+        deviceId,
+        (success: boolean, error: string) => {
+          if (success) {
+            resolve();
+          } else {
+            reject(new Error(error || 'Failed to disconnect GATT server device'));
+          }
+        }
+      );
+    });
+  }
+
+  public async checkPermissions(
+    options: BlePermissionOptions = {}
+  ): Promise<BlePermissionStatus> {
+    if (Platform.OS !== 'android') {
+      return createBluetoothPermissionStatus(this.state());
+    }
+
+    const permissions = getRequiredAndroidPermissions(options);
+    const checks = await Promise.all(
+      permissions.map(async (permission) => ({
+        permission,
+        granted: await PermissionsAndroid.check(permission),
+      }))
+    );
+    const missing = checks
+      .filter((result) => !result.granted)
+      .map((result) => result.permission);
+
+    return createPermissionStatus(permissions, missing);
+  }
+
+  public async requestPermissions(
+    options: BlePermissionOptions = {}
+  ): Promise<BlePermissionStatus> {
+    if (Platform.OS !== 'android') {
+      if (Platform.OS === 'ios') {
+        this.iosLazyInit();
+        const state = await this.waitForResolvedBluetoothPermissionState();
+        return createBluetoothPermissionStatus(state);
+      }
+      return this.checkPermissions(options);
+    }
+
+    const current = await this.checkPermissions(options);
+    if (current.granted) {
+      return current;
+    }
+
+    const permissions = getRequiredAndroidPermissions(options);
+    const results = await PermissionsAndroid.requestMultiple(permissions);
+    const missing = permissions.filter(
+      (permission) => results[permission] !== PermissionsAndroid.RESULTS.GRANTED
+    );
+
+    return createPermissionStatus(permissions, missing);
+  }
+
+  private waitForResolvedBluetoothPermissionState(): Promise<BLEState> {
+    return new Promise((resolve, reject) => {
+      const readState = () => {
+        try {
+          const state = this.state();
+          if (isResolvedBluetoothPermissionState(state)) {
+            resolve(state);
+            return;
+          }
+          setTimeout(readState, 50);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      readState();
+    });
   }
 
   /**

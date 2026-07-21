@@ -21,6 +21,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     private var isCurrentlyScanning = false
     private var currentScanFilter: ScanFilter?
     private var centralManagerDelegate: BleCentralManagerDelegate!
+    private var gattServer: BleNitroGattServer?
     private let lazyInitEnabled: Bool
     private var isCentralManagerInitialized = false
     
@@ -287,9 +288,9 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     
     public func requestMTU(deviceId: String, mtu: Double) throws -> Double {
         guard let peripheral = connectedPeripherals[deviceId] else {
-            return Double(-1)
+            return -1.0
         }
-        
+
         return Double(peripheral.maximumWriteValueLength(for: .withoutResponse))
     }
 
@@ -534,7 +535,134 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         return characteristic.isNotifying
     }
 
+    public func startGattServer(
+        options: GattServerOptions,
+        eventCallback: @escaping (GattServerEvent) -> Void,
+        callback: @escaping (Bool, String) -> Void
+    ) throws {
+        // Nitro's generated options contain ArrayBuffers backed by the caller.
+        // Copy them before crossing onto the main queue or waiting for the
+        // peripheral manager to finish initializing.
+        let configuration = BleNitroGattServerConfiguration(options: options)
+        performOnGattServerQueue {
+            self.gattServer?.stop()
+            let server = BleNitroGattServer(eventCallback: eventCallback)
+            self.gattServer = server
+            server.start(options: configuration) { [weak self] success, error in
+                if !success {
+                    server.stop(emitEvent: false)
+                    if self?.gattServer === server {
+                        self?.gattServer = nil
+                    }
+                }
+                callback(success, error)
+            }
+        }
+    }
+
+    public func stopGattServer(callback: @escaping (Bool, String) -> Void) throws {
+        performOnGattServerQueue {
+            self.gattServer?.stop()
+            self.gattServer = nil
+            callback(true, "")
+        }
+    }
+
+    public func isGattServerRunning() throws -> Bool {
+        return readGattServerState { gattServer?.isRunning() ?? false }
+    }
+
+    public func isGattServerAdvertising() throws -> Bool {
+        return readGattServerState { gattServer?.isAdvertising() ?? false }
+    }
+
+    public func getGattServerConnectedDevices() throws -> [String] {
+        return readGattServerState { gattServer?.getConnectedDevices() ?? [] }
+    }
+
+    public func getGattServerDeviceMTU(deviceId: String) throws -> Double {
+        return readGattServerState {
+            gattServer?.getDeviceMtu(deviceId: deviceId) ?? 0.0
+        }
+    }
+
+    public func setGattServerCharacteristicValue(
+        serviceId: String,
+        characteristicId: String,
+        data: ArrayBuffer,
+        callback: @escaping (Bool, String) -> Void
+    ) throws {
+        let value = data.toData(copyIfNeeded: true)
+        performOnGattServerQueue {
+            guard let gattServer = self.gattServer else {
+                callback(false, "GATT server is not running")
+                return
+            }
+
+            let success = gattServer.setCharacteristicValue(
+                serviceId: serviceId,
+                characteristicId: characteristicId,
+                value: value
+            )
+            callback(success, success ? "" : "Characteristic not found")
+        }
+    }
+
+    public func notifyGattServerCharacteristicChanged(
+        deviceId: String,
+        serviceId: String,
+        characteristicId: String,
+        data: ArrayBuffer,
+        callback: @escaping (Bool, [String], String) -> Void
+    ) throws {
+        let value = data.toData(copyIfNeeded: true)
+        performOnGattServerQueue {
+            guard let gattServer = self.gattServer else {
+                callback(false, [], "GATT server is not running")
+                return
+            }
+
+            gattServer.notifyCharacteristicChanged(
+                deviceId: deviceId,
+                serviceId: serviceId,
+                characteristicId: characteristicId,
+                value: value,
+                callback: callback
+            )
+        }
+    }
+
+    public func disconnectGattServerDevice(
+        deviceId: String,
+        callback: @escaping (Bool, String) -> Void
+    ) throws {
+        performOnGattServerQueue {
+            guard let gattServer = self.gattServer else {
+                callback(false, "GATT server is not running")
+                return
+            }
+
+            let result = gattServer.disconnectDevice(deviceId: deviceId)
+            callback(result.0, result.1)
+        }
+    }
+
     // MARK: - Helper Methods
+    private func performOnGattServerQueue(_ action: @escaping () -> Void) {
+        if Thread.isMainThread {
+            action()
+        } else {
+            DispatchQueue.main.async(execute: action)
+        }
+    }
+
+    private func readGattServerState<T>(_ read: () -> T) -> T {
+        if Thread.isMainThread {
+            return read()
+        }
+        return DispatchQueue.main.sync(execute: read)
+    }
+
     private func findPeripheral(by deviceId: String) -> CBPeripheral? {
         ensureCentralManager()
         // Check connected peripherals first

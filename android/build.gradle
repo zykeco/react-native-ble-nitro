@@ -144,3 +144,14 @@ dependencies {
 
   testImplementation "junit:junit:4.13.2"
 }
+
+if (isNewArchitectureEnabled()) {
+  // Restrict React Native codegen to this library's sources. Its default for a
+  // library is the repository root, which also contains the example app and
+  // can otherwise compile the example's generated native sources here.
+  react {
+    jsRootDir = file("../src/")
+    libraryName = "BleNitro"
+    codegenJavaPackageName = "com.margelo.nitro.co.zyke.ble"
+  }
+}
