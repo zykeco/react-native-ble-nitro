@@ -125,6 +125,7 @@ xcuserdata/
 # Android
 *.iml
 .gradle
+.cxx/
 local.properties
 .navigation
 captures/
