@@ -738,7 +738,16 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             val context = appContext
             if (context != null) {
                 val autoConnect = autoConnectAndroid ?: false
-                val gatt = device.connectGatt(context, autoConnect, gattCallback)
+                // Always connect over LE. The three-argument overload uses
+                // TRANSPORT_AUTO, which lets the stack fall back to BR/EDR for a
+                // BLE-only peripheral — the connection then never completes and no
+                // BluetoothGattCallback is ever invoked.
+                val gatt = device.connectGatt(
+                    context,
+                    autoConnect,
+                    gattCallback,
+                    BluetoothDevice.TRANSPORT_LE
+                )
                 connectedDevices[deviceId] = gatt
             } else {
                 callback(false, deviceId, "Context not available")
