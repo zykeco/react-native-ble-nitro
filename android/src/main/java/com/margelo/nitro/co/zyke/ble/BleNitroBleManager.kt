@@ -760,8 +760,21 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                     pendingConnect = callbacks?.connectCallback
                     callbacks?.copy(connectCallback = null)
                 }
+                val wasConnecting = pendingConnect != null
                 pendingConnect?.invoke(false, deviceId, "Connection cancelled")
                 gatt.disconnect()
+
+                // A connect that never reached STATE_CONNECTED will not reach
+                // STATE_DISCONNECTED either, so the close() in the GATT callback never
+                // runs and the client is leaked. Android permits a limited number of
+                // GATT clients, and exhausting them makes every later connectGatt()
+                // fail — usually as status 133 — until the Bluetooth stack restarts.
+                if (wasConnecting) {
+                    gatt.close()
+                    connectedDevices.remove(deviceId)
+                    deviceCallbacks.remove(deviceId)
+                }
+
                 callback(true, "")
             } else {
                 callback(false, "Device not connected")
