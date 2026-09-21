@@ -412,6 +412,42 @@ const fullUUIDs = BleNitro.normalizeGattUUIDs(['180d', '180f']);
 // Returns: ['0000180d-0000-1000-8000-00805f9b34fb', '0000180f-0000-1000-8000-00805f9b34fb']
 ```
 
+### Error Handling
+
+Every failure arrives as an error object — either as a rejected promise from an async method, or as the error argument of a failure callback (`startScan`'s `onError`, `connect`'s disconnect callback). It is one of two classes, and which one you get tells you **how far the operation got**:
+
+| Class | Raised when | `domain` | `code` |
+|---|---|---|---|
+| `BleNitroError` | The library rejected the call itself — nothing was ever sent to the platform (device not connected, unknown service or characteristic, Bluetooth unavailable, …) | always `BLE_NITRO_LIBRARY_DOMAIN` | a `BleNitroLibraryErrorCode`, a typed enum exported from the package |
+| `BleError` | The platform or the peripheral rejected it | the raw platform namespace: `CBErrorDomain` / `CBATTErrorDomain` on iOS, `android.bluetoothGatt.connection` / `android.bluetoothGatt.operation` / `android.bluetoothLe.scan` on Android | the raw `NSError` code, GATT status, or scan error code |
+
+Both also carry a `message` — human-readable text for logging only. Never parse it to drive logic; branch on the class and `code` instead.
+
+
+#### BleNitroError
+
+The enum member alone tells you what happened, so you can react to each one differently, eg.:
+
+- `DEVICE_NOT_CONNECTED` — the link is gone; reconnect and retry.
+- `BLUETOOTH_UNAVAILABLE` — nothing to reconnect to; ask the user to turn Bluetooth on.
+- `SERVICE_NOT_FOUND` / `CHARACTERISTIC_NOT_FOUND` — wrong UUID or unexpected peripheral state; retrying will not help.
+
+#### BleError
+
+Always react on `domain` and `code` **together** — the same number means different things in different namespaces, so the code alone is ambiguous, eg.:
+
+- `android.bluetoothGatt.connection` + `8` — `GATT_CONN_TIMEOUT`; the link is gone, reconnect.
+- `android.bluetoothGatt.operation` + `8` — `GATT_INSUF_AUTHORIZATION`; the peripheral wants a bonded connection, start pairing.
+- `CBErrorDomain` + `6` — the iOS equivalent of a connection timeout.
+- `CBATTErrorDomain` + `5` — the iOS equivalent of insufficient authentication.
+
+This library deliberately does not interpret or re-classify platform codes; it only guarantees the raw `domain`/`code`/`message` triple reaches you intact. The platform documentation is the source of truth for what a pair means:
+
+- [`CBError`](https://developer.apple.com/documentation/corebluetooth/cberror-swift.struct) — iOS `CBErrorDomain` codes
+- [`CBATTError`](https://developer.apple.com/documentation/corebluetooth/cbatterror-swift.struct) — iOS `CBATTErrorDomain` codes
+- [`BluetoothGatt`](https://developer.android.com/reference/android/bluetooth/BluetoothGatt) — Android GATT status constants
+- [`ScanCallback`](https://developer.android.com/reference/android/bluetooth/le/ScanCallback) — Android `SCAN_FAILED_*` error codes
+
 ### iOS Restore State
 
 There is built-in support for iOS state restoration. You need to provide a unique identifier and a callback to handle restored peripherals. If no unique identifier is provided, state restoration is disabled.

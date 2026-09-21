@@ -6,7 +6,9 @@ import {
   ScanCallback as NativeScanCallback,
   AndroidScanMode as NativeAndroidScanMode,
   AndroidConnectionPriority as NativeAndroidConnectionPriority,
+  BLENativeError,
 } from './specs/NativeBleNitro';
+import { BleErrorBase, toBleError } from './errors';
 
 export class BleTimeoutError extends Error {
   constructor(operation: string, ms: number) {
@@ -25,6 +27,14 @@ function withTimeout<T>(
     timer = setTimeout(() => reject(new BleTimeoutError(operation, ms)), ms);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Fallback for the case where a native failure callback reports
+ * `success = false` without an error object.
+ */
+function unknownError(operation: string): Error {
+  return new Error(`Unknown error: ${operation}`);
 }
 
 export type ByteArray = number[];
@@ -70,14 +80,14 @@ export type RestoreStateCallback = (connectedPeripherals: BLEDevice[]) => void;
 export type ConnectionCallback = (
   success: boolean,
   deviceId: string,
-  error: string
+  error?: BleErrorBase
 ) => void;
 export type DisconnectEventCallback = (
   deviceId: string,
   interrupted: boolean,
-  error: string
+  error?: BleErrorBase
 ) => void;
-export type OperationCallback = (success: boolean, error: string) => void;
+export type OperationCallback = (success: boolean, error?: BleErrorBase) => void;
 export type CharacteristicUpdateCallback = (
   characteristicId: string,
   data: ByteArray
@@ -258,7 +268,7 @@ export class BleNitroManager {
   public startScan(
     filter: ScanFilter = {},
     callback: ScanCallback,
-    onError?: (error: string) => void,
+    onError?: (error: BleErrorBase) => void,
   ): void {
     if (this._isScanning) {
       return;
@@ -273,10 +283,10 @@ export class BleNitroManager {
     };
 
     // Create callback wrapper
-    const scanCallback: NativeScanCallback = (device: NativeBLEDevice | null, error: string | null) => {
+    const scanCallback: NativeScanCallback = (device: NativeBLEDevice | null, error?: BLENativeError) => {
       if (error && !device) {
         this._isScanning = false;
-        onError?.(error);
+        onError?.(toBleError(error));
         return;
       }
       device = device!; // eslint-disable-line @typescript-eslint/no-non-null-assertion
@@ -343,15 +353,15 @@ export class BleNitroManager {
 
       this.Instance.connect(
         deviceId,
-        (success: boolean, connectedDeviceId: string, error: string) => {
+        (success: boolean, connectedDeviceId: string, error?: BLENativeError) => {
           if (success) {
             resolve(connectedDeviceId);
           } else {
-            reject(new Error(error));
+            reject(error ? toBleError(error) : unknownError('connect'));
           }
         },
-        onDisconnect ? (deviceId: string, interrupted: boolean, error: string) => {
-          onDisconnect(deviceId, interrupted, error);
+        onDisconnect ? (deviceId: string, interrupted: boolean, error?: BLENativeError) => {
+          onDisconnect(deviceId, interrupted, error ? toBleError(error) : undefined);
         } : undefined,
         autoConnectAndroid ?? false,
       );
@@ -406,11 +416,11 @@ export class BleNitroManager {
 
       this.Instance.disconnect(
         deviceId,
-        (success: boolean, error: string) => {
+        (success: boolean, error?: BLENativeError) => {
           if (success) {
             resolve(deviceId);
           } else {
-            reject(new Error(error));
+            reject(error ? toBleError(error) : unknownError('disconnect'));
           }
         }
       );
@@ -471,11 +481,11 @@ export class BleNitroManager {
 
       this.Instance.readRSSI(
         deviceId,
-        (success: boolean, rssi: number, error: string) => {
+        (success: boolean, rssi: number, error?: BLENativeError) => {
           if (success) {
             resolve(rssi);
           } else {
-            reject(new Error(error));
+            reject(error ? toBleError(error) : unknownError('readRSSI'));
           }
         }
       );
@@ -497,11 +507,11 @@ export class BleNitroManager {
 
       this.Instance.discoverServices(
         deviceId,
-        (success: boolean, error: string) => {
+        (success: boolean, error?: BLENativeError) => {
           if (success) {
             resolve(true);
           } else {
-            reject(new Error(error));
+            reject(error ? toBleError(error) : unknownError('discoverServices'));
           }
         }
       );
@@ -586,11 +596,11 @@ export class BleNitroManager {
       }
       this.Instance.discoverServicesWithCharacteristics(
         deviceId,
-        (success: boolean, error: string) => {
+        (success: boolean, error?: BLENativeError) => {
           if (success) {
             resolve();
           } else {
-            reject(new Error(error));
+            reject(error ? toBleError(error) : unknownError('discoverServicesWithCharacteristics'));
           }
         }
       );
@@ -625,11 +635,11 @@ export class BleNitroManager {
         deviceId,
         BleNitroManager.normalizeGattUUID(serviceId),
         BleNitroManager.normalizeGattUUID(characteristicId),
-        (success: boolean, data: ArrayBuffer, error: string) => {
+        (success: boolean, data: ArrayBuffer, error?: BLENativeError) => {
           if (success) {
             resolve(arrayBufferToByteArray(data));
           } else {
-            reject(new Error(error));
+            reject(error ? toBleError(error) : unknownError('readCharacteristic'));
           }
         }
       );
@@ -665,13 +675,13 @@ export class BleNitroManager {
         BleNitroManager.normalizeGattUUID(characteristicId),
         byteArrayToArrayBuffer(data),
         withResponse,
-        (success: boolean, responseData: ArrayBuffer, error: string) => {
+        (success: boolean, responseData: ArrayBuffer, error?: BLENativeError) => {
           if (success) {
             // Convert ArrayBuffer response to ByteArray
             const responseByteArray = arrayBufferToByteArray(responseData);
             resolve(responseByteArray);
           } else {
-            reject(new Error(error));
+            reject(error ? toBleError(error) : unknownError('writeCharacteristic'));
           }
         }
       );
@@ -706,9 +716,9 @@ export class BleNitroManager {
         (charId: string, data: ArrayBuffer) => {
           callback(charId, arrayBufferToByteArray(data));
         },
-        (success: boolean, error: string) => {
+        (success: boolean, error?: BLENativeError) => {
           if (!success) {
-            reject(new Error(error || 'Failed to subscribe to characteristic'));
+            reject(error ? toBleError(error) : unknownError('subscribeToCharacteristic'));
             return;
           }
 
@@ -751,11 +761,11 @@ export class BleNitroManager {
         deviceId,
         BleNitroManager.normalizeGattUUID(serviceId),
         BleNitroManager.normalizeGattUUID(characteristicId),
-        (success: boolean, error: string) => {
+        (success: boolean, error?: BLENativeError) => {
           if (success) {
             resolve();
           } else {
-            reject(new Error(error));
+            reject(error ? toBleError(error) : unknownError('unsubscribeFromCharacteristic'));
           }
         }
       );
@@ -798,11 +808,11 @@ export class BleNitroManager {
   public requestBluetoothEnable(): Promise<boolean> {
     return new Promise((resolve, reject) => {
       this.Instance.requestBluetoothEnable(
-        (success: boolean, error: string) => {
+        (success: boolean, error?: BLENativeError) => {
           if (success) {
             resolve(true);
           } else {
-            reject(new Error(error));
+            reject(error ? toBleError(error) : unknownError('requestBluetoothEnable'));
           }
         }
       );

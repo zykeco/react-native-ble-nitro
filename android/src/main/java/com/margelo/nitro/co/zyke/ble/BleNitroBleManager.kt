@@ -28,6 +28,31 @@ import com.margelo.nitro.core.*
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
+/** Domain strings for BLENativeError.domain. */
+object BleErrorDomain {
+    /** Raw status from BluetoothGattCallback.onConnectionStateChange. */
+    const val GATT_CONNECTION = "android.bluetoothGatt.connection"
+    /** Raw status from an ATT-operation callback (read/write/discover/RSSI/descriptor). */
+    const val GATT_OPERATION = "android.bluetoothGatt.operation"
+    /** Raw errorCode from ScanCallback.onScanFailed. */
+    const val SCAN = "android.bluetoothLe.scan"
+    /** Library guard-clause failure with no platform code; see BleNitroLibraryErrorCode. */
+    const val LIBRARY = "bleNitro.library"
+}
+
+/// Builds a BLENativeError from a library error code enum.
+private fun libraryError(code: BleNitroLibraryErrorCode, message: String) =
+    BLENativeError(BleErrorDomain.LIBRARY, code.value.toDouble(), message, code)
+
+private fun gattConnectionError(status: Int, message: String) =
+    BLENativeError(BleErrorDomain.GATT_CONNECTION, status.toDouble(), message, null)
+
+private fun gattOperationError(status: Int, message: String) =
+    BLENativeError(BleErrorDomain.GATT_OPERATION, status.toDouble(), message, null)
+
+private fun scanError(errorCode: Int, message: String) =
+    BLENativeError(BleErrorDomain.SCAN, errorCode.toDouble(), message, null)
+
 /**
  * Android implementation of the BLE Nitro Module
  * This class provides the actual BLE functionality for Android devices
@@ -46,7 +71,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     private var bleScanner: BluetoothLeScanner? = null
     private var isCurrentlyScanning = false
     private var scanCallback: ScanCallback? = null
-    private var deviceFoundCallback: ((device: Variant_NullType_BLEDevice?, error: Variant_NullType_String?) -> Unit)? = null
+    private var deviceFoundCallback: ((device: Variant_NullType_BLEDevice?, error: BLENativeError?) -> Unit)? = null
     private val discoveredDevicesInCurrentScan = mutableSetOf<String>()
     
     // Device connections
@@ -54,13 +79,13 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     private val deviceCallbacks = ConcurrentHashMap<String, DeviceCallbacks>()
     
     // Read callback storage for proper response handling (key: deviceId:characteristicId)
-    private val readCallbacks = ConcurrentHashMap<String, (Boolean, ArrayBuffer, String) -> Unit>()
+    private val readCallbacks = ConcurrentHashMap<String, (Boolean, ArrayBuffer, BLENativeError?) -> Unit>()
 
     // Write callback storage for proper response handling (key: deviceId:characteristicId)
-    private val writeCallbacks = ConcurrentHashMap<String, (Boolean, ArrayBuffer, String) -> Unit>()
+    private val writeCallbacks = ConcurrentHashMap<String, (Boolean, ArrayBuffer, BLENativeError?) -> Unit>()
 
     // RSSI callback storage (key: deviceId)
-    private val rssiCallbacks = ConcurrentHashMap<String, (Boolean, Double, String) -> Unit>()
+    private val rssiCallbacks = ConcurrentHashMap<String, (Boolean, Double, BLENativeError?) -> Unit>()
 
     // GATT operation queue for sequential descriptor writes (Android BLE requirement)
     private val gattOperationQueue = java.util.concurrent.LinkedBlockingQueue<GattOperation>()
@@ -68,7 +93,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     private val gattOperationLock = Any()
 
     // Descriptor write callback storage (key: deviceId:descriptorUuid)
-    private val descriptorWriteCallbacks = ConcurrentHashMap<String, (Boolean, String) -> Unit>()
+    private val descriptorWriteCallbacks = ConcurrentHashMap<String, (Boolean, BLENativeError?) -> Unit>()
 
     // Android permits only one outstanding ATT operation per GATT connection.
     // Defer service discovery while an MTU request is in flight so the two
@@ -83,9 +108,9 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     
     // Helper class to store device callbacks
     private data class DeviceCallbacks(
-        var connectCallback: ((success: Boolean, deviceId: String, error: String) -> Unit)? = null,
-        var disconnectCallback: ((deviceId: String, interrupted: Boolean, error: String) -> Unit)? = null,
-        var serviceDiscoveryCallback: ((success: Boolean, error: String) -> Unit)? = null,
+        var connectCallback: ((success: Boolean, deviceId: String, error: BLENativeError?) -> Unit)? = null,
+        var disconnectCallback: ((deviceId: String, interrupted: Boolean, error: BLENativeError?) -> Unit)? = null,
+        var serviceDiscoveryCallback: ((success: Boolean, error: BLENativeError?) -> Unit)? = null,
         // Key: "serviceId:characteristicId" for correct scoping when the same
         // characteristic UUID exists under multiple services.
         var characteristicSubscriptions: MutableMap<String, (characteristicId: String, data: ArrayBuffer) -> Unit> = ConcurrentHashMap()
@@ -98,7 +123,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             val descriptor: BluetoothGattDescriptor,
             val value: ByteArray,
             val deviceId: String,
-            val callback: (Boolean, String) -> Unit
+            val callback: (Boolean, BLENativeError?) -> Unit
         ) : GattOperation()
     }
     
@@ -298,12 +323,12 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> {
                         clearMtuGateState(deviceId)
-                        var connectCb: ((Boolean, String, String) -> Unit)? = null
+                        var connectCb: ((Boolean, String, BLENativeError?) -> Unit)? = null
                         deviceCallbacks.compute(deviceId) { _, callbacks ->
                             connectCb = callbacks?.connectCallback
                             callbacks?.copy(connectCallback = null)
                         }
-                        connectCb?.invoke(true, deviceId, "")
+                        connectCb?.invoke(true, deviceId, null)
                     }
                     BluetoothProfile.STATE_DISCONNECTED -> {
                         // Clean up
@@ -314,8 +339,8 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         // If a discoverServices() call was still in flight (or deferred
                         // behind an MTU request), it will never receive onServicesDiscovered
                         // now. Fail it explicitly so the JS promise does not hang forever.
-                        cb?.serviceDiscoveryCallback?.invoke(false, "Disconnected before service discovery completed")
-                        cb?.disconnectCallback?.invoke(deviceId, interrupted, if (interrupted) "Connection lost" else "")
+                        cb?.serviceDiscoveryCallback?.invoke(false, libraryError(BleNitroLibraryErrorCode.DISCONNECTED_DURING_OPERATION, "Disconnected before service discovery completed"))
+                        cb?.disconnectCallback?.invoke(deviceId, interrupted, if (interrupted) gattConnectionError(status, "Connection lost") else null)
                         gatt.close()
                     }
                 }
@@ -332,9 +357,9 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 val serviceDiscoveryCallback = callbacks?.serviceDiscoveryCallback
                 
                 if (status == BluetoothGatt.GATT_SUCCESS) {
-                    serviceDiscoveryCallback?.invoke(true, "")
+                    serviceDiscoveryCallback?.invoke(true, null)
                 } else {
-                    serviceDiscoveryCallback?.invoke(false, "Service discovery failed with status: $status")
+                    serviceDiscoveryCallback?.invoke(false, gattOperationError(status, "Service discovery failed with status: $status"))
                 }
                 
                 // Clear the service discovery callback as it's one-time use
@@ -355,9 +380,9 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         directBuffer.put(value)
                         directBuffer.flip()
                         val data = ArrayBuffer.wrap(directBuffer)
-                        callback(true, data, "")
+                        callback(true, data, null)
                     } else {
-                        callback(false, ArrayBuffer.allocate(0), "Read failed with status: $status")
+                        callback(false, ArrayBuffer.allocate(0), gattOperationError(status, "Read failed with status: $status"))
                     }
                 }
             }
@@ -376,9 +401,9 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         directBuffer.put(responseData)
                         directBuffer.flip()
                         val arrayBuffer = ArrayBuffer.wrap(directBuffer)
-                        callback(true, arrayBuffer, "")
+                        callback(true, arrayBuffer, null)
                     } else {
-                        callback(false, ArrayBuffer.allocate(0), "Write failed with status: $status")
+                        callback(false, ArrayBuffer.allocate(0), gattOperationError(status, "Write failed with status: $status"))
                     }
                 }
             }
@@ -388,9 +413,9 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 
                 rssiCallbacks.remove(deviceId)?.let { callback ->
                     if (status == BluetoothGatt.GATT_SUCCESS) {
-                        callback(true, rssi.toDouble(), "")
+                        callback(true, rssi.toDouble(), null)
                     } else {
-                        callback(false, 0.0, "RSSI read failed with status: $status")
+                        callback(false, 0.0, gattOperationError(status, "RSSI read failed with status: $status"))
                     }
                 }
             }
@@ -426,9 +451,9 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 // Get and invoke the stored callback
                 descriptorWriteCallbacks.remove(callbackKey)?.let { callback ->
                     if (status == BluetoothGatt.GATT_SUCCESS) {
-                        callback(true, "")
+                        callback(true, null)
                     } else {
-                        callback(false, "Descriptor write failed with status: $status")
+                        callback(false, gattOperationError(status, "Descriptor write failed with status: $status"))
                     }
                 }
 
@@ -529,7 +554,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         synchronized(gattOperationLock) {
                             isGattOperationInProgress = false
                         }
-                        operation.callback(false, "Failed to initiate descriptor write")
+                        operation.callback(false, libraryError(BleNitroLibraryErrorCode.OPERATION_INITIATION_FAILED, "Failed to initiate descriptor write"))
                         // Try next operation
                         processNextGattOperation()
                     }
@@ -548,7 +573,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     }
 
     // Scanning operations
-    override fun startScan(filter: com.margelo.nitro.co.zyke.ble.ScanFilter, callback: (device: Variant_NullType_BLEDevice?, error: Variant_NullType_String?) -> Unit) {
+    override fun startScan(filter: com.margelo.nitro.co.zyke.ble.ScanFilter, callback: (device: Variant_NullType_BLEDevice?, error: BLENativeError?) -> Unit) {
         try {
             initializeBluetoothIfNeeded()
             val adapter = bluetoothAdapter ?: return
@@ -620,7 +645,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         ScanCallback.SCAN_FAILED_SCANNING_TOO_FREQUENTLY -> "Scanning too frequently"
                         else -> "Scan failed with error code: $errorCode"
                     }
-                    callback(null, Variant_NullType_String.create(errorMessage))
+                    callback(null, scanError(errorCode, errorMessage))
                     stopScan()
                 }
             }
@@ -707,21 +732,21 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     // Connection management
     override fun connect(
         deviceId: String,
-        callback: (success: Boolean, deviceId: String, error: String) -> Unit,
-        disconnectCallback: ((deviceId: String, interrupted: Boolean, error: String) -> Unit)?,
+        callback: (success: Boolean, deviceId: String, error: BLENativeError?) -> Unit,
+        disconnectCallback: ((deviceId: String, interrupted: Boolean, error: BLENativeError?) -> Unit)?,
         autoConnectAndroid: Boolean?
     ) {
         try {
             initializeBluetoothIfNeeded()
             val adapter = bluetoothAdapter
             if (adapter == null) {
-                callback(false, deviceId, "Bluetooth not available")
+                callback(false, deviceId, libraryError(BleNitroLibraryErrorCode.BLUETOOTH_UNAVAILABLE, "Bluetooth not available"))
                 return
             }
             
             val device = adapter.getRemoteDevice(deviceId)
             if (device == null) {
-                callback(false, deviceId, "Device not found")
+                callback(false, deviceId, libraryError(BleNitroLibraryErrorCode.DEVICE_NOT_FOUND, "Device not found"))
                 return
             }
             
@@ -741,33 +766,33 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 val gatt = device.connectGatt(context, autoConnect, gattCallback)
                 connectedDevices[deviceId] = gatt
             } else {
-                callback(false, deviceId, "Context not available")
+                callback(false, deviceId, libraryError(BleNitroLibraryErrorCode.CONTEXT_UNAVAILABLE, "Context not available"))
             }
             
         } catch (e: SecurityException) {
-            callback(false, deviceId, "Permission denied")
+            callback(false, deviceId, libraryError(BleNitroLibraryErrorCode.PERMISSION_DENIED, "Permission denied"))
         } catch (e: Exception) {
-            callback(false, deviceId, "Connection error: ${e.message}")
+            callback(false, deviceId, libraryError(BleNitroLibraryErrorCode.NATIVE_EXCEPTION, "Connection error: ${e.message}"))
         }
     }
 
-    override fun disconnect(deviceId: String, callback: (success: Boolean, error: String) -> Unit) {
+    override fun disconnect(deviceId: String, callback: (success: Boolean, error: BLENativeError?) -> Unit) {
         try {
             val gatt = connectedDevices[deviceId]
             if (gatt != null) {
-                var pendingConnect: ((Boolean, String, String) -> Unit)? = null
+                var pendingConnect: ((Boolean, String, BLENativeError?) -> Unit)? = null
                 deviceCallbacks.compute(deviceId) { _, callbacks ->
                     pendingConnect = callbacks?.connectCallback
                     callbacks?.copy(connectCallback = null)
                 }
-                pendingConnect?.invoke(false, deviceId, "Connection cancelled")
+                pendingConnect?.invoke(false, deviceId, libraryError(BleNitroLibraryErrorCode.CONNECTION_CANCELLED, "Connection cancelled"))
                 gatt.disconnect()
-                callback(true, "")
+                callback(true, null)
             } else {
-                callback(false, "Device not connected")
+                callback(false, libraryError(BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED, "Device not connected"))
             }
         } catch (e: Exception) {
-            callback(false, "Disconnect error: ${e.message}")
+            callback(false, libraryError(BleNitroLibraryErrorCode.NATIVE_EXCEPTION, "Disconnect error: ${e.message}"))
         }
     }
 
@@ -804,11 +829,11 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         }
     }
 
-    override fun readRSSI(deviceId: String, callback: (success: Boolean, rssi: Double, error: String) -> Unit) {
+    override fun readRSSI(deviceId: String, callback: (success: Boolean, rssi: Double, error: BLENativeError?) -> Unit) {
         try {
             val gatt = connectedDevices[deviceId]
             if (gatt == null) {
-                callback(false, 0.0, "Device not connected")
+                callback(false, 0.0, libraryError(BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED, "Device not connected"))
                 return
             }
             
@@ -819,17 +844,17 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             val success = gatt.readRemoteRssi()
             if (!success) {
                 rssiCallbacks.remove(deviceId)
-                callback(false, 0.0, "Failed to initiate RSSI read")
+                callback(false, 0.0, libraryError(BleNitroLibraryErrorCode.OPERATION_INITIATION_FAILED, "Failed to initiate RSSI read"))
             }
             
         } catch (e: Exception) {
             rssiCallbacks.remove(deviceId)
-            callback(false, 0.0, "RSSI read error: ${e.message}")
+            callback(false, 0.0, libraryError(BleNitroLibraryErrorCode.NATIVE_EXCEPTION, "RSSI read error: ${e.message}"))
         }
     }
 
     // Service discovery
-    override fun discoverServices(deviceId: String, callback: (success: Boolean, error: String) -> Unit) {
+    override fun discoverServices(deviceId: String, callback: (success: Boolean, error: BLENativeError?) -> Unit) {
         try {
             val gatt = connectedDevices[deviceId]
             if (gatt != null) {
@@ -844,22 +869,22 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         if (!success) {
                             // Clear callback and report failure immediately
                             callbacks.serviceDiscoveryCallback = null
-                            callback(false, "Failed to start service discovery")
+                            callback(false, libraryError(BleNitroLibraryErrorCode.OPERATION_INITIATION_FAILED, "Failed to start service discovery"))
                         }
                         // If success, the callback will be invoked in onServicesDiscovered
                     }
                 } else {
-                    callback(false, "Device callback not found")
+                    callback(false, libraryError(BleNitroLibraryErrorCode.CALLBACK_NOT_FOUND, "Device callback not found"))
                 }
             } else {
-                callback(false, "Device not connected")
+                callback(false, libraryError(BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED, "Device not connected"))
             }
         } catch (e: Exception) {
-            callback(false, "Service discovery error: ${e.message}")
+            callback(false, libraryError(BleNitroLibraryErrorCode.NATIVE_EXCEPTION, "Service discovery error: ${e.message}"))
         }
     }
 
-    override fun discoverServicesWithCharacteristics(deviceId: String, callback: (success: Boolean, error: String) -> Unit) {
+    override fun discoverServicesWithCharacteristics(deviceId: String, callback: (success: Boolean, error: BLENativeError?) -> Unit) {
         // On Android, discoverServices() already discovers characteristics automatically.
         // Delegate directly to discoverServices.
         discoverServices(deviceId, callback)
@@ -893,24 +918,24 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         deviceId: String,
         serviceId: String,
         characteristicId: String,
-        callback: (success: Boolean, data: ArrayBuffer, error: String) -> Unit
+        callback: (success: Boolean, data: ArrayBuffer, error: BLENativeError?) -> Unit
     ) {
         try {
             val gatt = connectedDevices[deviceId]
             if (gatt == null) {
-                callback(false, ArrayBuffer.allocate(0), "Device not connected")
+                callback(false, ArrayBuffer.allocate(0), libraryError(BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED, "Device not connected"))
                 return
             }
 
             val service = gatt.getService(UUID.fromString(serviceId))
             if (service == null) {
-                callback(false, ArrayBuffer.allocate(0), "Service not found")
+                callback(false, ArrayBuffer.allocate(0), libraryError(BleNitroLibraryErrorCode.SERVICE_NOT_FOUND, "Service not found"))
                 return
             }
 
             val characteristic = service.getCharacteristic(UUID.fromString(characteristicId))
             if (characteristic == null) {
-                callback(false, ArrayBuffer.allocate(0), "Characteristic not found")
+                callback(false, ArrayBuffer.allocate(0), libraryError(BleNitroLibraryErrorCode.CHARACTERISTIC_NOT_FOUND, "Characteristic not found"))
                 return
             }
 
@@ -923,12 +948,12 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             if (!success) {
                 // Remove callback and report failure immediately
                 readCallbacks.remove(callbackKey)
-                callback(false, ArrayBuffer.allocate(0), "Failed to initiate read operation")
+                callback(false, ArrayBuffer.allocate(0), libraryError(BleNitroLibraryErrorCode.OPERATION_INITIATION_FAILED, "Failed to initiate read operation"))
             }
             // If success, wait for onCharacteristicRead callback
 
         } catch (e: Exception) {
-            callback(false, ArrayBuffer.allocate(0), "Read error: ${e.message}")
+            callback(false, ArrayBuffer.allocate(0), libraryError(BleNitroLibraryErrorCode.NATIVE_EXCEPTION, "Read error: ${e.message}"))
         }
     }
 
@@ -938,24 +963,24 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         characteristicId: String,
         data: ArrayBuffer,
         withResponse: Boolean,
-        callback: (success: Boolean, responseData: ArrayBuffer, error: String) -> Unit
+        callback: (success: Boolean, responseData: ArrayBuffer, error: BLENativeError?) -> Unit
     ) {
         try {
             val gatt = connectedDevices[deviceId]
             if (gatt == null) {
-                callback(false, ArrayBuffer.allocate(0), "Device not connected")
+                callback(false, ArrayBuffer.allocate(0), libraryError(BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED, "Device not connected"))
                 return
             }
             
             val service = gatt.getService(UUID.fromString(serviceId))
             if (service == null) {
-                callback(false, ArrayBuffer.allocate(0), "Service not found")
+                callback(false, ArrayBuffer.allocate(0), libraryError(BleNitroLibraryErrorCode.SERVICE_NOT_FOUND, "Service not found"))
                 return
             }
             
             val characteristic = service.getCharacteristic(UUID.fromString(characteristicId))
             if (characteristic == null) {
-                callback(false, ArrayBuffer.allocate(0), "Characteristic not found")
+                callback(false, ArrayBuffer.allocate(0), libraryError(BleNitroLibraryErrorCode.CHARACTERISTIC_NOT_FOUND, "Characteristic not found"))
                 return
             }
             
@@ -981,17 +1006,17 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             
             if (!withResponse) {
                 // For no response, call callback immediately
-                callback(success, ArrayBuffer.allocate(0), if (success) "" else "Write operation failed")
+                callback(success, ArrayBuffer.allocate(0), if (success) null else libraryError(BleNitroLibraryErrorCode.OPERATION_INITIATION_FAILED, "Write operation failed"))
             } else if (!success) {
                 // If write initiation failed, remove callback and notify
                 val callbackKey = "$deviceId:$characteristicId"
                 writeCallbacks.remove(callbackKey)
-                callback(false, ArrayBuffer.allocate(0), "Write operation failed to initiate")
+                callback(false, ArrayBuffer.allocate(0), libraryError(BleNitroLibraryErrorCode.OPERATION_INITIATION_FAILED, "Write operation failed to initiate"))
             }
             // If withResponse and success, wait for onCharacteristicWrite
             
         } catch (e: Exception) {
-            callback(false, ArrayBuffer.allocate(0), "Write error: ${e.message}")
+            callback(false, ArrayBuffer.allocate(0), libraryError(BleNitroLibraryErrorCode.NATIVE_EXCEPTION, "Write error: ${e.message}"))
         }
     }
 
@@ -1000,31 +1025,31 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         serviceId: String,
         characteristicId: String,
         updateCallback: (characteristicId: String, data: ArrayBuffer) -> Unit,
-        completionCallback: (success: Boolean, error: String) -> Unit
+        completionCallback: (success: Boolean, error: BLENativeError?) -> Unit
     ) {
         try {
             val gatt = connectedDevices[deviceId]
             if (gatt == null) {
-                completionCallback(false, "Device not connected")
+                completionCallback(false, libraryError(BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED, "Device not connected"))
                 return
             }
 
             val service = gatt.getService(UUID.fromString(serviceId))
             if (service == null) {
-                completionCallback(false, "Service not found")
+                completionCallback(false, libraryError(BleNitroLibraryErrorCode.SERVICE_NOT_FOUND, "Service not found"))
                 return
             }
 
             val characteristic = service.getCharacteristic(UUID.fromString(characteristicId))
             if (characteristic == null) {
-                completionCallback(false, "Characteristic not found")
+                completionCallback(false, libraryError(BleNitroLibraryErrorCode.CHARACTERISTIC_NOT_FOUND, "Characteristic not found"))
                 return
             }
 
             // Enable notifications locally
             val success = gatt.setCharacteristicNotification(characteristic, true)
             if (!success) {
-                completionCallback(false, "Failed to enable notifications")
+                completionCallback(false, libraryError(BleNitroLibraryErrorCode.OPERATION_INITIATION_FAILED, "Failed to enable notifications"))
                 return
             }
 
@@ -1034,7 +1059,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 CccdSubscriptionMode.INDICATE -> BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
                 CccdSubscriptionMode.NOTIFY -> BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                 CccdSubscriptionMode.UNSUPPORTED -> {
-                    completionCallback(false, "Characteristic does not support notify or indicate")
+                    completionCallback(false, libraryError(BleNitroLibraryErrorCode.CHARACTERISTIC_NOT_SUPPORTED, "Characteristic does not support notify or indicate"))
                     return
                 }
             }
@@ -1063,11 +1088,11 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 // No CCCD descriptor - store callback and report success
                 val callbacks = deviceCallbacks[deviceId]
                 callbacks?.characteristicSubscriptions?.set(subscriptionKey, updateCallback)
-                completionCallback(true, "")
+                completionCallback(true, null)
             }
 
         } catch (e: Exception) {
-            completionCallback(false, "Subscription error: ${e.message}")
+            completionCallback(false, libraryError(BleNitroLibraryErrorCode.NATIVE_EXCEPTION, "Subscription error: ${e.message}"))
         }
     }
 
@@ -1075,31 +1100,31 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
         deviceId: String,
         serviceId: String,
         characteristicId: String,
-        callback: (success: Boolean, error: String) -> Unit
+        callback: (success: Boolean, error: BLENativeError?) -> Unit
     ) {
         try {
             val gatt = connectedDevices[deviceId]
             if (gatt == null) {
-                callback(false, "Device not connected")
+                callback(false, libraryError(BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED, "Device not connected"))
                 return
             }
 
             val service = gatt.getService(UUID.fromString(serviceId))
             if (service == null) {
-                callback(false, "Service not found")
+                callback(false, libraryError(BleNitroLibraryErrorCode.SERVICE_NOT_FOUND, "Service not found"))
                 return
             }
 
             val characteristic = service.getCharacteristic(UUID.fromString(characteristicId))
             if (characteristic == null) {
-                callback(false, "Characteristic not found")
+                callback(false, libraryError(BleNitroLibraryErrorCode.CHARACTERISTIC_NOT_FOUND, "Characteristic not found"))
                 return
             }
 
             // Disable notifications locally
             val success = gatt.setCharacteristicNotification(characteristic, false)
             if (!success) {
-                callback(false, "Failed to disable notifications")
+                callback(false, libraryError(BleNitroLibraryErrorCode.OPERATION_INITIATION_FAILED, "Failed to disable notifications"))
                 return
             }
 
@@ -1130,11 +1155,11 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 // No CCCD descriptor - remove immediately
                 val callbacks = deviceCallbacks[deviceId]
                 callbacks?.characteristicSubscriptions?.remove(subscriptionKey)
-                callback(true, "")
+                callback(true, null)
             }
 
         } catch (e: Exception) {
-            callback(false, "Unsubscription error: ${e.message}")
+            callback(false, libraryError(BleNitroLibraryErrorCode.NATIVE_EXCEPTION, "Unsubscription error: ${e.message}"))
         }
     }
 
@@ -1149,17 +1174,17 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     }
 
     // Bluetooth state management
-    override fun requestBluetoothEnable(callback: (success: Boolean, error: String) -> Unit) {
+    override fun requestBluetoothEnable(callback: (success: Boolean, error: BLENativeError?) -> Unit) {
         try {
             initializeBluetoothIfNeeded()
             val adapter = bluetoothAdapter
             if (adapter == null) {
-                callback(false, "Bluetooth not supported on this device")
+                callback(false, libraryError(BleNitroLibraryErrorCode.BLUETOOTH_UNAVAILABLE, "Bluetooth not supported on this device"))
                 return
             }
             
             if (adapter.isEnabled) {
-                callback(true, "")
+                callback(true, null)
                 return
             }
             
@@ -1169,14 +1194,14 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 appContext?.let { ctx ->
                     enableBtIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     ctx.startActivity(enableBtIntent)
-                    callback(true, "Bluetooth enable request sent")
-                } ?: callback(false, "Context not available")
+                    callback(true, null)
+                } ?: callback(false, libraryError(BleNitroLibraryErrorCode.CONTEXT_UNAVAILABLE, "Context not available"))
             } catch (securityException: SecurityException) {
-                callback(false, "Permission denied: Cannot request Bluetooth enable. Please check app permissions.")
+                callback(false, libraryError(BleNitroLibraryErrorCode.PERMISSION_DENIED, "Permission denied: Cannot request Bluetooth enable. Please check app permissions."))
             }
             
         } catch (e: Exception) {
-            callback(false, "Error requesting Bluetooth enable: ${e.message}")
+            callback(false, libraryError(BleNitroLibraryErrorCode.NATIVE_EXCEPTION, "Error requesting Bluetooth enable: ${e.message}"))
         }
     }
 
@@ -1198,7 +1223,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
 
     override fun subscribeToStateChange(stateCallback: (state: BLEState) -> Unit): OperationResult {
         try {
-            val context = appContext ?: return OperationResult(success = false, error = "Context not available")
+            val context = appContext ?: return OperationResult(success = false, error = libraryError(BleNitroLibraryErrorCode.CONTEXT_UNAVAILABLE, "Context not available"))
             
             // Unsubscribe from any existing subscription
             unsubscribeFromStateChange()
@@ -1218,7 +1243,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             
             return OperationResult(success = true, error = null)
         } catch (e: Exception) {
-            return OperationResult(success = false, error = "Error subscribing to state changes: ${e.message}")
+            return OperationResult(success = false, error = libraryError(BleNitroLibraryErrorCode.NATIVE_EXCEPTION, "Error subscribing to state changes: ${e.message}"))
         }
     }
 
@@ -1242,7 +1267,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             
             return OperationResult(success = true, error = null)
         } catch (e: Exception) {
-            return OperationResult(success = false, error = "Error unsubscribing from state changes: ${e.message}")
+            return OperationResult(success = false, error = libraryError(BleNitroLibraryErrorCode.NATIVE_EXCEPTION, "Error unsubscribing from state changes: ${e.message}"))
         }
     }
 

@@ -129,7 +129,7 @@ export default function App() {
       });
     }, (error) => {
       console.error(error);
-      logMessage(`Scan error: ${error}`);
+      logMessage(`Scan error: [${error.domain}:${error.code}] ${error.message}`);
     });
     logMessage('Scan started');
     setIsScanning(true);

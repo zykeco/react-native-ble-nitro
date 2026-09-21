@@ -21,4 +21,14 @@ export {
   BleTimeoutError,
 } from "./manager";
 
+export {
+  BleErrorBase,
+  BleError,
+  BleNitroError,
+  BleNitroLibraryErrorCode,
+  BLE_NITRO_LIBRARY_DOMAIN,
+} from './errors';
+
+export { type BLENativeError } from './specs/NativeBleNitro';
+
 export { BleNitro } from './singleton';
