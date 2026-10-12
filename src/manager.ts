@@ -8,13 +8,20 @@ import {
   AndroidConnectionPriority as NativeAndroidConnectionPriority,
   BLENativeError,
 } from './specs/NativeBleNitro';
-import { BleErrorBase, toBleError } from './errors';
+import {
+  BleErrorBase,
+  BleNitroError,
+  BleNitroLibraryErrorCode,
+  BleTimeoutError,
+  toBleError,
+  toBleErrorOrUnknown,
+} from './errors';
 
-export class BleTimeoutError extends Error {
-  constructor(operation: string, ms: number) {
-    super(`${operation} timed out after ${ms}ms`);
-    this.name = 'BleTimeoutError';
-  }
+// Re-exported for consumers importing it from the `./manager` entry point.
+export { BleTimeoutError };
+
+function deviceNotConnectedError(): BleNitroError {
+  return new BleNitroError(BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED, 'Device not connected');
 }
 
 function withTimeout<T>(
@@ -27,14 +34,6 @@ function withTimeout<T>(
     timer = setTimeout(() => reject(new BleTimeoutError(operation, ms)), ms);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
-
-/**
- * Fallback for the case where a native failure callback reports
- * `success = false` without an error object.
- */
-function unknownError(operation: string): Error {
-  return new Error(`Unknown error: ${operation}`);
 }
 
 export type ByteArray = number[];
@@ -263,6 +262,8 @@ export class BleNitroManager {
    * Start scanning for Bluetooth devices
    * @param filter Optional scan filter
    * @param callback Callback function called when a device is found
+   * @param onError Optional callback called once if the scan cannot start or fails;
+   *   scanning has stopped by the time it runs
    * @returns void
    */
   public startScan(
@@ -295,9 +296,15 @@ export class BleNitroManager {
       callback(convertedDevice);
     };
 
-    // Start scan
-    this.Instance.startScan(nativeFilter, scanCallback);
+    // Set before the native call: native may report a start failure through
+    // scanCallback synchronously, and that must be able to reset the flag.
     this._isScanning = true;
+    try {
+      this.Instance.startScan(nativeFilter, scanCallback);
+    } catch (e) {
+      this._isScanning = false;
+      throw e;
+    }
   }
 
   /**
@@ -357,7 +364,7 @@ export class BleNitroManager {
           if (success) {
             resolve(connectedDeviceId);
           } else {
-            reject(error ? toBleError(error) : unknownError('connect'));
+            reject(toBleErrorOrUnknown(error, 'connect'));
           }
         },
         onDisconnect ? (deviceId: string, interrupted: boolean, error?: BLENativeError) => {
@@ -382,10 +389,11 @@ export class BleNitroManager {
       this.stopScan();
     }
     return new Promise((resolve, reject) => {
+      const scanTimeout = options?.scanTimeout ?? 5000;
       const timeoutScan = setTimeout(() => {
         this.stopScan();
-        reject(new Error('Scan timed out'));
-      }, options?.scanTimeout ?? 5000);
+        reject(new BleTimeoutError('Scan', scanTimeout));
+      }, scanTimeout);
       this.startScan(undefined, (device) => {
         if (device.id === deviceId) {
           this.stopScan();
@@ -397,6 +405,9 @@ export class BleNitroManager {
             reject(error);
           });
         }
+      }, (error) => {
+        clearTimeout(timeoutScan);
+        reject(error);
       });
     });
   }
@@ -420,7 +431,7 @@ export class BleNitroManager {
           if (success) {
             resolve(deviceId);
           } else {
-            reject(error ? toBleError(error) : unknownError('disconnect'));
+            reject(toBleErrorOrUnknown(error, 'disconnect'));
           }
         }
       );
@@ -475,7 +486,7 @@ export class BleNitroManager {
     return new Promise((resolve, reject) => {
       // Check if connected first
       if (!this.isConnected(deviceId)) {
-        reject(new Error('Device not connected'));
+        reject(deviceNotConnectedError());
         return;
       }
 
@@ -485,7 +496,7 @@ export class BleNitroManager {
           if (success) {
             resolve(rssi);
           } else {
-            reject(error ? toBleError(error) : unknownError('readRSSI'));
+            reject(toBleErrorOrUnknown(error, 'readRSSI'));
           }
         }
       );
@@ -501,7 +512,7 @@ export class BleNitroManager {
     return new Promise((resolve, reject) => {
       // Check if connected first
       if (!this.isConnected(deviceId)) {
-        reject(new Error('Device not connected'));
+        reject(deviceNotConnectedError());
         return;
       }
 
@@ -511,7 +522,7 @@ export class BleNitroManager {
           if (success) {
             resolve(true);
           } else {
-            reject(error ? toBleError(error) : unknownError('discoverServices'));
+            reject(toBleErrorOrUnknown(error, 'discoverServices'));
           }
         }
       );
@@ -523,22 +534,12 @@ export class BleNitroManager {
    * @param deviceId ID of the device
    * @returns Promise resolving to array of service UUIDs
    */
-  public getServices(deviceId: string): Promise<string[]> {
-    return new Promise(async (resolve, reject) => {
-      // Check if connected first
-      if (!this.isConnected(deviceId)) {
-        reject(new Error('Device not connected'));
-        return;
-      }
-
-      const success = await this.discoverServices(deviceId);
-      if (!success) {
-        reject(new Error('Failed to discover services'));
-        return;
-      }
-      const services = this.Instance.getServices(deviceId);
-      resolve(BleNitroManager.normalizeGattUUIDs(services));
-    });
+  public async getServices(deviceId: string): Promise<string[]> {
+    // discoverServices rejects (rather than resolving false) on any failure,
+    // including a disconnected device, so its error propagates as-is.
+    await this.discoverServices(deviceId);
+    const services = this.Instance.getServices(deviceId);
+    return BleNitroManager.normalizeGattUUIDs(services);
   }
 
   /**
@@ -552,7 +553,7 @@ export class BleNitroManager {
     serviceId: string
   ): string[] {
     if (!this.isConnected(deviceId)) {
-      throw new Error('Device not connected');
+      throw deviceNotConnectedError();
     }
 
     const characteristics = this.Instance.getCharacteristics(
@@ -591,7 +592,7 @@ export class BleNitroManager {
   ): Promise<void> {
     const inner = new Promise<void>((resolve, reject) => {
       if (!this.isConnected(deviceId)) {
-        reject(new Error('Device not connected'));
+        reject(deviceNotConnectedError());
         return;
       }
       this.Instance.discoverServicesWithCharacteristics(
@@ -600,7 +601,7 @@ export class BleNitroManager {
           if (success) {
             resolve();
           } else {
-            reject(error ? toBleError(error) : unknownError('discoverServicesWithCharacteristics'));
+            reject(toBleErrorOrUnknown(error, 'discoverServicesWithCharacteristics'));
           }
         }
       );
@@ -627,7 +628,7 @@ export class BleNitroManager {
     return new Promise((resolve, reject) => {
       // Check if connected first
       if (!this.isConnected(deviceId)) {
-        reject(new Error('Device not connected'));
+        reject(deviceNotConnectedError());
         return;
       }
 
@@ -639,7 +640,7 @@ export class BleNitroManager {
           if (success) {
             resolve(arrayBufferToByteArray(data));
           } else {
-            reject(error ? toBleError(error) : unknownError('readCharacteristic'));
+            reject(toBleErrorOrUnknown(error, 'readCharacteristic'));
           }
         }
       );
@@ -665,7 +666,7 @@ export class BleNitroManager {
     return new Promise((resolve, reject) => {
       // Check if connected first
       if (!this.isConnected(deviceId)) {
-        reject(new Error('Device not connected'));
+        reject(deviceNotConnectedError());
         return;
       }
 
@@ -681,7 +682,7 @@ export class BleNitroManager {
             const responseByteArray = arrayBufferToByteArray(responseData);
             resolve(responseByteArray);
           } else {
-            reject(error ? toBleError(error) : unknownError('writeCharacteristic'));
+            reject(toBleErrorOrUnknown(error, 'writeCharacteristic'));
           }
         }
       );
@@ -705,7 +706,7 @@ export class BleNitroManager {
     return new Promise((resolve, reject) => {
       // Check if connected first
       if (!this.isConnected(deviceId)) {
-        reject(new Error('Device not connected'));
+        reject(deviceNotConnectedError());
         return;
       }
 
@@ -718,7 +719,7 @@ export class BleNitroManager {
         },
         (success: boolean, error?: BLENativeError) => {
           if (!success) {
-            reject(error ? toBleError(error) : unknownError('subscribeToCharacteristic'));
+            reject(toBleErrorOrUnknown(error, 'subscribeToCharacteristic'));
             return;
           }
 
@@ -753,7 +754,7 @@ export class BleNitroManager {
     return new Promise((resolve, reject) => {
       // Check if connected first
       if (!this.isConnected(deviceId)) {
-        reject(new Error('Device not connected'));
+        reject(deviceNotConnectedError());
         return;
       }
 
@@ -765,7 +766,7 @@ export class BleNitroManager {
           if (success) {
             resolve();
           } else {
-            reject(error ? toBleError(error) : unknownError('unsubscribeFromCharacteristic'));
+            reject(toBleErrorOrUnknown(error, 'unsubscribeFromCharacteristic'));
           }
         }
       );
@@ -812,7 +813,7 @@ export class BleNitroManager {
           if (success) {
             resolve(true);
           } else {
-            reject(error ? toBleError(error) : unknownError('requestBluetoothEnable'));
+            reject(toBleErrorOrUnknown(error, 'requestBluetoothEnable'));
           }
         }
       );

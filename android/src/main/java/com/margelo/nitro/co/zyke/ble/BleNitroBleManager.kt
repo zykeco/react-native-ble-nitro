@@ -36,11 +36,14 @@ object BleErrorDomain {
     const val GATT_OPERATION = "android.bluetoothGatt.operation"
     /** Raw errorCode from ScanCallback.onScanFailed. */
     const val SCAN = "android.bluetoothLe.scan"
-    /** Library guard-clause failure with no platform code; see BleNitroLibraryErrorCode. */
+    /**
+     * Failure detected by the library itself; see BleNitroLibraryErrorCode.
+     * Must match BLE_NITRO_LIBRARY_DOMAIN in src/errors.ts and the iOS BleErrorDomain.library.
+     */
     const val LIBRARY = "bleNitro.library"
 }
 
-/// Builds a BLENativeError from a library error code enum.
+/** Builds a BLENativeError from a library error code enum. */
 private fun libraryError(code: BleNitroLibraryErrorCode, message: String) =
     BLENativeError(BleErrorDomain.LIBRARY, code.value.toDouble(), message, code)
 
@@ -576,9 +579,9 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
     override fun startScan(filter: com.margelo.nitro.co.zyke.ble.ScanFilter, callback: (device: Variant_NullType_BLEDevice?, error: BLENativeError?) -> Unit) {
         try {
             initializeBluetoothIfNeeded()
-            val adapter = bluetoothAdapter ?: return
-            
-            if (!adapter.isEnabled) {
+            val adapter = bluetoothAdapter
+            if (adapter == null || !adapter.isEnabled) {
+                callback(null, libraryError(BleNitroLibraryErrorCode.BLUETOOTH_UNAVAILABLE, "Bluetooth is not enabled"))
                 return
             }
             
@@ -590,7 +593,11 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             discoveredDevicesInCurrentScan.clear()
             
             // Initialize scanner
-            bleScanner = adapter.bluetoothLeScanner ?: return
+            bleScanner = adapter.bluetoothLeScanner
+            if (bleScanner == null) {
+                callback(null, libraryError(BleNitroLibraryErrorCode.BLUETOOTH_UNAVAILABLE, "Bluetooth LE scanner not available"))
+                return
+            }
             deviceFoundCallback = callback
             
             // Create scan callback
@@ -676,8 +683,10 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
             
         } catch (e: SecurityException) {
             isCurrentlyScanning = false
+            callback(null, libraryError(BleNitroLibraryErrorCode.PERMISSION_DENIED, "Permission denied"))
         } catch (e: Exception) {
             isCurrentlyScanning = false
+            callback(null, libraryError(BleNitroLibraryErrorCode.NATIVE_EXCEPTION, "Scan error: ${e.message}"))
         }
     }
 
@@ -744,7 +753,9 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                 return
             }
             
-            val device = adapter.getRemoteDevice(deviceId)
+            // getRemoteDevice() throws for a malformed address; report it as
+            // DEVICE_NOT_FOUND like iOS does for an unknown identifier.
+            val device = if (BluetoothAdapter.checkBluetoothAddress(deviceId)) adapter.getRemoteDevice(deviceId) else null
             if (device == null) {
                 callback(false, deviceId, libraryError(BleNitroLibraryErrorCode.DEVICE_NOT_FOUND, "Device not found"))
                 return
@@ -874,7 +885,7 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         // If success, the callback will be invoked in onServicesDiscovered
                     }
                 } else {
-                    callback(false, libraryError(BleNitroLibraryErrorCode.CALLBACK_NOT_FOUND, "Device callback not found"))
+                    callback(false, libraryError(BleNitroLibraryErrorCode.CONNECTION_STATE_NOT_FOUND, "Device callback not found"))
                 }
             } else {
                 callback(false, libraryError(BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED, "Device not connected"))

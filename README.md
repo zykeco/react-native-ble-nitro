@@ -97,7 +97,7 @@ const isEnabled = ble.isBluetoothEnabled();
 const state = ble.state();
 // Returns: BLEState.PoweredOn, BLEState.PoweredOff, etc.
 
-// Request to enable Bluetooth (Android only)
+// Request to enable Bluetooth (Android only; rejects with OPERATION_NOT_SUPPORTED on iOS)
 await ble.requestBluetoothEnable();
 
 // Subscribe to state changes
@@ -139,8 +139,8 @@ ble.startScan({
     console.log(`Manufacturer data for ${id}:`, new Uint8Array(data));
   });
 }, (error) => {
-  // only called on Android
-  console.error('Scan error:', error);
+  // Called once if the scan can't start or fails; scanning has stopped by then
+  console.error('Scan error:', error.domain, error.code, error.message);
 });
 
 // Stop scanning
@@ -414,25 +414,57 @@ const fullUUIDs = BleNitro.normalizeGattUUIDs(['180d', '180f']);
 
 ### Error Handling
 
-Every failure arrives as an error object — either as a rejected promise from an async method, or as the error argument of a failure callback (`startScan`'s `onError`, `connect`'s disconnect callback). It is one of two classes, and which one you get tells you **how far the operation got**:
+Every failure arrives as an error object extending `BleErrorBase`. It comes as a rejected promise from an async method, as a throw from `getCharacteristics`, or as the error argument of a failure callback (`startScan`'s `onError`, `connect`'s disconnect callback). Each error carries `domain`, `code` and `message`, and is one of two classes. The class tells you **who reported the failure**:
 
 | Class | Raised when | `domain` | `code` |
 |---|---|---|---|
-| `BleNitroError` | The library rejected the call itself — nothing was ever sent to the platform (device not connected, unknown service or characteristic, Bluetooth unavailable, …) | always `BLE_NITRO_LIBRARY_DOMAIN` | a `BleNitroLibraryErrorCode`, a typed enum exported from the package |
-| `BleError` | The platform or the peripheral rejected it | the raw platform namespace: `CBErrorDomain` / `CBATTErrorDomain` on iOS, `android.bluetoothGatt.connection` / `android.bluetoothGatt.operation` / `android.bluetoothLe.scan` on Android | the raw `NSError` code, GATT status, or scan error code |
+| `BleNitroError` | The library detected or decided the failure itself: a guard clause (device not connected, unknown service or characteristic, Bluetooth unavailable, …), a link lost mid-operation, a timeout, or a platform failure that came without an error code | always `BLE_NITRO_LIBRARY_DOMAIN` (`'bleNitro.library'`) | a `BleNitroLibraryErrorCode`, a typed enum exported from the package |
+| `BlePlatformError` | The platform or the peripheral rejected the operation with its own error code | the raw platform namespace: `CBErrorDomain` / `CBATTErrorDomain` on iOS, `android.bluetoothGatt.connection` / `android.bluetoothGatt.operation` / `android.bluetoothLe.scan` on Android | the raw `NSError` code, GATT status, or scan error code |
 
-Both also carry a `message` — human-readable text for logging only. Never parse it to drive logic; branch on the class and `code` instead.
+`BleTimeoutError` is a `BleNitroError` whose `code` is always `TIMEOUT`.
 
+`message` is human-readable text for logging only. Never parse it to drive logic; branch on the class and `code` instead:
+
+```typescript
+import { BleNitroError, BlePlatformError, BleNitroLibraryErrorCode } from 'react-native-ble-nitro';
+
+try {
+  await ble.readCharacteristic(deviceId, serviceId, characteristicId);
+} catch (error) {
+  if (error instanceof BleNitroError && error.code === BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED) {
+    // reconnect and retry
+  } else if (error instanceof BlePlatformError && error.domain === 'android.bluetoothGatt.operation' && error.code === 8) {
+    // GATT_INSUF_AUTHORIZATION: start pairing
+  }
+}
+```
 
 #### BleNitroError
 
-The enum member alone tells you what happened, so you can react to each one differently, eg.:
+The enum member alone tells you what happened. The full list:
 
-- `DEVICE_NOT_CONNECTED` — the link is gone; reconnect and retry.
-- `BLUETOOTH_UNAVAILABLE` — nothing to reconnect to; ask the user to turn Bluetooth on.
-- `SERVICE_NOT_FOUND` / `CHARACTERISTIC_NOT_FOUND` — wrong UUID or unexpected peripheral state; retrying will not help.
+| Code | Raised on | Meaning and suggested reaction |
+|---|---|---|
+| `UNKNOWN` (0) | iOS, Android, JS | A failure with no further detail, e.g. iOS `didFailToConnect` without an `NSError`. Log it; retrying may help. |
+| `DEVICE_NOT_CONNECTED` (1) | iOS, Android, JS | The device isn't connected. Reconnect and retry. |
+| `DEVICE_NOT_FOUND` (2) | iOS, Android | `connect()` was given an identifier iOS doesn't know, or a malformed Android address. Scan for the device first. |
+| `SERVICE_NOT_FOUND` (3) | iOS, Android | The connected device has no service with that UUID. Check the UUID or run service discovery; retrying alone won't help. |
+| `CHARACTERISTIC_NOT_FOUND` (4) | iOS, Android | The service has no characteristic with that UUID. Same reaction as above. |
+| `PERMISSION_DENIED` (5) | iOS (scan), Android | A Bluetooth permission is missing. Ask the user to grant it. |
+| `BLUETOOTH_UNAVAILABLE` (6) | iOS (scan), Android | Bluetooth is off or unsupported. Ask the user to turn Bluetooth on. |
+| `CONTEXT_UNAVAILABLE` (7) | Android | No Android `Context` was available yet. Retry once the app has started. |
+| `OPERATION_INITIATION_FAILED` (8) | Android | Android refused to start the GATT operation, usually because another one is in flight. Retry shortly. |
+| `CONNECTION_STATE_NOT_FOUND` (9) | iOS, Android | The device is connected, but the library holds no state for that connection (e.g. it was connected outside this library, or teardown is in progress). Call `connect()` again. |
+| `DISCONNECTED_DURING_OPERATION` (10) | iOS, Android | The link dropped before the operation completed. Reconnect and retry. |
+| `DATA_ERROR` (11) | iOS | A read completed, but its value was missing or unreadable. Retry the read. |
+| `NATIVE_EXCEPTION` (12) | Android | The Android Bluetooth stack threw unexpectedly; `message` holds the exception text. |
+| `CONNECTION_CANCELLED` (13) | iOS, Android | `disconnect()` was called while the connection was still being established. |
+| `CHARACTERISTIC_NOT_SUPPORTED` (14) | Android | The characteristic supports neither notify nor indicate, so it can't be subscribed to. |
+| `OPERATION_NOT_SUPPORTED` (15) | iOS | The operation isn't available on this platform: `requestBluetoothEnable()` on iOS. |
+| `SERVICES_CHANGED` (16) | iOS | The peripheral changed its services during discovery. Run discovery again. |
+| `TIMEOUT` (17) | JS | The operation didn't finish in time (the `findAndConnect` scan, or service and characteristic discovery). Raised as `BleTimeoutError`. |
 
-#### BleError
+#### BlePlatformError
 
 Always react on `domain` and `code` **together** — the same number means different things in different namespaces, so the code alone is ambiguous, eg.:
 
@@ -553,8 +585,8 @@ enum AndroidConnectionPriority {
 // Callback types
 type StateChangeCallback = (state: BLEState) => void;
 type ScanEventCallback = (device: BLEDevice) => void;
-type ScanErrorCallback = (error: string) => void; // Android only
-type DisconnectEventCallback = (deviceId: string, interrupted: boolean, error: string) => void;
+type ScanErrorCallback = (error: BleErrorBase) => void;
+type DisconnectEventCallback = (deviceId: string, interrupted: boolean, error?: BleErrorBase) => void;
 type CharacteristicUpdateCallback = (characteristicId: string, data: ArrayBuffer) => void;
 ```
 

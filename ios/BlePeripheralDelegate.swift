@@ -91,15 +91,12 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         let serviceId = service.uuid.uuidString
 
         if let error = error {
-            let nsError = error as NSError
             characteristicDiscoveryCallbacks[serviceId]?(false, nativeError(from: error))
             // Record the first error for the full discovery callback
             if characteristicDiscoveryError == nil {
-                characteristicDiscoveryError = BLENativeError(
-                    domain: nsError.domain,
-                    code: Double(nsError.code),
-                    message: "Characteristic discovery failed for service \(serviceId): \(error.localizedDescription)",
-                    libraryCode: nil
+                characteristicDiscoveryError = nativeError(
+                    from: error,
+                    message: "Characteristic discovery failed for service \(serviceId): \(error.localizedDescription)"
                 )
             }
         } else {
@@ -225,8 +222,10 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         if let subscriptionCallback = subscriptionCallbacks[characteristicUUID] {
             if let error = error {
                 subscriptionCallback(false, nativeError(from: error))
+            } else if characteristic.isNotifying {
+                subscriptionCallback(true, nil)
             } else {
-                subscriptionCallback(characteristic.isNotifying, nil)
+                subscriptionCallback(false, libraryError(BleNitroLibraryErrorCode.unknown, "Failed to subscribe to characteristic"))
             }
             subscriptionCallbacks.removeValue(forKey: characteristicUUID)
         }
@@ -235,8 +234,10 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         if let unsubscriptionCallback = unsubscriptionCallbacks[characteristicUUID] {
             if let error = error {
                 unsubscriptionCallback(false, nativeError(from: error))
+            } else if !characteristic.isNotifying {
+                unsubscriptionCallback(true, nil)
             } else {
-                unsubscriptionCallback(!characteristic.isNotifying, nil)
+                unsubscriptionCallback(false, libraryError(BleNitroLibraryErrorCode.unknown, "Failed to unsubscribe from characteristic"))
             }
             unsubscriptionCallbacks.removeValue(forKey: characteristicUUID)
         }
@@ -245,7 +246,7 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     // MARK: - CBPeripheralDelegate - Connection Events
     
     func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
-        resolveFullDiscoveryCallbacks(success: false, error: libraryError(BleNitroLibraryErrorCode.disconnectedDuringOperation, "Services were invalidated during discovery"))
+        resolveFullDiscoveryCallbacks(success: false, error: libraryError(BleNitroLibraryErrorCode.servicesChanged, "Services were invalidated during discovery"))
         servicesDiscovered = false
         characteristicsDiscoveredCount = 0
         expectedCharacteristicsCount = 0
