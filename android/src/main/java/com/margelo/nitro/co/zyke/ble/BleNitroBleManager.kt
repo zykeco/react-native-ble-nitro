@@ -343,7 +343,15 @@ class BleNitroBleManager : HybridNativeBleNitroSpec() {
                         // behind an MTU request), it will never receive onServicesDiscovered
                         // now. Fail it explicitly so the JS promise does not hang forever.
                         cb?.serviceDiscoveryCallback?.invoke(false, libraryError(BleNitroLibraryErrorCode.DISCONNECTED_DURING_OPERATION, "Disconnected before service discovery completed"))
-                        cb?.disconnectCallback?.invoke(deviceId, interrupted, if (interrupted) gattConnectionError(status, "Connection lost") else null)
+                        val pendingConnect = cb?.connectCallback
+                        if (pendingConnect != null) {
+                            // STATE_CONNECTED never arrived (it clears connectCallback), so this
+                            // is a failed connect. Settle the connect() promise and, like iOS
+                            // didFailToConnect, emit no disconnect event for a link that never existed.
+                            pendingConnect(false, deviceId, if (interrupted) gattConnectionError(status, "Connection failed with status: $status") else libraryError(BleNitroLibraryErrorCode.UNKNOWN, "Connection failed"))
+                        } else {
+                            cb?.disconnectCallback?.invoke(deviceId, interrupted, if (interrupted) gattConnectionError(status, "Connection lost") else null)
+                        }
                         gatt.close()
                     }
                 }
