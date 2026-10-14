@@ -59,13 +59,20 @@ jest.mock('../specs/NativeBleNitroFactory', () => ({
   },
 }));
 
-import { AndroidConnectionPriority, BleNitro } from '../index';
+import { AndroidConnectionPriority, BleNitro, BlePlatformError, BleNitroError, BleTimeoutError, BleNitroLibraryErrorCode, BLE_NITRO_LIBRARY_DOMAIN, type BLENativeError } from '../index';
 
 // Get reference to the mocked module
 const mockNative = mockNativeInstance;
 
 // Get BLE instance
 const BleManager = BleNitro.instance();
+
+// Build native error payloads the way the native helpers do: platform errors
+// pass domain/code through and leave libraryCode unset, library errors set it.
+const platformError = (domain: string, code: number, message: string): BLENativeError =>
+  ({ domain, code, message });
+const libraryError = (code: BleNitroLibraryErrorCode, message: string): BLENativeError =>
+  ({ domain: BLE_NITRO_LIBRARY_DOMAIN, code, message, libraryCode: code });
 
 describe('BleNitro', () => {
   beforeEach(() => {
@@ -147,8 +154,8 @@ describe('BleNitro', () => {
 
   test('connect calls native and resolves with device id', async () => {
     const deviceId = 'test-device';
-    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
-      callback(true, id, '');
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error?: BLENativeError) => void) => {
+      callback(true, id, undefined);
     });
 
     const result = await BleManager.connect(deviceId);
@@ -159,8 +166,8 @@ describe('BleNitro', () => {
 
   test('connect keeps positional autoConnectAndroid compatibility', async () => {
     const deviceId = 'test-device-autoconnect';
-    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void) => {
-      callback(true, id, '');
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void) => {
+      callback(true, id, undefined);
     });
 
     const result = await BleManager.connect(deviceId, undefined, true);
@@ -182,11 +189,65 @@ describe('BleNitro', () => {
   });
 
   test('connect rejects on error', async () => {
-    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
-      callback(false, '', 'Connection failed');
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error?: BLENativeError) => void) => {
+      callback(false, '', platformError('CBErrorDomain', 14, 'Connection failed'));
     });
 
     await expect(BleManager.connect('test')).rejects.toThrow('Connection failed');
+  });
+
+  test('connect rejects with BlePlatformError carrying platform domain and code', async () => {
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void) => {
+      callback(false, '', platformError('CBErrorDomain', 14, 'Peer removed pairing information'));
+    });
+
+    const rejection = await BleManager.connect('test').catch(e => e);
+    expect(rejection).toBeInstanceOf(BlePlatformError);
+    expect(rejection).toMatchObject(platformError('CBErrorDomain', 14, 'Peer removed pairing information'));
+    expect(rejection).not.toBeInstanceOf(BleNitroError); // platform error, not a library one
+  });
+
+  test('readCharacteristic rejects with BlePlatformError carrying Android GATT operation status', async () => {
+    mockNative.isConnected.mockImplementation((id: string) => id === 'device-gatt-fail');
+
+    mockNative.readCharacteristic.mockImplementation((_device: string, _service: string, _char: string, callback: (success: boolean, data: ArrayBuffer, error?: BLENativeError) => void) => {
+      callback(false, new ArrayBuffer(0), platformError('android.bluetoothGatt.operation', 8, 'Read failed with status: 8'));
+    });
+
+    const rejection = await BleManager.readCharacteristic('device-gatt-fail', 'service', 'char').catch(e => e);
+    expect(rejection).toBeInstanceOf(BlePlatformError);
+    expect(rejection).toMatchObject(platformError('android.bluetoothGatt.operation', 8, 'Read failed with status: 8'));
+  });
+
+  test('disconnect rejects with BleNitroError carrying library code', async () => {
+    mockNative.isConnected.mockReturnValue(true);
+    mockNative.disconnect.mockImplementation((_id: string, callback: (success: boolean, error?: BLENativeError) => void) => {
+      callback(false, libraryError(BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED, 'Device not connected'));
+    });
+
+    const rejection = await BleManager.disconnect('device-lib-fail').catch(e => e);
+    expect(rejection).toBeInstanceOf(BleNitroError);
+    expect(rejection).not.toBeInstanceOf(BlePlatformError); // libraryCode routes it away from the platform class
+    // BleNitroError exposes the library code as its own `code`, not as libraryCode
+    expect(rejection).toMatchObject({ domain: BLE_NITRO_LIBRARY_DOMAIN, code: BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED, message: 'Device not connected' });
+    mockNative.isConnected.mockReset();
+  });
+
+  test('startScan onError receives BlePlatformError with scan domain', () => {
+    mockNative.stopScan.mockImplementation(() => true);
+    BleManager.stopScan();
+
+    mockNative.startScan.mockImplementation((_filter, callback) => {
+      callback(null, platformError('android.bluetoothLe.scan', 2, 'App registration failed'));
+    });
+
+    const onError = jest.fn();
+    BleManager.startScan({}, jest.fn(), onError);
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    const error = onError.mock.calls[0][0];
+    expect(error).toBeInstanceOf(BlePlatformError);
+    expect(error).toMatchObject(platformError('android.bluetoothLe.scan', 2, 'App registration failed'));
   });
 
   test('isBluetoothEnabled calls native', () => {
@@ -207,8 +268,8 @@ describe('BleNitro', () => {
 
   test('writeCharacteristic without response returns empty array', async () => {
     // First connect
-    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
-      callback(true, id, '');
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error?: BLENativeError) => void) => {
+      callback(true, id, undefined);
     });
     await BleManager.connect('device-write');
 
@@ -217,10 +278,10 @@ describe('BleNitro', () => {
     });
 
     // Mock writeCharacteristic with new signature (success, responseData, error)
-    mockNative.writeCharacteristic.mockImplementation((_deviceId: string, _serviceId: string, _charId: string, _data: ArrayBuffer, withResponse: boolean, callback: (success: boolean, responseData: ArrayBuffer, error: string) => void) => {
+    mockNative.writeCharacteristic.mockImplementation((_deviceId: string, _serviceId: string, _charId: string, _data: ArrayBuffer, withResponse: boolean, callback: (success: boolean, responseData: ArrayBuffer, error?: BLENativeError) => void) => {
       // For withResponse=false, return empty ArrayBuffer
       const emptyBuffer = new ArrayBuffer(0);
-      callback(true, emptyBuffer, '');
+      callback(true, emptyBuffer, undefined);
     });
 
     const data = [1, 2, 3];
@@ -239,8 +300,8 @@ describe('BleNitro', () => {
 
   test('writeCharacteristic with response returns response data', async () => {
     // First connect
-    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
-      callback(true, id, '');
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error?: BLENativeError) => void) => {
+      callback(true, id, undefined);
     });
     await BleManager.connect('device-write-resp');
 
@@ -249,10 +310,10 @@ describe('BleNitro', () => {
     });
 
     // Mock writeCharacteristic to return response data
-    mockNative.writeCharacteristic.mockImplementation((_deviceId: string, _serviceId: string, _charId: string, _data: ArrayBuffer, withResponse: boolean, callback: (success: boolean, responseData: ArrayBuffer, error: string) => void) => {
+    mockNative.writeCharacteristic.mockImplementation((_deviceId: string, _serviceId: string, _charId: string, _data: ArrayBuffer, withResponse: boolean, callback: (success: boolean, responseData: ArrayBuffer, error?: BLENativeError) => void) => {
       // For withResponse=true, return some response data
       const responseData = new Uint8Array([0xAA, 0xBB, 0xCC]).buffer;
-      callback(true, responseData, '');
+      callback(true, responseData, undefined);
     });
 
     const data = [1, 2, 3];
@@ -271,8 +332,8 @@ describe('BleNitro', () => {
 
   test('getServicesWithCharacteristics discovers and returns services with characteristics', async () => {
     // First connect
-    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
-      callback(true, id, '');
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error?: BLENativeError) => void) => {
+      callback(true, id, undefined);
     });
     await BleManager.connect('device-svc');
 
@@ -281,8 +342,8 @@ describe('BleNitro', () => {
     });
 
     // Mock discoverServicesWithCharacteristics
-    mockNative.discoverServicesWithCharacteristics.mockImplementation((_deviceId: string, callback: (success: boolean, error: string) => void) => {
-      callback(true, '');
+    mockNative.discoverServicesWithCharacteristics.mockImplementation((_deviceId: string, callback: (success: boolean, error?: BLENativeError) => void) => {
+      callback(true, undefined);
     });
 
     // Mock getServices to return service UUIDs
@@ -309,8 +370,8 @@ describe('BleNitro', () => {
   });
 
   test('getServicesWithCharacteristics rejects on discovery failure', async () => {
-    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
-      callback(true, id, '');
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error?: BLENativeError) => void) => {
+      callback(true, id, undefined);
     });
     await BleManager.connect('device-svc-fail');
 
@@ -318,8 +379,8 @@ describe('BleNitro', () => {
       return id === 'device-svc-fail';
     });
 
-    mockNative.discoverServicesWithCharacteristics.mockImplementation((_deviceId: string, callback: (success: boolean, error: string) => void) => {
-      callback(false, 'Discovery failed');
+    mockNative.discoverServicesWithCharacteristics.mockImplementation((_deviceId: string, callback: (success: boolean, error?: BLENativeError) => void) => {
+      callback(false, libraryError(BleNitroLibraryErrorCode.DISCONNECTED_DURING_OPERATION, 'Discovery failed'));
     });
 
     await expect(BleManager.getServicesWithCharacteristics('device-svc-fail')).rejects.toThrow('Discovery failed');
@@ -334,8 +395,8 @@ describe('BleNitro', () => {
   test('getServicesWithCharacteristics rejects with BleTimeoutError on timeout', async () => {
     jest.useFakeTimers();
 
-    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void) => {
-      callback(true, id, '');
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void) => {
+      callback(true, id, undefined);
     });
     await BleManager.connect('device-timeout');
 
@@ -349,14 +410,16 @@ describe('BleNitro', () => {
     jest.advanceTimersByTime(30_000);
 
     await expect(promise).rejects.toThrow('timed out after 30000ms');
+    await expect(promise).rejects.toBeInstanceOf(BleTimeoutError);
+    await expect(promise).rejects.toMatchObject({ domain: BLE_NITRO_LIBRARY_DOMAIN, code: BleNitroLibraryErrorCode.TIMEOUT });
 
     jest.useRealTimers();
   });
 
   test('readCharacteristic works after connection', async () => {
     // First connect
-    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
-      callback(true, id, '');
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error?: BLENativeError) => void) => {
+      callback(true, id, undefined);
     });
     await BleManager.connect('device');
     mockNative.isConnected.mockImplementation((id: string) => {
@@ -364,9 +427,9 @@ describe('BleNitro', () => {
     });
 
     // Then read
-    mockNative.readCharacteristic.mockImplementation((_device: string, _service: string, _char: string, callback: (success: boolean, data: ArrayBuffer, error: string) => void) => {
+    mockNative.readCharacteristic.mockImplementation((_device: string, _service: string, _char: string, callback: (success: boolean, data: ArrayBuffer, error?: BLENativeError) => void) => {
       const testData = new Uint8Array([85]);
-      callback(true, testData.buffer, ''); // Battery level 85%
+      callback(true, testData.buffer, undefined);
     });
 
     const result = await BleManager.readCharacteristic('device', 'service', 'char');
@@ -386,8 +449,8 @@ describe('BleNitro', () => {
 
   test('disconnect calls native', async () => {
     // First connect
-    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
-      callback(true, id, '');
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error?: BLENativeError) => void) => {
+      callback(true, id, undefined);
     });
     await BleManager.connect('device');
 
@@ -396,8 +459,8 @@ describe('BleNitro', () => {
     });
 
     // Then disconnect
-    mockNative.disconnect.mockImplementation((_id: string, callback: (success: boolean, error: string) => void) => {
-      callback(true, '');
+    mockNative.disconnect.mockImplementation((_id: string, callback: (success: boolean, error?: BLENativeError) => void) => {
+      callback(true, undefined);
     });
 
     const result = await BleManager.disconnect('device');
@@ -408,18 +471,18 @@ describe('BleNitro', () => {
 
   test('subscribeToCharacteristic calls callback', async () => {
     // First connect
-    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
-      callback(true, id, '');
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error?: BLENativeError) => void) => {
+      callback(true, id, undefined);
     });
     await BleManager.connect('device');
 
     // Mock subscription - now uses completion callback (async)
-    mockNative.subscribeToCharacteristic.mockImplementation((_device: string, _service: string, _char: string, updateCallback: (charId: string, data: ArrayBuffer) => void, completionCallback: (success: boolean, error: string) => void) => {
+    mockNative.subscribeToCharacteristic.mockImplementation((_device: string, _service: string, _char: string, updateCallback: (charId: string, data: ArrayBuffer) => void, completionCallback: (success: boolean, error?: BLENativeError) => void) => {
       // Simulate notification
       const testData = new Uint8Array([1, 2, 3]);
       updateCallback('char-id', testData.buffer);
       // Call completion callback to signal subscription is established
-      completionCallback(true, '');
+      completionCallback(true, undefined);
     });
 
     const notificationCallback = jest.fn();
@@ -437,12 +500,12 @@ describe('BleNitro', () => {
     const deviceId = 'test-device-2'; // Use different device ID to avoid state conflicts
     const onDisconnect = jest.fn();
 
-    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
-      callback(true, id, '');
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void, disconnectCallback?: (deviceId: string, interrupted: boolean, error?: BLENativeError) => void) => {
+      callback(true, id, undefined);
       // Simulate a disconnect event later
       if (disconnectCallback) {
         setTimeout(() => {
-          disconnectCallback(id, true, 'Connection lost'); // interrupted = true
+          disconnectCallback(id, true, platformError('android.bluetoothGatt.connection', 8, 'Connection lost')); // interrupted = true
         }, 10);
       }
     });
@@ -454,7 +517,9 @@ describe('BleNitro', () => {
 
     // Wait for disconnect callback
     await new Promise(resolve => setTimeout(resolve, 30));
-    expect(onDisconnect).toHaveBeenCalledWith(deviceId, true, 'Connection lost');
+    expect(onDisconnect).toHaveBeenCalledWith(deviceId, true, expect.any(BlePlatformError));
+    const disconnectError = onDisconnect.mock.calls[0][2];
+    expect(disconnectError).toMatchObject(platformError('android.bluetoothGatt.connection', 8, 'Connection lost'));
   });
 
   test('isSubscribedToCharacteristic delegates to native with normalized UUIDs', () => {
@@ -506,8 +571,8 @@ describe('BleNitro', () => {
 
   test('readRSSI works after connection', async () => {
     // First connect
-    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
-      callback(true, id, '');
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error?: BLENativeError) => void) => {
+      callback(true, id, undefined);
     });
     await BleManager.connect('device-rssi');
     mockNative.isConnected.mockImplementation((id: string) => {
@@ -515,8 +580,8 @@ describe('BleNitro', () => {
     });
 
     // Mock readRSSI with new signature (success, rssi, error)
-    mockNative.readRSSI.mockImplementation((_deviceId: string, callback: (success: boolean, rssi: number, error: string) => void) => {
-      callback(true, -65, ''); // Mock RSSI value of -65 dBm
+    mockNative.readRSSI.mockImplementation((_deviceId: string, callback: (success: boolean, rssi: number, error?: BLENativeError) => void) => {
+      callback(true, -65, undefined); // Mock RSSI value of -65 dBm
     });
 
     const rssi = await BleManager.readRSSI('device-rssi');
@@ -530,8 +595,8 @@ describe('BleNitro', () => {
 
   test('readRSSI handles failure', async () => {
     // First connect
-    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error: string) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error: string) => void) => {
-      callback(true, id, '');
+    mockNative.connect.mockImplementation((id: string, callback: (success: boolean, deviceId: string, error?: BLENativeError) => void, _disconnectCallback?: (deviceId: string, interrupted: boolean, error?: BLENativeError) => void) => {
+      callback(true, id, undefined);
     });
     await BleManager.connect('device-rssi-fail');
     mockNative.isConnected.mockImplementation((id: string) => {
@@ -539,8 +604,8 @@ describe('BleNitro', () => {
     });
 
     // Mock readRSSI failure
-    mockNative.readRSSI.mockImplementation((_deviceId: string, callback: (success: boolean, rssi: number, error: string) => void) => {
-      callback(false, 0, 'RSSI read failed');
+    mockNative.readRSSI.mockImplementation((_deviceId: string, callback: (success: boolean, rssi: number, error?: BLENativeError) => void) => {
+      callback(false, 0, platformError('android.bluetoothGatt.operation', 133, 'RSSI read failed'));
     });
 
     await expect(BleManager.readRSSI('device-rssi-fail')).rejects.toThrow('RSSI read failed');
@@ -549,5 +614,215 @@ describe('BleNitro', () => {
       'device-rssi-fail',
       expect.any(Function)
     );
+  });
+
+  describe('JS guard clauses', () => {
+    const guarded: { label: string, invoke: () => Promise<unknown> }[] = [
+      { label: 'readRSSI', invoke: () => BleManager.readRSSI('device-offline') },
+      { label: 'discoverServices', invoke: () => BleManager.discoverServices('device-offline') },
+      { label: 'getServices', invoke: () => BleManager.getServices('device-offline') },
+      { label: 'getServicesWithCharacteristics', invoke: () => BleManager.getServicesWithCharacteristics('device-offline') },
+      { label: 'readCharacteristic', invoke: () => BleManager.readCharacteristic('device-offline', 'service', 'char') },
+      { label: 'writeCharacteristic', invoke: () => BleManager.writeCharacteristic('device-offline', 'service', 'char', [0x01]) },
+      { label: 'subscribeToCharacteristic', invoke: () => BleManager.subscribeToCharacteristic('device-offline', 'service', 'char', jest.fn()) },
+      { label: 'unsubscribeFromCharacteristic', invoke: () => BleManager.unsubscribeFromCharacteristic('device-offline', 'service', 'char') },
+    ];
+
+    it.each(guarded)('$label rejects with a DEVICE_NOT_CONNECTED BleNitroError', async ({ invoke }) => {
+      mockNative.isConnected.mockReturnValue(false);
+
+      const rejection = await invoke().catch(e => e);
+
+      expect(rejection).toBeInstanceOf(BleNitroError);
+      expect(rejection).toMatchObject({ domain: BLE_NITRO_LIBRARY_DOMAIN, code: BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED, message: 'Device not connected' });
+    });
+
+    test('getCharacteristics throws a DEVICE_NOT_CONNECTED BleNitroError', () => {
+      mockNative.isConnected.mockReturnValue(false);
+
+      let thrown: unknown;
+      try {
+        BleManager.getCharacteristics('device-offline', 'service');
+      } catch (e) {
+        thrown = e;
+      }
+
+      expect(thrown).toBeInstanceOf(BleNitroError);
+      expect(thrown).toMatchObject({ code: BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED });
+    });
+  });
+
+  test('a library error with libraryCode UNKNOWN (0) is still a BleNitroError', async () => {
+    mockNative.requestBluetoothEnable.mockImplementation((callback: (success: boolean, error?: BLENativeError) => void) => {
+      callback(false, libraryError(BleNitroLibraryErrorCode.UNKNOWN, 'Connection failed'));
+    });
+
+    const rejection = await BleManager.requestBluetoothEnable().catch(e => e);
+
+    expect(rejection).toBeInstanceOf(BleNitroError);
+    expect(rejection).toMatchObject({ code: BleNitroLibraryErrorCode.UNKNOWN, message: 'Connection failed' });
+  });
+
+  test('getServices rejects with the discovery error instead of hanging', async () => {
+    mockNative.isConnected.mockReturnValue(true);
+    mockNative.discoverServices.mockImplementation((_deviceId: string, callback: (success: boolean, error?: BLENativeError) => void) => {
+      callback(false, platformError('CBATTErrorDomain', 5, 'Authentication is insufficient.'));
+    });
+
+    const rejection = await BleManager.getServices('device-discovery-fail').catch(e => e);
+
+    expect(rejection).toBeInstanceOf(BlePlatformError);
+    expect(rejection).toMatchObject(platformError('CBATTErrorDomain', 5, 'Authentication is insufficient.'));
+  });
+
+  test('startScan can start again after native reports a start failure synchronously', () => {
+    mockNative.stopScan.mockImplementation(() => true);
+    BleManager.stopScan();
+
+    mockNative.startScan.mockImplementationOnce((_filter, callback) => {
+      callback(null, libraryError(BleNitroLibraryErrorCode.BLUETOOTH_UNAVAILABLE, 'Bluetooth is not powered on'));
+    });
+    const onError = jest.fn();
+    BleManager.startScan({}, jest.fn(), onError);
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][0]).toBeInstanceOf(BleNitroError);
+    expect(onError.mock.calls[0][0]).toMatchObject({ code: BleNitroLibraryErrorCode.BLUETOOTH_UNAVAILABLE });
+
+    mockNative.startScan.mockImplementationOnce(() => {});
+    BleManager.startScan({}, jest.fn());
+
+    // Not short-circuited by a stale "already scanning" flag
+    expect(mockNative.startScan).toHaveBeenCalledTimes(2);
+    BleManager.stopScan();
+  });
+
+  test('findAndConnect rejects with BleTimeoutError when the device is not found', async () => {
+    jest.useFakeTimers();
+    mockNative.isConnected.mockReturnValue(false);
+    mockNative.stopScan.mockImplementation(() => true);
+    mockNative.startScan.mockImplementation(() => {});
+
+    const promise = BleManager.findAndConnect('device-missing', { scanTimeout: 1000 });
+    jest.advanceTimersByTime(1000);
+    const rejection = await promise.catch(e => e);
+
+    expect(rejection).toBeInstanceOf(BleTimeoutError);
+    expect(rejection).toMatchObject({ code: BleNitroLibraryErrorCode.TIMEOUT, message: 'Scan timed out after 1000ms' });
+
+    jest.useRealTimers();
+  });
+
+  test('findAndConnect rejects with the scan error instead of waiting for the timeout', async () => {
+    mockNative.isConnected.mockReturnValue(false);
+    mockNative.stopScan.mockImplementation(() => true);
+    mockNative.startScan.mockImplementation((_filter, callback) => {
+      callback(null, platformError('android.bluetoothLe.scan', 6, 'Scanning too frequently'));
+    });
+
+    const rejection = await BleManager.findAndConnect('device-scan-fail', { scanTimeout: 60_000 }).catch(e => e);
+
+    expect(rejection).toBeInstanceOf(BlePlatformError);
+    expect(rejection).toMatchObject(platformError('android.bluetoothLe.scan', 6, 'Scanning too frequently'));
+  });
+});
+
+describe('native failure without an error object', () => {
+  type NativeCallback = (...args: unknown[]) => void;
+
+  // Invokes the native method's completion callback (always its last function
+  // argument) with a failure result and no error object.
+  const failWithoutError = (...failureArgs: unknown[]) => (...args: unknown[]) => {
+    const callbacks = args.filter((arg): arg is NativeCallback => typeof arg === 'function');
+    const callback = callbacks[callbacks.length - 1];
+    callback?.(...failureArgs);
+  };
+
+  const cases: { label: string, native: jest.Mock, failureArgs: unknown[], connected: boolean, invoke: () => Promise<unknown> }[] = [
+    {
+      label: 'connect',
+      native: mockNative.connect,
+      failureArgs: [false, '', undefined],
+      connected: false,
+      invoke: () => BleManager.connect('device-unknown'),
+    },
+    {
+      label: 'disconnect',
+      native: mockNative.disconnect,
+      failureArgs: [false, undefined],
+      connected: true,
+      invoke: () => BleManager.disconnect('device-unknown'),
+    },
+    {
+      label: 'readRSSI',
+      native: mockNative.readRSSI,
+      failureArgs: [false, 0, undefined],
+      connected: true,
+      invoke: () => BleManager.readRSSI('device-unknown'),
+    },
+    {
+      label: 'discoverServices',
+      native: mockNative.discoverServices,
+      failureArgs: [false, undefined],
+      connected: true,
+      invoke: () => BleManager.discoverServices('device-unknown'),
+    },
+    {
+      label: 'getServicesWithCharacteristics',
+      native: mockNative.discoverServicesWithCharacteristics,
+      failureArgs: [false, undefined],
+      connected: true,
+      invoke: () => BleManager.getServicesWithCharacteristics('device-unknown'),
+    },
+    {
+      label: 'readCharacteristic',
+      native: mockNative.readCharacteristic,
+      failureArgs: [false, new ArrayBuffer(0), undefined],
+      connected: true,
+      invoke: () => BleManager.readCharacteristic('device-unknown', 'service', 'char'),
+    },
+    {
+      label: 'writeCharacteristic',
+      native: mockNative.writeCharacteristic,
+      failureArgs: [false, new ArrayBuffer(0), undefined],
+      connected: true,
+      invoke: () => BleManager.writeCharacteristic('device-unknown', 'service', 'char', [0x01]),
+    },
+    {
+      label: 'subscribeToCharacteristic',
+      native: mockNative.subscribeToCharacteristic,
+      failureArgs: [false, undefined],
+      connected: true,
+      invoke: () => BleManager.subscribeToCharacteristic('device-unknown', 'service', 'char', jest.fn()),
+    },
+    {
+      label: 'unsubscribeFromCharacteristic',
+      native: mockNative.unsubscribeFromCharacteristic,
+      failureArgs: [false, undefined],
+      connected: true,
+      invoke: () => BleManager.unsubscribeFromCharacteristic('device-unknown', 'service', 'char'),
+    },
+    {
+      label: 'requestBluetoothEnable',
+      native: mockNative.requestBluetoothEnable,
+      failureArgs: [false, undefined],
+      connected: true,
+      invoke: () => BleManager.requestBluetoothEnable(),
+    },
+  ];
+
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it.each(cases)('$label rejects with an UNKNOWN BleNitroError', async ({ native, failureArgs, connected, invoke }) => {
+    mockNative.isConnected.mockReturnValue(connected);
+    native.mockImplementation(failWithoutError(...failureArgs));
+
+    const rejection = await invoke().then(() => undefined, (error: unknown) => error);
+
+    expect(rejection).toBeInstanceOf(BleNitroError);
+    expect(rejection).toMatchObject({ domain: BLE_NITRO_LIBRARY_DOMAIN, code: BleNitroLibraryErrorCode.UNKNOWN });
+    expect((rejection as Error).message).toMatch(/^Unknown error: /);
   });
 });

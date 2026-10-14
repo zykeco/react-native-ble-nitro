@@ -97,7 +97,7 @@ const isEnabled = ble.isBluetoothEnabled();
 const state = ble.state();
 // Returns: BLEState.PoweredOn, BLEState.PoweredOff, etc.
 
-// Request to enable Bluetooth (Android only)
+// Request to enable Bluetooth (Android only; rejects with OPERATION_NOT_SUPPORTED on iOS)
 await ble.requestBluetoothEnable();
 
 // Subscribe to state changes
@@ -139,8 +139,8 @@ ble.startScan({
     console.log(`Manufacturer data for ${id}:`, new Uint8Array(data));
   });
 }, (error) => {
-  // only called on Android
-  console.error('Scan error:', error);
+  // Called once if the scan can't start or fails; scanning has stopped by then
+  console.error('Scan error:', error.domain, error.code, error.message);
 });
 
 // Stop scanning
@@ -412,6 +412,251 @@ const fullUUIDs = BleNitro.normalizeGattUUIDs(['180d', '180f']);
 // Returns: ['0000180d-0000-1000-8000-00805f9b34fb', '0000180f-0000-1000-8000-00805f9b34fb']
 ```
 
+### Error Handling
+
+Every failed Bluetooth operation reports an error object extending `BleErrorBase`. It comes as a rejected promise from an async method, a throw from `getCharacteristics`, or the error argument of a failure callback (`startScan`'s `onError`, `connect`'s disconnect callback). The few APIs that report failure another way are listed under [Failures that aren't error objects](#failures-that-arent-error-objects).
+
+Each error carries `domain`, `code` and `message`, and is one of two classes. The class tells you **who reported the failure**:
+
+| Class | Raised when | `domain` | `code` |
+|---|---|---|---|
+| `BleNitroError` | The library detected or decided the failure itself: a guard clause (device not connected, unknown service or characteristic, Bluetooth unavailable, …), a link lost mid-operation, a timeout, or a platform failure that came without an error code | always `BLE_NITRO_LIBRARY_DOMAIN` (`'bleNitro.library'`) | a `BleNitroLibraryErrorCode`, a typed enum exported from the package |
+| `BlePlatformError` | The platform or the peripheral rejected the operation with its own error code | the raw platform namespace: `CBErrorDomain` / `CBATTErrorDomain` on iOS, `android.bluetoothGatt.connection` / `android.bluetoothGatt.operation` / `android.bluetoothLe.scan` on Android | the raw `NSError` code, GATT status, or scan error code |
+
+`BleTimeoutError` is a `BleNitroError` whose `code` is always `TIMEOUT`.
+
+`message` is human-readable text for logging only. Never parse it to drive logic; branch on the class and `code` instead:
+
+```typescript
+import { BleNitroError, BlePlatformError, BleNitroLibraryErrorCode } from 'react-native-ble-nitro';
+
+try {
+  await ble.readCharacteristic(deviceId, serviceId, characteristicId);
+} catch (error) {
+  if (error instanceof BleNitroError && error.code === BleNitroLibraryErrorCode.DEVICE_NOT_CONNECTED) {
+    // reconnect and retry
+  } else if (error instanceof BlePlatformError && error.domain === 'android.bluetoothGatt.operation' && error.code === 8) {
+    // GATT_INSUFFICIENT_AUTHORIZATION: start pairing
+  }
+}
+```
+
+> **Upgrading from 1.15.x or earlier:** failures used to be plain `Error` objects, and callbacks received strings, so the message text was the only information. If your code compares `error.message` or the callback string (for example against `'Device not connected'`), switch to the class and `code`. `startScan`'s `onError` and `connect`'s disconnect callback now receive an error object instead of a string.
+
+#### Errors by method
+
+Every method that needs a connection checks it in JS first and rejects with `DEVICE_NOT_CONNECTED`; `getCharacteristics` throws it instead. Any callback-based method can also reject with `UNKNOWN` if the native side reports a failure without an error object. On top of that, each method can report:
+
+| Method | iOS | Android |
+|---|---|---|
+| `startScan` → `onError` | `BLUETOOTH_UNAVAILABLE`, `PERMISSION_DENIED` | `BLUETOOTH_UNAVAILABLE`, `PERMISSION_DENIED`, `NATIVE_EXCEPTION`<br>platform: `android.bluetoothLe.scan` |
+| `connect` | `DEVICE_NOT_FOUND`, `UNKNOWN`<br>platform: `CBErrorDomain` | `BLUETOOTH_UNAVAILABLE`, `DEVICE_NOT_FOUND`, `CONTEXT_UNAVAILABLE`, `PERMISSION_DENIED`, `NATIVE_EXCEPTION`, `UNKNOWN`<br>platform: `android.bluetoothGatt.connection` |
+| `connect` → disconnect callback | platform: `CBErrorDomain`; `undefined` after an intentional disconnect | platform: `android.bluetoothGatt.connection`; `undefined` after an intentional disconnect |
+| `findAndConnect` | everything `startScan` and `connect` report, plus `TIMEOUT` if the device isn't found in time | same as iOS |
+| `disconnect` | `DEVICE_NOT_CONNECTED`<br>platform: `CBErrorDomain` | `DEVICE_NOT_CONNECTED`, `NATIVE_EXCEPTION` |
+| `readRSSI` | `CONNECTION_STATE_NOT_FOUND`<br>platform: `CBErrorDomain`, `CBATTErrorDomain` | `OPERATION_INITIATION_FAILED`, `NATIVE_EXCEPTION`<br>platform: `android.bluetoothGatt.operation` |
+| `discoverServices`, `getServices` | `CONNECTION_STATE_NOT_FOUND`<br>platform: `CBErrorDomain`, `CBATTErrorDomain` | `CONNECTION_STATE_NOT_FOUND`, `OPERATION_INITIATION_FAILED`, `DISCONNECTED_DURING_OPERATION`, `NATIVE_EXCEPTION`<br>platform: `android.bluetoothGatt.operation` |
+| `getServicesWithCharacteristics` | as `discoverServices`, plus `SERVICES_CHANGED` and `TIMEOUT` | as `discoverServices`, plus `TIMEOUT` |
+| `readCharacteristic` | `SERVICE_NOT_FOUND`, `CHARACTERISTIC_NOT_FOUND`, `CONNECTION_STATE_NOT_FOUND`, `DATA_ERROR`<br>platform: `CBATTErrorDomain`, `CBErrorDomain` | `SERVICE_NOT_FOUND`, `CHARACTERISTIC_NOT_FOUND`, `OPERATION_INITIATION_FAILED`, `NATIVE_EXCEPTION`<br>platform: `android.bluetoothGatt.operation` |
+| `writeCharacteristic` | `SERVICE_NOT_FOUND`, `CHARACTERISTIC_NOT_FOUND`, `CONNECTION_STATE_NOT_FOUND`<br>platform: `CBATTErrorDomain`, `CBErrorDomain` | `SERVICE_NOT_FOUND`, `CHARACTERISTIC_NOT_FOUND`, `OPERATION_INITIATION_FAILED`, `NATIVE_EXCEPTION`<br>platform: `android.bluetoothGatt.operation` |
+| `subscribeToCharacteristic` | `SERVICE_NOT_FOUND`, `CHARACTERISTIC_NOT_FOUND`, `CONNECTION_STATE_NOT_FOUND`, `UNKNOWN`<br>platform: `CBATTErrorDomain`, `CBErrorDomain` | `SERVICE_NOT_FOUND`, `CHARACTERISTIC_NOT_FOUND`, `CHARACTERISTIC_NOT_SUPPORTED`, `OPERATION_INITIATION_FAILED`, `NATIVE_EXCEPTION`<br>platform: `android.bluetoothGatt.operation` |
+| `unsubscribeFromCharacteristic` | `SERVICE_NOT_FOUND`, `CHARACTERISTIC_NOT_FOUND`, `CONNECTION_STATE_NOT_FOUND`, `UNKNOWN`<br>platform: `CBATTErrorDomain`, `CBErrorDomain` | `SERVICE_NOT_FOUND`, `CHARACTERISTIC_NOT_FOUND`, `OPERATION_INITIATION_FAILED`, `NATIVE_EXCEPTION`<br>platform: `android.bluetoothGatt.operation` |
+| `requestBluetoothEnable` | `OPERATION_NOT_SUPPORTED`, always | `BLUETOOTH_UNAVAILABLE`, `CONTEXT_UNAVAILABLE`, `PERMISSION_DENIED`, `NATIVE_EXCEPTION` |
+
+The `remove()` of a subscription returned by `subscribeToCharacteristic` never rejects; it ignores unsubscribe failures.
+
+#### BleNitroError codes
+
+The enum member alone tells you what happened:
+
+| Code | Raised on | Meaning and suggested reaction |
+|---|---|---|
+| `UNKNOWN` (0) | iOS, Android, JS | A failure without further detail: iOS `didFailToConnect` without an `NSError`, an Android connection attempt that failed with status 0, an iOS subscribe or unsubscribe that didn't reach the requested state, or a native failure reported without any error. Log it; retrying may help. |
+| `DEVICE_NOT_CONNECTED` (1) | iOS, Android, JS | The device isn't connected. Reconnect and retry. |
+| `DEVICE_NOT_FOUND` (2) | iOS, Android | `connect()` was given an identifier iOS doesn't know, or a malformed Android address. Scan for the device first. |
+| `SERVICE_NOT_FOUND` (3) | iOS, Android | The connected device has no service with that UUID, or services haven't been discovered yet. Check the UUID or run service discovery; retrying alone won't help. |
+| `CHARACTERISTIC_NOT_FOUND` (4) | iOS, Android | The service has no characteristic with that UUID. Same reaction as above. |
+| `PERMISSION_DENIED` (5) | iOS (scan), Android | A Bluetooth permission is missing. Ask the user to grant it. |
+| `BLUETOOTH_UNAVAILABLE` (6) | iOS (scan), Android | Bluetooth is off or unsupported. Ask the user to turn Bluetooth on. |
+| `CONTEXT_UNAVAILABLE` (7) | Android | No Android `Context` was available yet. Retry once the app has started. |
+| `OPERATION_INITIATION_FAILED` (8) | Android | Android refused to start the GATT operation, usually because another one is in flight. Retry shortly. |
+| `CONNECTION_STATE_NOT_FOUND` (9) | iOS, Android | The device is connected, but the library holds no state for that connection (e.g. it was connected outside this library, or teardown is in progress). Call `connect()` again. |
+| `DISCONNECTED_DURING_OPERATION` (10) | Android | The link dropped before service discovery completed. Reconnect and retry. |
+| `DATA_ERROR` (11) | iOS | A read completed, but its value was missing or unreadable. Retry the read. |
+| `NATIVE_EXCEPTION` (12) | Android | The Android Bluetooth stack threw unexpectedly; `message` holds the exception text. |
+| `CONNECTION_CANCELLED` (13) | iOS, Android (native only) | Reserved for a disconnect that cancels a pending connection. The public API doesn't raise it yet: `disconnect()` resolves without cancelling anything while the device isn't connected. |
+| `CHARACTERISTIC_NOT_SUPPORTED` (14) | Android | The characteristic supports neither notify nor indicate, so it can't be subscribed to. |
+| `OPERATION_NOT_SUPPORTED` (15) | iOS | The operation isn't available on this platform: `requestBluetoothEnable()` on iOS. |
+| `SERVICES_CHANGED` (16) | iOS | The peripheral changed its services during discovery. Run discovery again. |
+| `TIMEOUT` (17) | JS | The operation didn't finish in time: the `findAndConnect` scan (default 5 s), or service and characteristic discovery (30 s). Raised as `BleTimeoutError`. |
+
+#### BlePlatformError codes
+
+Always react on `domain` and `code` **together**. The same number means different things in different namespaces, so the code alone is ambiguous:
+
+- `android.bluetoothGatt.connection` + `8` — `GATT_CONN_TIMEOUT`; the link is gone, reconnect.
+- `android.bluetoothGatt.operation` + `8` — `GATT_INSUFFICIENT_AUTHORIZATION`; the peripheral wants a bonded connection, start pairing.
+- `CBErrorDomain` + `6` — the iOS equivalent of a connection timeout.
+- `CBATTErrorDomain` + `5` — the iOS equivalent of insufficient authentication.
+
+This library deliberately does not interpret or re-classify platform codes; it only guarantees the raw `domain`/`code`/`message` triple reaches you intact. The tables below list every code each domain defines, as a reference; the platform documentation stays the source of truth.
+
+<details>
+<summary><b><code>CBErrorDomain</code></b> (iOS): Core Bluetooth errors</summary>
+
+From [`CBError.Code`](https://developer.apple.com/documentation/corebluetooth/cberror-swift.struct/code).
+
+| Code | `CBError.Code` | Meaning |
+|---|---|---|
+| 0 | `unknown` | An unknown error occurred. |
+| 1 | `invalidParameters` | The specified parameters are invalid. |
+| 2 | `invalidHandle` | The specified attribute handle is invalid. |
+| 3 | `notConnected` | The device isn't currently connected. |
+| 4 | `outOfSpace` | The device has run out of space to complete the operation. |
+| 5 | `operationCancelled` | The operation was cancelled. |
+| 6 | `connectionTimeout` | The connection timed out. |
+| 7 | `peripheralDisconnected` | The peripheral disconnected. |
+| 8 | `uuidNotAllowed` | The specified UUID isn't permitted. |
+| 9 | `alreadyAdvertising` | The peripheral is already advertising. Peripheral role only; this library doesn't raise it. |
+| 10 | `connectionFailed` | The connection failed. |
+| 11 | `connectionLimitReached` | The device already has the maximum number of connections. |
+| 12 | `unknownDevice` | The device is unknown. |
+| 13 | `operationNotSupported` | The operation isn't supported. |
+| 14 | `peerRemovedPairingInformation` | The peripheral deleted its pairing information. The user usually has to forget the device in iOS Settings → Bluetooth before it can pair again. |
+| 15 | `encryptionTimedOut` | Encrypting the link timed out. |
+| 16 | `tooManyLEPairedDevices` | Too many LE devices are paired with this device. |
+
+Codes 17–20 are watchOS-only or belong to Channel Sounding, which this library doesn't use.
+
+</details>
+
+<details>
+<summary><b><code>CBATTErrorDomain</code></b> (iOS): errors returned by the peripheral</summary>
+
+From [`CBATTError.Code`](https://developer.apple.com/documentation/corebluetooth/cbatterror-swift.struct/code). These are the Attribute Protocol (ATT) error codes of the Bluetooth Core Specification, so the same numbers appear in Android's `android.bluetoothGatt.operation` domain.
+
+| Code | `CBATTError.Code` | Meaning |
+|---|---|---|
+| 1 | `invalidHandle` | The attribute handle is invalid on this peripheral. |
+| 2 | `readNotPermitted` | The permissions prohibit reading the attribute's value. |
+| 3 | `writeNotPermitted` | The permissions prohibit writing the attribute's value. |
+| 4 | `invalidPdu` | The attribute Protocol Data Unit (PDU) is invalid. |
+| 5 | `insufficientAuthentication` | Reading or writing failed for lack of authentication; the peripheral requires pairing. |
+| 6 | `requestNotSupported` | The peripheral doesn't support the request. |
+| 7 | `invalidOffset` | The offset was past the end of the attribute's value. |
+| 8 | `insufficientAuthorization` | Reading or writing failed for lack of authorization. |
+| 9 | `prepareQueueFull` | Too many write requests are queued. |
+| 10 | `attributeNotFound` | The attribute wasn't found within the given handle range. |
+| 11 | `attributeNotLong` | The attribute can't be read or written with a read blob request. |
+| 12 | `insufficientEncryptionKeySize` | The link's encryption key size is insufficient. |
+| 13 | `invalidAttributeValueLength` | The value's length is invalid for this operation. |
+| 14 | `unlikelyError` | The request hit an unlikely error and wasn't completed. |
+| 15 | `insufficientEncryption` | Reading or writing failed for lack of encryption; the peripheral requires an encrypted (paired) link. |
+| 16 | `unsupportedGroupType` | The attribute type isn't a supported grouping attribute. |
+| 17 | `insufficientResources` | The peripheral lacks the resources to complete the request. |
+
+Other codes are defined by the peripheral itself: ATT reserves 128–159 (`0x80`–`0x9F`) for application errors and 224–255 (`0xE0`–`0xFF`) for common profile and service errors.
+
+</details>
+
+<details>
+<summary><b><code>android.bluetoothGatt.operation</code></b> (Android): status of a GATT operation</summary>
+
+The `status` Android passes to the read, write, descriptor-write (subscribe and unsubscribe), service-discovery and RSSI callbacks. Names starting with `BluetoothGatt.` are public [`BluetoothGatt`](https://developer.android.com/reference/android/bluetooth/BluetoothGatt) constants; the others come from AOSP's [`gatt_api.h`](https://android.googlesource.com/platform/packages/modules/Bluetooth/+/refs/heads/main/system/stack/include/gatt_api.h). Codes 1–19 are ATT error codes returned by the peripheral (the same numbers as iOS's `CBATTErrorDomain`); codes from 128 up are mostly statuses of Android's own Bluetooth stack, although a peripheral can also return application errors in the 128–159 range.
+
+| Code | Name | Meaning |
+|---|---|---|
+| 1 | `GATT_INVALID_HANDLE` | The attribute handle is invalid. |
+| 2 | `BluetoothGatt.GATT_READ_NOT_PERMITTED` | GATT read operation is not permitted. |
+| 3 | `BluetoothGatt.GATT_WRITE_NOT_PERMITTED` | GATT write operation is not permitted. |
+| 4 | `GATT_INVALID_PDU` | The request PDU is invalid. |
+| 5 | `BluetoothGatt.GATT_INSUFFICIENT_AUTHENTICATION` | Insufficient authentication; the peripheral requires pairing. |
+| 6 | `BluetoothGatt.GATT_REQUEST_NOT_SUPPORTED` | The request is not supported. |
+| 7 | `BluetoothGatt.GATT_INVALID_OFFSET` | A read or write used an invalid offset. |
+| 8 | `BluetoothGatt.GATT_INSUFFICIENT_AUTHORIZATION` | Insufficient authorization; usually the peripheral wants a bonded connection. |
+| 9 | `GATT_PREPARE_Q_FULL` | Too many write requests are queued. |
+| 10 | `GATT_NOT_FOUND` | The attribute wasn't found. |
+| 11 | `GATT_NOT_LONG` | The attribute can't be read or written with a read blob request. |
+| 12 | `GATT_INSUF_KEY_SIZE` | The link's encryption key size is insufficient. |
+| 13 | `BluetoothGatt.GATT_INVALID_ATTRIBUTE_LENGTH` | A write exceeds the attribute's maximum length. |
+| 14 | `GATT_ERR_UNLIKELY` | The peripheral hit an unlikely error. |
+| 15 | `BluetoothGatt.GATT_INSUFFICIENT_ENCRYPTION` | Insufficient encryption; the peripheral requires an encrypted (paired) link. |
+| 16 | `GATT_UNSUPPORT_GRP_TYPE` | The attribute type isn't a supported grouping type. |
+| 17 | `GATT_INSUF_RESOURCE` | The peripheral lacks the resources for the request. |
+| 18 | `GATT_DATABASE_OUT_OF_SYNC` | The cached GATT database is out of date. Run service discovery again. |
+| 19 | `GATT_VALUE_NOT_ALLOWED` | The peripheral doesn't allow this value. |
+| 128 | `GATT_NO_RESOURCES` | The Android Bluetooth stack is out of resources. |
+| 129 | `GATT_INTERNAL_ERROR` | Internal error in the Android Bluetooth stack. |
+| 130 | `GATT_WRONG_STATE` | The operation isn't valid in the current state. |
+| 131 | `GATT_DB_FULL` | The GATT database is full. |
+| 132 | `GATT_BUSY` | Another GATT operation is in progress. Retry later. |
+| 133 | `GATT_ERROR` | Generic, unspecific failure. |
+| 134 | `GATT_CMD_STARTED` | Command started (stack-internal status). |
+| 135 | `GATT_ILLEGAL_PARAMETER` | An illegal parameter was passed. |
+| 136 | `GATT_PENDING` | Operation pending (stack-internal status). |
+| 137 | `GATT_AUTH_FAIL` | Authentication (pairing) failed. |
+| 139 | `GATT_INVALID_CFG` | Invalid configuration. |
+| 140 | `GATT_SERVICE_STARTED` | Service started (stack-internal status). |
+| 141 | `GATT_ENCRYPED_NO_MITM` | The link is encrypted without MITM protection, which the attribute requires. |
+| 142 | `GATT_NOT_ENCRYPTED` | The link isn't encrypted. |
+| 143 | `BluetoothGatt.GATT_CONNECTION_CONGESTED` | The connection is congested. Retry later. |
+| 144 | `GATT_DUP_REG` | Duplicate registration. |
+| 145 | `GATT_ALREADY_OPEN` | Already open. |
+| 146 | `GATT_CANCEL` | The operation was cancelled. |
+| 147 | `BluetoothGatt.GATT_CONNECTION_TIMEOUT` | The GATT connection timed out. |
+| 253 | `GATT_CCC_CFG_ERR` | The Client Characteristic Configuration Descriptor is improperly configured. |
+| 254 | `GATT_PRC_IN_PROGRESS` | A procedure is already in progress. |
+| 255 | `GATT_OUT_OF_RANGE` | The attribute value is out of range. |
+| 257 | `BluetoothGatt.GATT_FAILURE` | A GATT operation failed for another reason. |
+
+</details>
+
+<details>
+<summary><b><code>android.bluetoothGatt.connection</code></b> (Android): connection failures and disconnects</summary>
+
+The `status` of `onConnectionStateChange`. It rejects a failed `connect()` and is passed to the disconnect callback after an unexpected disconnect. Most values are Bluetooth HCI disconnect reasons; AOSP's [`gatt_api.h`](https://android.googlesource.com/platform/packages/modules/Bluetooth/+/refs/heads/main/system/stack/include/gatt_api.h) names the common ones. Other HCI reason codes from the Bluetooth Core Specification can appear too.
+
+| Code | Name | Meaning |
+|---|---|---|
+| 1 | `GATT_CONN_L2C_FAILURE` | General L2CAP failure. |
+| 8 | `GATT_CONN_TIMEOUT` | The link timed out: the peripheral went out of range or stopped responding. Reconnect. |
+| 19 | `GATT_CONN_TERMINATE_PEER_USER` | The peripheral closed the connection. |
+| 21 | `GATT_CONN_TERMINATED_POWER_OFF` | The peripheral closed the connection because it is powering off. |
+| 22 | `GATT_CONN_TERMINATE_LOCAL_HOST` | This device's Bluetooth stack closed the connection. |
+| 34 | `GATT_CONN_LMP_TIMEOUT` | The link-layer response timed out. |
+| 62 | `GATT_CONN_FAILED_ESTABLISHMENT` | The connection could not be established. Retry. |
+| 133 | `GATT_ERROR` | Generic, unspecific failure. Common when a connection attempt fails; retrying after a short delay often helps. |
+| 147 | `BluetoothGatt.GATT_CONNECTION_TIMEOUT` | The connection timed out, likely because the peripheral is out of range or not advertising as connectable (Android 15+). |
+
+</details>
+
+<details>
+<summary><b><code>android.bluetoothLe.scan</code></b> (Android): scan failures</summary>
+
+The `errorCode` of [`ScanCallback.onScanFailed`](https://developer.android.com/reference/android/bluetooth/le/ScanCallback).
+
+| Code | `ScanCallback` constant | Meaning |
+|---|---|---|
+| 1 | `SCAN_FAILED_ALREADY_STARTED` | A scan with the same settings is already running for this app. |
+| 2 | `SCAN_FAILED_APPLICATION_REGISTRATION_FAILED` | The app couldn't be registered for scanning. |
+| 3 | `SCAN_FAILED_INTERNAL_ERROR` | Internal error. |
+| 4 | `SCAN_FAILED_FEATURE_UNSUPPORTED` | The device doesn't support power-optimized scanning. |
+| 5 | `SCAN_FAILED_OUT_OF_HARDWARE_RESOURCES` | The scan hardware is out of resources. |
+| 6 | `SCAN_FAILED_SCANNING_TOO_FREQUENTLY` | The app started scans too often; Android throttles frequent scan starts. Wait before scanning again. |
+
+</details>
+
+#### Failures that aren't error objects
+
+A few APIs report failure through their return value or don't report it at all:
+
+- `requestMTU()` returns `-1` on iOS when the device isn't connected, and `0` on Android when the device isn't connected or the request can't be started.
+- `requestConnectionPriority()` returns `false` when the request can't be started, and always on iOS.
+- `isConnected()` and `isSubscribedToCharacteristic()` return `false` for unknown or disconnected devices.
+- `openSettings()` rejects with a plain `Error` on Android if no `Context` is available or the settings screen can't be opened.
+- `subscribeToStateChange()` doesn't report failures. On Android, if no `Context` is available, no state changes are delivered.
+- Synchronous methods (`isScanning`, `getConnectedDevices`, `getCharacteristics`, `isSubscribedToCharacteristic`, …) throw a plain `Error` if the native layer throws unexpectedly.
+
 ### iOS Restore State
 
 There is built-in support for iOS state restoration. You need to provide a unique identifier and a callback to handle restored peripherals. If no unique identifier is provided, state restoration is disabled.
@@ -517,8 +762,8 @@ enum AndroidConnectionPriority {
 // Callback types
 type StateChangeCallback = (state: BLEState) => void;
 type ScanEventCallback = (device: BLEDevice) => void;
-type ScanErrorCallback = (error: string) => void; // Android only
-type DisconnectEventCallback = (deviceId: string, interrupted: boolean, error: string) => void;
+type ScanErrorCallback = (error: BleErrorBase) => void;
+type DisconnectEventCallback = (deviceId: string, interrupted: boolean, error?: BleErrorBase) => void;
 type CharacteristicUpdateCallback = (characteristicId: string, data: ArrayBuffer) => void;
 ```
 

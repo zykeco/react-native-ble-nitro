@@ -18,7 +18,17 @@ export {
   AndroidScanMode,
   AndroidConnectionPriority,
   BleNitroManager,
-  BleTimeoutError,
 } from "./manager";
+
+export {
+  BleErrorBase,
+  BlePlatformError,
+  BleNitroError,
+  BleTimeoutError,
+  BleNitroLibraryErrorCode,
+  BLE_NITRO_LIBRARY_DOMAIN,
+} from './errors';
+
+export { type BLENativeError } from './specs/NativeBleNitro';
 
 export { BleNitro } from './singleton';

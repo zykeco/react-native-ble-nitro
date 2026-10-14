@@ -13,27 +13,27 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     weak var manager: BleNitroBleManager?
     
     // Callback storage
-    var connectionCallback: ((Bool, String, String) -> Void)?
-    var disconnectionCallback: ((Bool, String) -> Void)?
-    var disconnectEventCallback: ((String, Bool, String) -> Void)?
-    var serviceDiscoveryCallback: ((Bool, String) -> Void)?
-    var characteristicDiscoveryCallbacks: [String: (Bool, String) -> Void] = [:]
+    var connectionCallback: ((Bool, String, BLENativeError?) -> Void)?
+    var disconnectionCallback: ((Bool, BLENativeError?) -> Void)?
+    var disconnectEventCallback: ((String, Bool, BLENativeError?) -> Void)?
+    var serviceDiscoveryCallback: ((Bool, BLENativeError?) -> Void)?
+    var characteristicDiscoveryCallbacks: [String: (Bool, BLENativeError?) -> Void] = [:]
 
     // Full discovery (services + characteristics) callbacks and state
-    var fullDiscoveryCallbacks: [(Bool, String) -> Void] = []
+    var fullDiscoveryCallbacks: [(Bool, BLENativeError?) -> Void] = []
     var servicesDiscovered = false
     var characteristicsDiscoveredCount = 0
     var expectedCharacteristicsCount = 0
-    var characteristicDiscoveryError: String?
+    var characteristicDiscoveryError: BLENativeError?
 
     // RSSI callback
-    var rssiCallback: ((Bool, Double, String) -> Void)?
+    var rssiCallback: ((Bool, Double, BLENativeError?) -> Void)?
     
     // Operation callbacks - using CBUUID as key for reliable UUID matching
-    var readCallbacks: [CBUUID: (Bool, ArrayBuffer, String) -> Void] = [:]
-    var writeCallbacks: [CBUUID: (Bool, ArrayBuffer, String) -> Void] = [:]
-    var subscriptionCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
-    var unsubscriptionCallbacks: [CBUUID: (Bool, String) -> Void] = [:]
+    var readCallbacks: [CBUUID: (Bool, ArrayBuffer, BLENativeError?) -> Void] = [:]
+    var writeCallbacks: [CBUUID: (Bool, ArrayBuffer, BLENativeError?) -> Void] = [:]
+    var subscriptionCallbacks: [CBUUID: (Bool, BLENativeError?) -> Void] = [:]
+    var unsubscriptionCallbacks: [CBUUID: (Bool, BLENativeError?) -> Void] = [:]
     
     // Store written data for comparison
     var writtenData: [CBUUID: Data] = [:]
@@ -51,16 +51,17 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     // MARK: - CBPeripheralDelegate - Service Discovery
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         if let error = error {
-            serviceDiscoveryCallback?(false, error.localizedDescription)
+            let bleError = nativeError(from: error)
+            serviceDiscoveryCallback?(false, bleError)
             serviceDiscoveryCallback = nil
-            resolveFullDiscoveryCallbacks(success: false, error: error.localizedDescription)
+            resolveFullDiscoveryCallbacks(success: false, error: bleError)
             return
         }
 
         servicesDiscovered = true
 
         // Resolve service-only callback immediately
-        serviceDiscoveryCallback?(true, "")
+        serviceDiscoveryCallback?(true, nil)
         serviceDiscoveryCallback = nil
 
         // Trigger characteristic discovery only for services that still need it.
@@ -71,7 +72,7 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         let undiscovered = services.filter { $0.characteristics == nil }
 
         if undiscovered.isEmpty {
-            resolveFullDiscoveryCallbacks(success: true, error: "")
+            resolveFullDiscoveryCallbacks(success: true, error: nil)
         } else {
             expectedCharacteristicsCount = undiscovered.count
             characteristicsDiscoveredCount = 0
@@ -90,13 +91,16 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         let serviceId = service.uuid.uuidString
 
         if let error = error {
-            characteristicDiscoveryCallbacks[serviceId]?(false, error.localizedDescription)
+            characteristicDiscoveryCallbacks[serviceId]?(false, nativeError(from: error))
             // Record the first error for the full discovery callback
             if characteristicDiscoveryError == nil {
-                characteristicDiscoveryError = "Characteristic discovery failed for service \(serviceId): \(error.localizedDescription)"
+                characteristicDiscoveryError = nativeError(
+                    from: error,
+                    message: "Characteristic discovery failed for service \(serviceId): \(error.localizedDescription)"
+                )
             }
         } else {
-            characteristicDiscoveryCallbacks[serviceId]?(true, "")
+            characteristicDiscoveryCallbacks[serviceId]?(true, nil)
         }
         characteristicDiscoveryCallbacks.removeValue(forKey: serviceId)
 
@@ -106,7 +110,7 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
             if let discoveryError = characteristicDiscoveryError {
                 resolveFullDiscoveryCallbacks(success: false, error: discoveryError)
             } else {
-                resolveFullDiscoveryCallbacks(success: true, error: "")
+                resolveFullDiscoveryCallbacks(success: true, error: nil)
             }
         }
     }
@@ -122,32 +126,33 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         // Handle read callback using CBUUID - no normalization needed
         if let readCallback = readCallbacks[characteristicUUID] {
             if let error = error {
+                let bleError = nativeError(from: error)
                 do {
                     let emptyData = Data(capacity: 0)
                     let emptyBuffer = try ArrayBuffer.copy(data: emptyData)
-                    readCallback(false, emptyBuffer, error.localizedDescription)
+                    readCallback(false, emptyBuffer, bleError)
                 } catch {
                     let emptyBuffer = try! ArrayBuffer.copy(data: Data())
-                    readCallback(false, emptyBuffer, error.localizedDescription)
+                    readCallback(false, emptyBuffer, bleError)
                 }
             } else if let data = characteristic.value {
                 do {
                     let capacityData = Data(capacity: data.count)
                     let finalData = capacityData + data
                     let arrayBuffer = try ArrayBuffer.copy(data: finalData)
-                    readCallback(true, arrayBuffer, "")
+                    readCallback(true, arrayBuffer, nil)
                 } catch {
                     let emptyBuffer = try! ArrayBuffer.copy(data: Data())
-                    readCallback(false, emptyBuffer, "Failed to create ArrayBuffer")
+                    readCallback(false, emptyBuffer, libraryError(BleNitroLibraryErrorCode.dataError, "Failed to create ArrayBuffer"))
                 }
             } else {
                 do {
                     let emptyData = Data(capacity: 0)
                     let emptyBuffer = try ArrayBuffer.copy(data: emptyData)
-                    readCallback(false, emptyBuffer, "No data received")
+                    readCallback(false, emptyBuffer, libraryError(BleNitroLibraryErrorCode.dataError, "No data received"))
                 } catch {
                     let emptyBuffer = try! ArrayBuffer.copy(data: Data())
-                    readCallback(false, emptyBuffer, "No data received")
+                    readCallback(false, emptyBuffer, libraryError(BleNitroLibraryErrorCode.dataError, "No data received"))
                 }
             }
             readCallbacks.removeValue(forKey: characteristicUUID)
@@ -180,13 +185,13 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         if let writeCallback = writeCallbacks[characteristicUUID] {
             if let error = error {
                 let emptyBuffer = try! ArrayBuffer.copy(data: Data())
-                writeCallback(false, emptyBuffer, error.localizedDescription)
+                writeCallback(false, emptyBuffer, nativeError(from: error))
             } else {
                 // For write operations in iOS, didWriteValueFor indicates successful acknowledgment
                 // Check if characteristic value was updated (may contain response data or written data)
                 let responseData = characteristic.value ?? Data()
                 let responseBuffer = try! ArrayBuffer.copy(data: responseData)
-                writeCallback(true, responseBuffer, "")
+                writeCallback(true, responseBuffer, nil)
             }
             writeCallbacks.removeValue(forKey: characteristicUUID)
             writtenData.removeValue(forKey: characteristicUUID)
@@ -197,9 +202,9 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didReadRSSI RSSI: NSNumber, error: Error?) {
         if let rssiCallback = rssiCallback {
             if let error = error {
-                rssiCallback(false, 0.0, error.localizedDescription)
+                rssiCallback(false, 0.0, nativeError(from: error))
             } else {
-                rssiCallback(true, RSSI.doubleValue, "")
+                rssiCallback(true, RSSI.doubleValue, nil)
             }
             self.rssiCallback = nil // Clear callback after use
         }
@@ -216,9 +221,11 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         // Handle subscription callback using CBUUID
         if let subscriptionCallback = subscriptionCallbacks[characteristicUUID] {
             if let error = error {
-                subscriptionCallback(false, error.localizedDescription)
+                subscriptionCallback(false, nativeError(from: error))
+            } else if characteristic.isNotifying {
+                subscriptionCallback(true, nil)
             } else {
-                subscriptionCallback(characteristic.isNotifying, "")
+                subscriptionCallback(false, libraryError(BleNitroLibraryErrorCode.unknown, "Failed to subscribe to characteristic"))
             }
             subscriptionCallbacks.removeValue(forKey: characteristicUUID)
         }
@@ -226,9 +233,11 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
         // Handle unsubscription callback using CBUUID
         if let unsubscriptionCallback = unsubscriptionCallbacks[characteristicUUID] {
             if let error = error {
-                unsubscriptionCallback(false, error.localizedDescription)
+                unsubscriptionCallback(false, nativeError(from: error))
+            } else if !characteristic.isNotifying {
+                unsubscriptionCallback(true, nil)
             } else {
-                unsubscriptionCallback(!characteristic.isNotifying, "")
+                unsubscriptionCallback(false, libraryError(BleNitroLibraryErrorCode.unknown, "Failed to unsubscribe from characteristic"))
             }
             unsubscriptionCallbacks.removeValue(forKey: characteristicUUID)
         }
@@ -237,7 +246,7 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     // MARK: - CBPeripheralDelegate - Connection Events
     
     func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
-        resolveFullDiscoveryCallbacks(success: false, error: "Services were invalidated during discovery")
+        resolveFullDiscoveryCallbacks(success: false, error: libraryError(BleNitroLibraryErrorCode.servicesChanged, "Services were invalidated during discovery"))
         servicesDiscovered = false
         characteristicsDiscoveredCount = 0
         expectedCharacteristicsCount = 0
@@ -246,7 +255,7 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     
     // MARK: - Full Discovery Helpers
 
-    private func resolveFullDiscoveryCallbacks(success: Bool, error: String) {
+    private func resolveFullDiscoveryCallbacks(success: Bool, error: BLENativeError?) {
         let callbacks = fullDiscoveryCallbacks
         fullDiscoveryCallbacks.removeAll()
         for callback in callbacks {
@@ -262,7 +271,7 @@ class BlePeripheralDelegate: NSObject, CBPeripheralDelegate {
     // MARK: - Cleanup
     func cleanup() {
         // Reject in-flight discovery callbacks before clearing
-        resolveFullDiscoveryCallbacks(success: false, error: "Peripheral disconnected during discovery")
+        resolveFullDiscoveryCallbacks(success: false, error: libraryError(BleNitroLibraryErrorCode.disconnectedDuringOperation, "Peripheral disconnected during discovery"))
         // Clear all callbacks to prevent memory leaks
         connectionCallback = nil
         disconnectionCallback = nil

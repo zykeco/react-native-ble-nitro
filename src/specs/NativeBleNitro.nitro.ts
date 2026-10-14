@@ -62,23 +62,67 @@ export interface ScanFilter {
   androidScanMode: AndroidScanMode;
 }
 
-export type ScanCallback = (device: BLEDevice | null, error: string | null) => void;
+/**
+ * Error codes for failures the library itself detects or decides, carried on
+ * `BLENativeError.libraryCode`. Some are raised only by the JS layer (e.g.
+ * `TIMEOUT`), but live here so all three platforms share one definition.
+ *
+ * Members are UPPER_SNAKE (unlike the PascalCase enums above) because nitrogen
+ * maps UPPER_SNAKE to camelCase Swift cases (`.deviceNotConnected`), whereas
+ * PascalCase would be flattened to `.devicenotconnected`.
+ */
+export enum BleNitroLibraryErrorCode {
+  UNKNOWN = 0,
+  DEVICE_NOT_CONNECTED = 1,
+  DEVICE_NOT_FOUND = 2,
+  SERVICE_NOT_FOUND = 3,
+  CHARACTERISTIC_NOT_FOUND = 4,
+  PERMISSION_DENIED = 5,
+  BLUETOOTH_UNAVAILABLE = 6,
+  CONTEXT_UNAVAILABLE = 7,
+  OPERATION_INITIATION_FAILED = 8,
+  CONNECTION_STATE_NOT_FOUND = 9,
+  DISCONNECTED_DURING_OPERATION = 10,
+  DATA_ERROR = 11,
+  NATIVE_EXCEPTION = 12,
+  CONNECTION_CANCELLED = 13,
+  CHARACTERISTIC_NOT_SUPPORTED = 14,
+  OPERATION_NOT_SUPPORTED = 15,
+  SERVICES_CHANGED = 16,
+  TIMEOUT = 17,
+}
+
+/**
+ * An error crossing the native boundary: either a raw platform error
+ * (`domain`/`code` passed through untouched, no `libraryCode`) or a library
+ * error (`domain` is `bleNitro.library` and `libraryCode` is set).
+ */
+export interface BLENativeError {
+  domain: string;
+  code: number;
+  message: string;
+  /** Set only for `bleNitro.library` errors; mirrors `code` as a typed enum.
+   * Declared in the spec to generate the matching Kotlin and Swift enums */
+  libraryCode?: BleNitroLibraryErrorCode;
+}
+
+export type ScanCallback = (device: BLEDevice | null, error?: BLENativeError) => void;
 export type DevicesCallback = (devices: BLEDevice[]) => void;
-export type ConnectionCallback = (success: boolean, deviceId: string, error: string) => void;
-export type DisconnectionEventCallback = (deviceId: string, interrupted: boolean, error: string) => void;
-export type OperationCallback = (success: boolean, error: string) => void;
+export type ConnectionCallback = (success: boolean, deviceId: string, error?: BLENativeError) => void;
+export type DisconnectionEventCallback = (deviceId: string, interrupted: boolean, error?: BLENativeError) => void;
+export type OperationCallback = (success: boolean, error?: BLENativeError) => void;
 export type CharacteristicCallback = (characteristicId: string, data: BLEValue) => void;
 export type StateCallback = (state: BLEState) => void;
 export type BooleanCallback = (result: boolean) => void;
 export type StringArrayCallback = (result: string[]) => void;
-export type ReadCharacteristicCallback = (success: boolean, data: BLEValue, error: string) => void;
-export type WriteCharacteristicCallback = (success: boolean, responseData: BLEValue, error: string) => void;
-export type ReadRSSICallback = (success: boolean, rssi: number, error: string) => void;
+export type ReadCharacteristicCallback = (success: boolean, data: BLEValue, error?: BLENativeError) => void;
+export type WriteCharacteristicCallback = (success: boolean, responseData: BLEValue, error?: BLENativeError) => void;
+export type ReadRSSICallback = (success: boolean, rssi: number, error?: BLENativeError) => void;
 export type RestoreCallback = (restoredPeripherals: BLEDevice[]) => void;
 
 export type OperationResult = {
   success: boolean;
-  error?: string;
+  error?: BLENativeError;
 };
 
 /**

@@ -1,6 +1,25 @@
 import Foundation
 import CoreBluetooth
 import NitroModules
+
+
+enum BleErrorDomain {
+    /// Must match BLE_NITRO_LIBRARY_DOMAIN in src/errors.ts and the Android BleErrorDomain.LIBRARY.
+    static let library = "bleNitro.library"
+}
+
+/// Builds a BLENativeError from a library error code enum.
+func libraryError(_ code: BleNitroLibraryErrorCode, _ message: String) -> BLENativeError {
+    return BLENativeError(domain: BleErrorDomain.library, code: Double(code.rawValue), message: message, libraryCode: code)
+}
+
+/// Builds a BLENativeError from a platform NSError, preserving its domain and code.
+/// `message` replaces the NSError's localizedDescription when given.
+func nativeError(from error: Error, message: String? = nil) -> BLENativeError {
+    let nsError = error as NSError
+    return BLENativeError(domain: nsError.domain, code: Double(nsError.code), message: message ?? error.localizedDescription, libraryCode: nil)
+}
+
 /**
  * iOS implementation of the BLE Nitro Manager
  * Implements the HybridNativeBleNitroSpec protocol for Core Bluetooth operations
@@ -84,10 +103,10 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         return bleState
     }
     
-    public func requestBluetoothEnable(callback: @escaping (Bool, String) -> Void) throws {
+    public func requestBluetoothEnable(callback: @escaping (Bool, BLENativeError?) -> Void) throws {
         // iOS doesn't allow programmatic Bluetooth enabling
         // We can only check the current state
-        callback(false, "Not supported")
+        callback(false, libraryError(BleNitroLibraryErrorCode.operationNotSupported, "Not supported on iOS"))
     }
     
     public func subscribeToStateChange(
@@ -111,12 +130,17 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     }
     
     // MARK: - Scanning Operations
-    public func startScan(filter: ScanFilter, callback: @escaping (Variant_NullType_BLEDevice?, Variant_NullType_String?) -> Void) throws {
+    public func startScan(filter: ScanFilter, callback: @escaping (Variant_NullType_BLEDevice?, BLENativeError?) -> Void) throws {
         ensureCentralManager()
         guard centralManager.state == .poweredOn else {
-            throw NSError(domain: "BleNitroError", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Bluetooth is not powered on"
-            ])
+            // Reported through the callback rather than thrown, so JS receives a
+            // structured error like every other scan failure.
+            if centralManager.state == .unauthorized {
+                callback(nil, libraryError(BleNitroLibraryErrorCode.permissionDenied, "Bluetooth permission denied"))
+            } else {
+                callback(nil, libraryError(BleNitroLibraryErrorCode.bluetoothUnavailable, "Bluetooth is not powered on"))
+            }
+            return
         }
 
         func scanCallbackWrapper(device: BLEDevice) {
@@ -231,17 +255,17 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     }
     
     // MARK: - Connection Management
-    public func connect(deviceId: String, callback: @escaping (Bool, String, String) -> Void, disconnectCallback: ((String, Bool, String) -> Void)?, autoConnectAndroid: Bool?) throws {
+    public func connect(deviceId: String, callback: @escaping (Bool, String, BLENativeError?) -> Void, disconnectCallback: ((String, Bool, BLENativeError?) -> Void)?, autoConnectAndroid: Bool?) throws {
         ensureCentralManager()
         // Find peripheral by identifier
         guard let peripheral = findPeripheral(by: deviceId) else {
-            callback(false, "", "Peripheral not found")
+            callback(false, "", libraryError(BleNitroLibraryErrorCode.deviceNotFound, "Peripheral not found"))
             return
         }
         
         // Check if already connected
         if peripheral.state == .connected {
-            callback(true, deviceId, "")
+            callback(true, deviceId, nil)
             return
         }
         
@@ -256,15 +280,16 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         centralManager.connect(peripheral, options: nil)
     }
     
-    public func disconnect(deviceId: String, callback: @escaping (Bool, String) -> Void) throws {
+    public func disconnect(deviceId: String, callback: @escaping (Bool, BLENativeError?) -> Void) throws {
         ensureCentralManager()
         guard let peripheral = connectedPeripherals[deviceId] ?? findPeripheral(by: deviceId) else {
-            callback(false, "Peripheral not found")
+            // An unknown peripheral cannot be connected; same code as Android.
+            callback(false, libraryError(BleNitroLibraryErrorCode.deviceNotConnected, "Device not connected"))
             return
         }
 
         if peripheral.state == .connecting, let delegate = peripheralDelegates[deviceId] {
-            delegate.connectionCallback?(false, "", "Connection cancelled")
+            delegate.connectionCallback?(false, "", libraryError(BleNitroLibraryErrorCode.connectionCancelled, "Connection cancelled"))
             delegate.connectionCallback = nil
         }
 
@@ -297,15 +322,15 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         return false
     }
     
-    public func readRSSI(deviceId: String, callback: @escaping (Bool, Double, String) -> Void) throws {
+    public func readRSSI(deviceId: String, callback: @escaping (Bool, Double, BLENativeError?) -> Void) throws {
         guard let peripheral = connectedPeripherals[deviceId] else {
-            callback(false, 0.0, "Device not connected")
+            callback(false, 0.0, libraryError(BleNitroLibraryErrorCode.deviceNotConnected, "Device not connected"))
             return
         }
         
         // Ensure peripheral delegate exists for RSSI response handling
         guard let delegate = peripheralDelegates[deviceId] else {
-            callback(false, 0.0, "Device not properly connected or delegate not found")
+            callback(false, 0.0, libraryError(BleNitroLibraryErrorCode.connectionStateNotFound, "Device not properly connected or delegate not found"))
             return
         }
         
@@ -317,21 +342,21 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
     }
     
     // MARK: - Service Discovery
-    public func discoverServices(deviceId: String, callback: @escaping (Bool, String) -> Void) throws {
+    public func discoverServices(deviceId: String, callback: @escaping (Bool, BLENativeError?) -> Void) throws {
         guard let peripheral = connectedPeripherals[deviceId] else {
-            callback(false, "Peripheral not connected")
+            callback(false, libraryError(BleNitroLibraryErrorCode.deviceNotConnected, "Peripheral not connected"))
             return
         }
 
         guard let delegate = peripheralDelegates[deviceId] else {
-            callback(false, "Peripheral delegate not found")
+            callback(false, libraryError(BleNitroLibraryErrorCode.connectionStateNotFound, "Peripheral delegate not found"))
             return
         }
 
         // If services already discovered, resolve immediately to avoid
         // CoreBluetooth silently skipping the didDiscoverServices callback.
         if delegate.servicesDiscovered, let services = peripheral.services, !services.isEmpty {
-            callback(true, "")
+            callback(true, nil)
             return
         }
 
@@ -339,14 +364,14 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         peripheral.discoverServices(nil)
     }
 
-    public func discoverServicesWithCharacteristics(deviceId: String, callback: @escaping (Bool, String) -> Void) throws {
+    public func discoverServicesWithCharacteristics(deviceId: String, callback: @escaping (Bool, BLENativeError?) -> Void) throws {
         guard let peripheral = connectedPeripherals[deviceId] else {
-            callback(false, "Peripheral not connected")
+            callback(false, libraryError(BleNitroLibraryErrorCode.deviceNotConnected, "Peripheral not connected"))
             return
         }
 
         guard let delegate = peripheralDelegates[deviceId] else {
-            callback(false, "Peripheral delegate not found")
+            callback(false, libraryError(BleNitroLibraryErrorCode.connectionStateNotFound, "Peripheral delegate not found"))
             return
         }
 
@@ -354,7 +379,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         if delegate.servicesDiscovered,
            let services = peripheral.services, !services.isEmpty,
            services.allSatisfy({ $0.characteristics != nil }) {
-            callback(true, "")
+            callback(true, nil)
             return
         }
 
@@ -399,16 +424,16 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         deviceId: String,
         serviceId: String,
         characteristicId: String,
-        callback: @escaping (Bool, ArrayBuffer, String) -> Void
+        callback: @escaping (Bool, ArrayBuffer, BLENativeError?) -> Void
     ) throws {
         guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
             do {
                 let emptyData = Data(capacity: 0)
                 let emptyBuffer = try ArrayBuffer.copy(data: emptyData)
-                callback(false, emptyBuffer, "Characteristic not found")
+                callback(false, emptyBuffer, characteristicLookupError(deviceId: deviceId, serviceId: serviceId))
             } catch {
                 let emptyBuffer = try! ArrayBuffer.copy(data: Data())
-                callback(false, emptyBuffer, "Characteristic not found")
+                callback(false, emptyBuffer, characteristicLookupError(deviceId: deviceId, serviceId: serviceId))
             }
             return
         }
@@ -418,10 +443,10 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
             do {
                 let emptyData = Data(capacity: 0)
                 let emptyBuffer = try ArrayBuffer.copy(data: emptyData)
-                callback(false, emptyBuffer, "Device not properly connected or delegate not found")
+                callback(false, emptyBuffer, libraryError(BleNitroLibraryErrorCode.connectionStateNotFound, "Device not properly connected or delegate not found"))
             } catch {
                 let emptyBuffer = try! ArrayBuffer.copy(data: Data())
-                callback(false, emptyBuffer, "Device not properly connected or delegate not found")
+                callback(false, emptyBuffer, libraryError(BleNitroLibraryErrorCode.connectionStateNotFound, "Device not properly connected or delegate not found"))
             }
             return
         }
@@ -439,11 +464,11 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         characteristicId: String,
         data: ArrayBuffer,
         withResponse: Bool,
-        callback: @escaping (Bool, ArrayBuffer, String) -> Void
+        callback: @escaping (Bool, ArrayBuffer, BLENativeError?) -> Void
     ) throws {
         guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
             let emptyBuffer = try! ArrayBuffer.copy(data: Data())
-            callback(false, emptyBuffer, "Characteristic not found")
+            callback(false, emptyBuffer, characteristicLookupError(deviceId: deviceId, serviceId: serviceId))
             return
         }
         
@@ -454,7 +479,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
             // Ensure peripheral delegate exists for response handling
             guard let delegate = peripheralDelegates[deviceId] else {
                 let emptyBuffer = try! ArrayBuffer.copy(data: Data())
-                callback(false, emptyBuffer, "Device not properly connected or delegate not found")
+                callback(false, emptyBuffer, libraryError(BleNitroLibraryErrorCode.connectionStateNotFound, "Device not properly connected or delegate not found"))
                 return
             }
             delegate.writeCallbacks[characteristic.uuid] = callback
@@ -466,7 +491,7 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         
         if !withResponse {
             let emptyBuffer = try! ArrayBuffer.copy(data: Data())
-            callback(true, emptyBuffer, "")
+            callback(true, emptyBuffer, nil)
         }
     }
     
@@ -475,16 +500,16 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         serviceId: String,
         characteristicId: String,
         updateCallback: @escaping (String, ArrayBuffer) -> Void,
-        completionCallback: @escaping (Bool, String) -> Void
+        completionCallback: @escaping (Bool, BLENativeError?) -> Void
     ) throws {
         guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
-            completionCallback(false, "Characteristic not found")
+            completionCallback(false, characteristicLookupError(deviceId: deviceId, serviceId: serviceId))
             return
         }
 
         // Ensure peripheral delegate exists
         guard let delegate = peripheralDelegates[deviceId] else {
-            completionCallback(false, "Device not properly connected or delegate not found")
+            completionCallback(false, libraryError(BleNitroLibraryErrorCode.connectionStateNotFound, "Device not properly connected or delegate not found"))
             return
         }
 
@@ -498,16 +523,16 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         deviceId: String,
         serviceId: String,
         characteristicId: String,
-        callback: @escaping (Bool, String) -> Void
+        callback: @escaping (Bool, BLENativeError?) -> Void
     ) throws {
         guard let characteristic = findCharacteristic(deviceId: deviceId, serviceId: serviceId, characteristicId: characteristicId) else {
-            callback(false, "Characteristic not found")
+            callback(false, characteristicLookupError(deviceId: deviceId, serviceId: serviceId))
             return
         }
         
         // Ensure peripheral delegate exists
         guard let delegate = peripheralDelegates[deviceId] else {
-            callback(false, "Device not properly connected or delegate not found")
+            callback(false, libraryError(BleNitroLibraryErrorCode.connectionStateNotFound, "Device not properly connected or delegate not found"))
             return
         }
         
@@ -567,6 +592,20 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         
         
         return characteristic
+    }
+
+    /// Explains why findCharacteristic returned nil. Checks run in the same order
+    /// as on Android (device → service → characteristic) so both platforms report
+    /// the same library code for the same situation.
+    private func characteristicLookupError(deviceId: String, serviceId: String) -> BLENativeError {
+        guard let peripheral = connectedPeripherals[deviceId] else {
+            return libraryError(BleNitroLibraryErrorCode.deviceNotConnected, "Device not connected")
+        }
+        let serviceUUID = CBUUID(string: serviceId)
+        guard peripheral.services?.contains(where: { $0.uuid == serviceUUID }) == true else {
+            return libraryError(BleNitroLibraryErrorCode.serviceNotFound, "Service not found")
+        }
+        return libraryError(BleNitroLibraryErrorCode.characteristicNotFound, "Characteristic not found")
     }
     
     internal func mapCBManagerStateToBLEState(_ state: CBManagerState) -> BLEState {
@@ -678,17 +717,18 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         connectedPeripherals[deviceId] = peripheral
         
         if let delegate = peripheralDelegates[deviceId] {
-            delegate.connectionCallback?(true, deviceId, "")
+            delegate.connectionCallback?(true, deviceId, nil)
             delegate.connectionCallback = nil
         }
     }
     
     internal func handleDeviceConnectionFailed(_ peripheral: CBPeripheral, error: Error?) {
         let deviceId = peripheral.identifier.uuidString
-        let errorMessage = error?.localizedDescription ?? "Connection failed"
+        let bleError = error.map { nativeError(from: $0) }
+            ?? libraryError(BleNitroLibraryErrorCode.unknown, "Connection failed")
         
         if let delegate = peripheralDelegates[deviceId] {
-            delegate.connectionCallback?(false, "", errorMessage)
+            delegate.connectionCallback?(false, "", bleError)
             delegate.connectionCallback = nil
         }
         
@@ -705,16 +745,17 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
         intentionalDisconnections.remove(deviceId)
         
         if let delegate = peripheralDelegates[deviceId] {
+            let bleError = error.map { nativeError(from: $0) }
+
             // Handle the disconnect() method callback (for intentional disconnections)
             if let callback = delegate.disconnectionCallback {
-                callback(error == nil, error?.localizedDescription ?? "")
+                callback(error == nil, bleError)
                 delegate.disconnectionCallback = nil
             }
             
             // Handle the disconnect event callback (for both intentional and interrupted)
             if let disconnectEventCallback = delegate.disconnectEventCallback {
-                let errorMessage = error?.localizedDescription ?? ""
-                disconnectEventCallback(deviceId, interrupted, errorMessage)
+                disconnectEventCallback(deviceId, interrupted, bleError)
             }
         }
         
