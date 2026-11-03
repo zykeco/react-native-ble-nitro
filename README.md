@@ -796,6 +796,7 @@ interface BleNitroPluginProps {
   bluetoothAlwaysPermission?: string | false; // iOS permission message
   androidAdvertisingEnabled?: boolean; // Android Peripheral mode (advertising)
   iOSLazyInit?: boolean;            // Lazy init BLE module to prevent permission dialog on app launch (delays state restoration)
+  iOSShowPowerAlert?: boolean;      // Show the iOS "Turn On Bluetooth" system alert (default: CoreBluetooth default, shown)
 }
 ```
 
@@ -807,6 +808,15 @@ To use lazy BLE initialization, add the following to your `Info.plist`:
 <key>BLENitroLazyInit</key>
 <true/>
 ```
+
+To hide the iOS system alert shown when Bluetooth is turned off (`CBCentralManagerOptionShowPowerAlertKey`), add:
+
+```xml
+<key>BLENitroShowPowerAlert</key>
+<false/>
+```
+
+When the key is absent, CoreBluetooth's default applies and the alert is shown. Use `state()` / `subscribeToStateChange()` to present your own guidance instead.
 
 
 ### Lazy initialization
