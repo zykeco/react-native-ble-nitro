@@ -68,6 +68,10 @@ public class BleNitroBleManager: HybridNativeBleNitroSpec {
 
         // Create options dictionary for central manager with restore identifier if set
         var options: [String: Any] = [:]
+        // Opt-in: when the key is absent, CoreBluetooth keeps its default (alert shown).
+        if let showPowerAlert = Bundle.main.object(forInfoDictionaryKey: "BLENitroShowPowerAlert") as? Bool {
+            options[CBCentralManagerOptionShowPowerAlertKey] = showPowerAlert
+        }
         print("Restore Identifier: \(String(describing: restoreStateIdentifier))")
         if let identifier = restoreStateIdentifier {
             options[CBCentralManagerOptionRestoreIdentifierKey] = identifier

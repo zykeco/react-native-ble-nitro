@@ -48,6 +48,14 @@ export interface BleNitroPluginProps {
    * @default false
    */
   iOSLazyInit?: boolean;
+
+  /**
+   * iOS only: Controls the system alert shown when Bluetooth is powered off
+   * at CBCentralManager creation (CBCentralManagerOptionShowPowerAlertKey).
+   * Set to false to handle the powered-off state in your own UI.
+   * When omitted, CoreBluetooth's default applies (alert shown).
+   */
+  iOSShowPowerAlert?: boolean;
 }
 
 const BLUETOOTH_PERMISSIONS = [
@@ -133,6 +141,7 @@ export const withBleNitroIOS: ConfigPlugin<BleNitroPluginProps> = (config, props
     modes,
     bluetoothAlwaysPermission = 'Allow $(PRODUCT_NAME) to connect to bluetooth devices',
     iOSLazyInit,
+    iOSShowPowerAlert,
   } = props;
 
   return withInfoPlist(config, (config) => {
@@ -143,6 +152,10 @@ export const withBleNitroIOS: ConfigPlugin<BleNitroPluginProps> = (config, props
 
     if (iOSLazyInit) {
       config.modResults.BLENitroLazyInit = true;
+    }
+
+    if (typeof iOSShowPowerAlert === 'boolean') {
+      config.modResults.BLENitroShowPowerAlert = iOSShowPowerAlert;
     }
 
     // Add background modes if specified
