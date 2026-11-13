@@ -65,6 +65,13 @@ For bare React Native projects, the library auto-links. Just run:
 npx pod-install # iOS only
 ```
 
+### Android release builds (R8 / ProGuard)
+
+The library includes consumer keep rules for the BLE manager and factory that
+Nitro instantiates by name through JNI. These rules are applied automatically
+when the app enables shrinking or obfuscation, so no app-level BLE keep rules
+are needed. Rebuild the native Android app after upgrading to pick up the rules.
+
 ## 📖 Usage
 
 ### Basic Setup
